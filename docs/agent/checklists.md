@@ -112,6 +112,7 @@ When opening or updating a PR, check:
 - Is the PR author assigned as the assignee in PR metadata?
 - Does the PR use the repository PR template?
 - Is the related issue linked?
+- Does the related issue section avoid auto-closing keywords such as `Close`, `Closes`, `Closed`, `Fix`, `Fixes`, `Fixed`, `Resolve`, `Resolves`, or `Resolved`?
 - Is repository verification handled in the agent's final report instead of being written into the issue or PR body?
 - Does the issue or PR body avoid command-specific AI verification notes such as `./gradlew test passed`, `./docs/scripts/verify.sh passed`, or similar agent execution notes?
 - Does the PR template keep generic human-facing checklist items such as `테스트를 통과했나요?` when useful?

@@ -315,6 +315,7 @@ Decision:
 - Assign the PR author as the assignee in PR metadata.
 - Use the repository PR template for PR content.
 - Write PR titles and bodies in Korean.
+- In the related issue section, reference issue numbers without auto-closing keywords such as `Close`, `Fixes`, or `Resolves`.
 - Do not put command-specific AI verification notes, such as `./gradlew test passed`, in issue or PR bodies.
 - Generic checklist text such as `테스트를 통과했나요?` is allowed in PR templates.
 
@@ -325,6 +326,7 @@ Implication for agents:
 - When creating or proposing PRs, use the `[type] title` format.
 - Set the PR assignee to the PR author through PR metadata when tool access allows it.
 - Include related issue, work purpose, work contents, optional screenshots, and checklist.
+- Use plain issue references such as `- #2` instead of `Close #2` in PR bodies unless the user explicitly asks to auto-close the issue.
 - Report command-specific verification results in the agent's final response, not as AI-flavored prose in issue or PR templates.
 - Use Korean for PR titles and body content unless the user explicitly requests another language.
 

@@ -47,3 +47,23 @@ Correct behavior:
 Related files:
 - `docs/agent/checklists.md`
 - `docs/agent/decisions.md`
+
+## 2026-06-16 - PR Body Used Auto-Closing Issue Keyword
+
+Context:
+- The agent created a draft PR for the `auth-service` package structure task.
+
+Mistake:
+- The agent wrote `Close #2` in the PR body's related issue section.
+
+Why it was wrong:
+- The team wants PR bodies to reference related issues without automatically closing them.
+- Auto-closing keywords can close issues at merge time before the team intentionally chooses that behavior.
+
+Correct behavior:
+- In PR bodies, use plain issue references such as `- #2`.
+- Do not use auto-closing keywords such as `Close`, `Closes`, `Closed`, `Fix`, `Fixes`, `Fixed`, `Resolve`, `Resolves`, or `Resolved` unless the user explicitly asks for auto-closing behavior.
+
+Related files:
+- `docs/agent/checklists.md`
+- `docs/agent/decisions.md`
