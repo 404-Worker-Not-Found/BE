@@ -92,6 +92,7 @@ When starting or preparing a new unit of work, check:
 
 - Was an issue created first?
 - Does the issue title follow `Type: title`, such as `Chore: 스타일 시스템 추가`?
+- Are the issue title and body written in Korean?
 - Does the issue use the repository issue template?
 - Was the work branch created from `develop`?
 - Does the branch name include the issue number, such as `feature/#20-note-release`?
@@ -106,6 +107,7 @@ When opening or updating a PR, check:
 
 - Does the PR target `develop`?
 - Does the PR title follow `[type] PR 제목`, such as `[feat] 노트 CRUD`?
+- Are the PR title and body written in Korean?
 - Is the PR author assigned as the assignee in PR metadata?
 - Does the PR use the repository PR template?
 - Is the related issue linked?

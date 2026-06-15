@@ -289,6 +289,7 @@ Related files:
 Decision:
 - Use issue titles in the format `Type: title`, such as `Chore: 스타일 시스템 추가`.
 - Use the repository issue template for issue content.
+- Write issue titles and bodies in Korean.
 
 Reason:
 - Consistent issue titles and content make planned work easier to scan and track.
@@ -296,6 +297,7 @@ Reason:
 Implication for agents:
 - When creating or proposing issues, include issue type, feature description, task checklist, and reference links when available.
 - Follow the issue template instead of inventing a new format.
+- Use Korean for issue titles and body content unless the user explicitly requests another language.
 
 Related files:
 - `.github/ISSUE_TEMPLATE/task.md`
@@ -308,6 +310,7 @@ Decision:
 - Target `develop` for development PRs.
 - Assign the PR author as the assignee in PR metadata.
 - Use the repository PR template for PR content.
+- Write PR titles and bodies in Korean.
 - Do not put command-specific AI verification notes, such as `./gradlew test passed`, in issue or PR bodies.
 - Generic checklist text such as `테스트를 통과했나요?` is allowed in PR templates.
 
@@ -319,6 +322,7 @@ Implication for agents:
 - Set the PR assignee to the PR author through PR metadata when tool access allows it.
 - Include related issue, work purpose, work contents, optional screenshots, and checklist.
 - Report command-specific verification results in the agent's final response, not as AI-flavored prose in issue or PR templates.
+- Use Korean for PR titles and body content unless the user explicitly requests another language.
 
 Related files:
 - `.github/pull_request_template.md`
