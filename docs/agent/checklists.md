@@ -92,12 +92,12 @@ When agent documents are updated, check:
 When starting or preparing a new unit of work, check:
 
 - Was an issue created first?
-- Does the issue title follow `Type: title`, such as `Chore: 스타일 시스템 추가`?
+- Does the issue title follow `[type] title`, such as `[chore] 스타일 시스템 추가`?
 - Are the issue title and body written in Korean?
 - Does the issue use the repository issue template?
 - Was the work branch created from `develop`?
-- Does the branch name include the issue number, such as `feature/#20-note-release`?
-- Does the branch type match the work type, such as `feature/*` or `fix/*`?
+- Does the branch name follow `{type}/#{issue-number}-{short-description}`, such as `chore/#2-auth-service-package-structure`?
+- Does the branch type match the work type, such as `feature/*`, `fix/*`, `docs/*`, `refactor/*`, `test/*`, `build/*`, `ci/*`, `chore/*`, or `environment/*`?
 
 When committing, check:
 
@@ -112,6 +112,7 @@ When opening or updating a PR, check:
 - Is the PR author assigned as the assignee in PR metadata?
 - Does the PR use the repository PR template?
 - Is the related issue linked?
+- Does the related issue section avoid auto-closing keywords such as `Close`, `Closes`, `Closed`, `Fix`, `Fixes`, `Fixed`, `Resolve`, `Resolves`, or `Resolved`?
 - Is repository verification handled in the agent's final report instead of being written into the issue or PR body?
 - Does the issue or PR body avoid command-specific AI verification notes such as `./gradlew test passed`, `./docs/scripts/verify.sh passed`, or similar agent execution notes?
 - Does the PR template keep generic human-facing checklist items such as `테스트를 통과했나요?` when useful?
