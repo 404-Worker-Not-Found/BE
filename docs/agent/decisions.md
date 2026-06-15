@@ -253,9 +253,9 @@ Related files:
 Decision:
 - Use Git Flow for collaboration.
 - Use `develop` as the integration branch for development work.
-- Create `feature/*` branches from `develop` for new feature work.
-- Create `fix/*` branches for bug fixes.
-- Include the issue number in the branch name, such as `feature/#20-note-release`.
+- Create work branches from `develop`.
+- Match the branch type to the work type.
+- Include the issue number in the branch name using `{type}/#{issue-number}-{short-description}`, such as `chore/#2-auth-service-package-structure`.
 
 Reason:
 - A consistent branch flow keeps work isolated and makes integration testing through `develop` predictable.
@@ -263,7 +263,8 @@ Reason:
 Implication for agents:
 - Do not work directly on `develop` unless explicitly requested.
 - For a new unit of work, follow this flow: create issue, create issue-number branch from `develop`, work locally, commit and push, then open a PR to `develop`.
-- Use `feature/*` for feature work and `fix/*` for bug fixes unless the user specifies a different branch type.
+- Use branch types such as `feature/*`, `fix/*`, `docs/*`, `refactor/*`, `test/*`, `build/*`, `ci/*`, `chore/*`, or `environment/*` according to the work type.
+- For chore tasks, use `chore/*` branches unless the user explicitly says otherwise.
 
 Related files:
 - `docs/agent/checklists.md`
@@ -289,7 +290,7 @@ Related files:
 ## 2026-06-15 - Issue Convention
 
 Decision:
-- Use issue titles in the format `Type: title`, such as `Chore: 스타일 시스템 추가`.
+- Use issue titles in the format `[type] title`, such as `[chore] 스타일 시스템 추가`.
 - Use the repository issue template for issue content.
 - Write issue titles and bodies in Korean.
 
@@ -297,6 +298,7 @@ Reason:
 - Consistent issue titles and content make planned work easier to scan and track.
 
 Implication for agents:
+- Match the issue type to the work type, such as `[feature]`, `[fix]`, `[docs]`, `[refactor]`, `[test]`, `[build]`, `[ci]`, `[chore]`, or `[environment]`.
 - When creating or proposing issues, include issue type, feature description, task checklist, and reference links when available.
 - Follow the issue template instead of inventing a new format.
 - Use Korean for issue titles and body content unless the user explicitly requests another language.
@@ -345,7 +347,7 @@ Reason:
 Implication for agents:
 - Do not merge without review approval unless explicitly instructed.
 - Prefer squash-and-merge when completing PRs.
-- After merge, expect the feature/fix branch to be deleted before starting new work.
+- After merge, expect the work branch to be deleted before starting new work.
 
 Related files:
 - `docs/agent/checklists.md`

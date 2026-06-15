@@ -92,12 +92,12 @@ When agent documents are updated, check:
 When starting or preparing a new unit of work, check:
 
 - Was an issue created first?
-- Does the issue title follow `Type: title`, such as `Chore: 스타일 시스템 추가`?
+- Does the issue title follow `[type] title`, such as `[chore] 스타일 시스템 추가`?
 - Are the issue title and body written in Korean?
 - Does the issue use the repository issue template?
 - Was the work branch created from `develop`?
-- Does the branch name include the issue number, such as `feature/#20-note-release`?
-- Does the branch type match the work type, such as `feature/*` or `fix/*`?
+- Does the branch name follow `{type}/#{issue-number}-{short-description}`, such as `chore/#2-auth-service-package-structure`?
+- Does the branch type match the work type, such as `feature/*`, `fix/*`, `docs/*`, `refactor/*`, `test/*`, `build/*`, `ci/*`, `chore/*`, or `environment/*`?
 
 When committing, check:
 

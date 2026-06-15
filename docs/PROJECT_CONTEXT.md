@@ -115,7 +115,8 @@ Expected responsibilities:
 
 Current implementation state:
 
-- The service currently contains only generated Spring Boot skeleton code.
+- The service currently contains generated Spring Boot application and test skeletons.
+- The agreed package structure has been scaffolded in `auth-service` with `package-info.java` files so package directories are tracked.
 - Security, domain model, API contracts, persistence model, and token strategy are not yet implemented in code.
 
 Auth-related decisions are recorded in `docs/agent/decisions.md`.
@@ -132,7 +133,6 @@ Current persistence-related dependencies:
 
 Likely next steps:
 
-- Apply the decided service package structure to `auth-service`.
 - Define access token and refresh token handling details.
 - Define common API response and error response shape.
 - Add first Flyway migration when the initial auth schema is confirmed.
