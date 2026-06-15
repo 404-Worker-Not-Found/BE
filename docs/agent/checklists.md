@@ -25,7 +25,7 @@ No agent document update needed.
 For repository-wide verification, run:
 
 ```bash
-./scripts/verify.sh
+./docs/scripts/verify.sh
 ```
 
 If verification fails, check:
@@ -62,7 +62,7 @@ When a task changes build configuration, dependencies, or service scaffolding, c
 When a task changes persistence, JPA, Flyway migrations, or integration tests, check:
 
 - Does `auth-service` still use Testcontainers with MySQL for integration-test datasource setup?
-- Does repository verification still run through `./scripts/verify.sh`?
+- Does repository verification still run through `./docs/scripts/verify.sh`?
 - Are new database-dependent tests using shared test support instead of ad hoc local database configuration?
 - If Redis behavior becomes part of the test path, is Redis Testcontainers support added or explicitly deferred?
 
@@ -81,10 +81,10 @@ When a task changes authentication behavior, check:
 When agent documents are updated, check:
 
 - Does `AGENTS.md` contain AI behavior rules only?
-- Does `PROJECT_CONTEXT.md` describe current project state only?
-- Does `.agent/decisions.md` record decisions?
-- Does `.agent/failure-memory.md` record only user-identified repeated mistakes?
-- Does `.agent/checklists.md` contain verification checklists?
+- Does `docs/PROJECT_CONTEXT.md` describe current project state only?
+- Does `docs/agent/decisions.md` record decisions?
+- Does `docs/agent/failure-memory.md` record only user-identified repeated mistakes?
+- Does `docs/agent/checklists.md` contain verification checklists?
 
 ## Collaboration Workflow Check
 
@@ -110,7 +110,7 @@ When opening or updating a PR, check:
 - Does the PR use the repository PR template?
 - Is the related issue linked?
 - Is repository verification handled in the agent's final report instead of being written into the issue or PR body?
-- Does the issue or PR body avoid command-specific AI verification notes such as `./gradlew test passed`, `./scripts/verify.sh passed`, or similar agent execution notes?
+- Does the issue or PR body avoid command-specific AI verification notes such as `./gradlew test passed`, `./docs/scripts/verify.sh passed`, or similar agent execution notes?
 - Does the PR template keep generic human-facing checklist items such as `테스트를 통과했나요?` when useful?
 
 When merging a PR, check:

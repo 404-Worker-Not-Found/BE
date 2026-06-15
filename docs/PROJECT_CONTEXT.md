@@ -12,7 +12,7 @@ The current repository is in an early backend setup stage. The only implemented 
 
 The broader domain and service boundaries are currently represented in:
 
-- `urgent_job_service_msa_erd_v1.drawio`
+- `docs/urgent_job_service_msa_erd_v1.drawio`
 
 ## Domain
 
@@ -41,10 +41,10 @@ Current state:
 - `auth-service` exists as a Spring Boot service.
 - `auth-service` has generated application and test skeletons.
 - The repository has a first ERD draft for the MSA design.
-- A repository-wide verification script exists at `scripts/verify.sh`.
+- A repository-wide verification script exists at `docs/scripts/verify.sh`.
 - `auth-service` tests use Testcontainers with MySQL for the test datasource.
 - Agent work instructions exist in `AGENTS.md`.
-- Agent failure memory, decision memory, and checklist memory exist under `.agent/`.
+- Agent failure memory, decision memory, and checklist memory exist under `docs/agent/`.
 
 ## Current Technical State
 
@@ -64,7 +64,7 @@ Current `auth-service` scaffold:
 - Bean Validation
 - Lombok
 
-The current scaffold matches the decided technology baseline in `.agent/decisions.md`.
+The current scaffold matches the decided technology baseline in `docs/agent/decisions.md`.
 
 ## Service Map
 
@@ -83,7 +83,7 @@ Planned or represented in the ERD:
 - `chat-service`
 - `support-service`
 
-This service map is provisional. Use `.agent/decisions.md` for confirmed decisions that override this document.
+This service map is provisional. Use `docs/agent/decisions.md` for confirmed decisions that override this document.
 
 ## Current ERD Notes
 
@@ -113,7 +113,7 @@ Current implementation state:
 - The service currently contains only generated Spring Boot skeleton code.
 - Security, domain model, API contracts, persistence model, and token strategy are not yet implemented in code.
 
-Auth-related decisions are recorded in `.agent/decisions.md`.
+Auth-related decisions are recorded in `docs/agent/decisions.md`.
 
 ## Current Persistence Dependencies
 

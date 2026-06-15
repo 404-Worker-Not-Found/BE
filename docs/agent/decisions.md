@@ -37,7 +37,7 @@ Implication for agents:
 
 Related files:
 - `auth-service`
-- `scripts/verify.sh`
+- `docs/scripts/verify.sh`
 
 ## 2026-06-15 - Service Boundaries Are Not Final
 
@@ -55,8 +55,8 @@ Implication for agents:
 - Treat service names from the ERD as planned candidates until implemented or confirmed.
 
 Related files:
-- `PROJECT_CONTEXT.md`
-- `urgent_job_service_msa_erd_v1.drawio`
+- `docs/PROJECT_CONTEXT.md`
+- `docs/urgent_job_service_msa_erd_v1.drawio`
 - `auth-service`
 
 ## 2026-06-15 - Service Data Ownership
@@ -75,8 +75,8 @@ Implication for agents:
 - Be explicit about which service owns each piece of data.
 
 Related files:
-- `urgent_job_service_msa_erd_v1.drawio`
-- `PROJECT_CONTEXT.md`
+- `docs/urgent_job_service_msa_erd_v1.drawio`
+- `docs/PROJECT_CONTEXT.md`
 
 ## 2026-06-15 - JWT Authentication Strategy
 
@@ -112,7 +112,7 @@ Implication for agents:
 
 Related files:
 - `auth-service/build.gradle`
-- `PROJECT_CONTEXT.md`
+- `docs/PROJECT_CONTEXT.md`
 
 ## 2026-06-15 - Backend Development Conventions
 
@@ -157,10 +157,10 @@ Related files:
 
 Decision:
 - `AGENTS.md` defines AI behavior rules.
-- `PROJECT_CONTEXT.md` describes the current project state.
-- `.agent/decisions.md` records decisions.
-- `.agent/failure-memory.md` records repeated mistakes identified by the user.
-- `.agent/checklists.md` records verification checklists.
+- `docs/PROJECT_CONTEXT.md` describes the current project state.
+- `docs/agent/decisions.md` records decisions.
+- `docs/agent/failure-memory.md` records repeated mistakes identified by the user.
+- `docs/agent/checklists.md` records verification checklists.
 
 Reason:
 - Each document has a different purpose and update cadence.
@@ -171,43 +171,43 @@ Implication for agents:
 
 Related files:
 - `AGENTS.md`
-- `PROJECT_CONTEXT.md`
-- `.agent/decisions.md`
-- `.agent/failure-memory.md`
-- `.agent/checklists.md`
+- `docs/PROJECT_CONTEXT.md`
+- `docs/agent/decisions.md`
+- `docs/agent/failure-memory.md`
+- `docs/agent/checklists.md`
 
 ## 2026-06-15 - Decision Priority
 
 Decision:
-- When `PROJECT_CONTEXT.md` and `.agent/decisions.md` conflict, follow `.agent/decisions.md` and report the conflict.
+- When `docs/PROJECT_CONTEXT.md` and `docs/agent/decisions.md` conflict, follow `docs/agent/decisions.md` and report the conflict.
 
 Reason:
-- `PROJECT_CONTEXT.md` describes current state and may become stale. `.agent/decisions.md` records what has been decided.
+- `docs/PROJECT_CONTEXT.md` describes current state and may become stale. `docs/agent/decisions.md` records what has been decided.
 
 Implication for agents:
-- Treat `.agent/decisions.md` as the higher-priority source for decisions.
+- Treat `docs/agent/decisions.md` as the higher-priority source for decisions.
 - Do not silently resolve conflicts.
 
 Related files:
-- `PROJECT_CONTEXT.md`
-- `.agent/decisions.md`
+- `docs/PROJECT_CONTEXT.md`
+- `docs/agent/decisions.md`
 
 ## 2026-06-15 - Repository Verification Entry Point
 
 Decision:
-- Use `./scripts/verify.sh` as the repository-wide verification command.
+- Use `./docs/scripts/verify.sh` as the repository-wide verification command.
 
 Reason:
 - A single verification entry point lets humans, agents, and future CI run the same check.
 
 Implication for agents:
-- Run `./scripts/verify.sh` before completing non-documentation tasks unless the user explicitly asks not to.
-- Add new service checks or smoke tests to `scripts/verify.sh` as the project grows.
+- Run `./docs/scripts/verify.sh` before completing non-documentation tasks unless the user explicitly asks not to.
+- Add new service checks or smoke tests to `docs/scripts/verify.sh` as the project grows.
 - If verification fails, report the failing step and whether it appears related to the current task.
 
 Related files:
-- `scripts/verify.sh`
-- `.agent/checklists.md`
+- `docs/scripts/verify.sh`
+- `docs/agent/checklists.md`
 - `AGENTS.md`
 
 ## 2026-06-15 - Test Datasource Strategy
@@ -227,12 +227,12 @@ Implication for agents:
 Related files:
 - `auth-service/build.gradle`
 - `auth-service/src/test/java/com/workernotfound/auth/support/IntegrationTestSupport.java`
-- `scripts/verify.sh`
+- `docs/scripts/verify.sh`
 
 ## 2026-06-15 - Failure Memory Requires User Identification
 
 Decision:
-- Do not let agents independently decide that a mistake should be recorded in `.agent/failure-memory.md`.
+- Do not let agents independently decide that a mistake should be recorded in `docs/agent/failure-memory.md`.
 - When the user identifies a repeated mistake, propose an entry and record it only after user approval.
 
 Reason:
@@ -240,10 +240,10 @@ Reason:
 
 Implication for agents:
 - Propose failure-memory entries only when the user identifies a repeated mistake.
-- Do not update `.agent/failure-memory.md` without explicit user request or clear approval.
+- Do not update `docs/agent/failure-memory.md` without explicit user request or clear approval.
 
 Related files:
-- `.agent/failure-memory.md`
+- `docs/agent/failure-memory.md`
 - `AGENTS.md`
 
 ## 2026-06-15 - Branch Strategy
@@ -264,7 +264,7 @@ Implication for agents:
 - Use `feature/*` for feature work and `fix/*` for bug fixes unless the user specifies a different branch type.
 
 Related files:
-- `.agent/checklists.md`
+- `docs/agent/checklists.md`
 
 ## 2026-06-15 - Commit Convention
 
@@ -282,7 +282,7 @@ Implication for agents:
 - Pick the most specific type for the change.
 
 Related files:
-- `.agent/checklists.md`
+- `docs/agent/checklists.md`
 
 ## 2026-06-15 - Issue Convention
 
@@ -299,7 +299,7 @@ Implication for agents:
 
 Related files:
 - `.github/ISSUE_TEMPLATE/task.md`
-- `.agent/checklists.md`
+- `docs/agent/checklists.md`
 
 ## 2026-06-15 - Pull Request Convention
 
@@ -322,7 +322,7 @@ Implication for agents:
 
 Related files:
 - `.github/pull_request_template.md`
-- `.agent/checklists.md`
+- `docs/agent/checklists.md`
 
 ## 2026-06-15 - Review and Merge Strategy
 
@@ -342,4 +342,4 @@ Implication for agents:
 - After merge, expect the feature/fix branch to be deleted before starting new work.
 
 Related files:
-- `.agent/checklists.md`
+- `docs/agent/checklists.md`
