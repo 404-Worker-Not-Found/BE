@@ -161,6 +161,7 @@ Decision:
 - `docs/agent/decisions.md` records decisions.
 - `docs/agent/failure-memory.md` records repeated mistakes identified by the user.
 - `docs/agent/checklists.md` records verification checklists.
+- `docs/agent/coding-rules.md` records AI-facing backend coding rules.
 
 Reason:
 - Each document has a different purpose and update cadence.
@@ -175,6 +176,7 @@ Related files:
 - `docs/agent/decisions.md`
 - `docs/agent/failure-memory.md`
 - `docs/agent/checklists.md`
+- `docs/agent/coding-rules.md`
 
 ## 2026-06-15 - Decision Priority
 
@@ -347,3 +349,55 @@ Implication for agents:
 
 Related files:
 - `docs/agent/checklists.md`
+
+## 2026-06-16 - Service Package Structure
+
+Decision:
+- Use the service package structure defined in `docs/architecture/service-package-structure.md`.
+- Organize service code by domain under `domain/{domain}` with controller, service, repository, entity, and dto packages.
+- Use `global` for service-wide configuration, exception handling, response shape, and security.
+- Use `external` for other service clients, events, Redis, and other external integrations.
+- Follow the layer direction `Controller -> Service -> Repository -> Entity`.
+- Do not reference upper layers from lower layers, and avoid skipping layers.
+- Use Service CQRS naming with `ApplicationService`, `CommandService`, and `FindService` when the domain responsibility justifies separation.
+- Split DTO packages into request and response.
+- Use Java `record` as the default DTO form.
+- Use DTO static factory methods for simple response conversion, and use converter classes only when conversion is complex or reused.
+- Keep DTO builder or response assembly details out of Service use-case flow.
+
+Reason:
+- A shared internal structure makes services easier for the team to navigate.
+- Domain-first packaging keeps related code close together while preserving layer responsibilities.
+- CQRS-style service separation keeps command and query responsibilities clear as domains grow.
+- Record DTOs and centralized conversion reduce boilerplate and prevent JPA entities from leaking through API responses.
+
+Implication for agents:
+- Read `docs/architecture/service-package-structure.md` before creating or changing service package structure.
+- Apply the documented structure to new service code unless the user explicitly approves a different structure.
+- If a different structure is needed, explain the reason and record the decision.
+- Do not create empty packages or classes before they are needed.
+
+Related files:
+- `docs/architecture/service-package-structure.md`
+- `AGENTS.md`
+- `docs/PROJECT_CONTEXT.md`
+
+## 2026-06-16 - AI-Facing Backend Coding Rules
+
+Decision:
+- Keep AI-facing backend coding rules in `docs/agent/coding-rules.md`.
+- Function, naming, and error handling rules belong in `docs/agent/coding-rules.md`, not in the architecture package-structure document.
+
+Reason:
+- Function length, naming, and error handling guidance are implementation behavior rules for agents rather than service architecture structure.
+- Keeping them in `docs/agent` prevents the architecture document from mixing structural decisions with code-style guidance.
+
+Implication for agents:
+- Apply the function, naming, and error handling rules during backend implementation work.
+- Consult `docs/agent/coding-rules.md` when the task involves function structure, naming, or error handling rules, or when the rule is not already clear from the current context.
+- Keep architecture documents focused on structure, ownership, boundaries, and package layout.
+
+Related files:
+- `docs/agent/coding-rules.md`
+- `AGENTS.md`
+- `docs/architecture/service-package-structure.md`

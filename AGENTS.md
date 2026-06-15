@@ -12,11 +12,12 @@ Keep this file focused on AI behavior rules.
 - `docs/agent/decisions.md`: decisions the project has already made
 - `docs/agent/failure-memory.md`: repeated or high-risk mistakes identified by the user
 - `docs/agent/checklists.md`: verification checklists
+- `docs/agent/coding-rules.md`: AI-facing backend coding rules
 - `docs/scripts/verify.sh`: repository-wide verification entry point
 
 ## Required Reading
 
-Before making code changes, agents must read:
+Before starting a code-change task, agents must read:
 
 - `docs/PROJECT_CONTEXT.md`, if it exists
 - `docs/agent/decisions.md`
@@ -24,6 +25,8 @@ Before making code changes, agents must read:
 - `docs/agent/checklists.md`
 
 If the task affects a specific service, inspect that service's source code, build file, configuration, and tests before editing.
+
+For backend implementation work, follow `docs/agent/coding-rules.md`. Consult it when the task involves function structure, naming, or error handling rules, or when the rule is not already clear from the current context.
 
 For `auth-service`, inspect as needed:
 
@@ -82,4 +85,4 @@ Before reporting completion:
 - Confirm changes are scoped to the request.
 - Run required verification, or report why it was not run.
 - Confirm no secrets were added.
-- Check whether `docs/PROJECT_CONTEXT.md`, `docs/agent/decisions.md`, `docs/agent/failure-memory.md`, or `docs/agent/checklists.md` needs an update.
+- Check whether `docs/PROJECT_CONTEXT.md`, `docs/agent/decisions.md`, `docs/agent/failure-memory.md`, `docs/agent/checklists.md`, or `docs/agent/coding-rules.md` needs an update.

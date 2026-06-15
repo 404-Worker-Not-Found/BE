@@ -85,6 +85,7 @@ When agent documents are updated, check:
 - Does `docs/agent/decisions.md` record decisions?
 - Does `docs/agent/failure-memory.md` record only user-identified repeated mistakes?
 - Does `docs/agent/checklists.md` contain verification checklists?
+- Does `docs/agent/coding-rules.md` contain AI-facing backend coding rules?
 
 ## Collaboration Workflow Check
 

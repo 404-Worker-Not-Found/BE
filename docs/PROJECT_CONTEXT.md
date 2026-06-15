@@ -14,6 +14,10 @@ The broader domain and service boundaries are currently represented in:
 
 - `docs/urgent_job_service_msa_erd_v1.drawio`
 
+Architecture notes:
+
+- `docs/architecture/service-package-structure.md`
+
 ## Domain
 
 The service domain is urgent job matching.
@@ -42,6 +46,7 @@ Current state:
 - `auth-service` has generated application and test skeletons.
 - The repository has a first ERD draft for the MSA design.
 - A repository-wide verification script exists at `docs/scripts/verify.sh`.
+- The service package structure is defined in `docs/architecture/service-package-structure.md`.
 - `auth-service` tests use Testcontainers with MySQL for the test datasource.
 - Agent work instructions exist in `AGENTS.md`.
 - Agent failure memory, decision memory, and checklist memory exist under `docs/agent/`.
@@ -127,7 +132,7 @@ Current persistence-related dependencies:
 
 Likely next steps:
 
-- Define `auth-service` package structure.
+- Apply the decided service package structure to `auth-service`.
 - Define access token and refresh token handling details.
 - Define common API response and error response shape.
 - Add first Flyway migration when the initial auth schema is confirmed.
