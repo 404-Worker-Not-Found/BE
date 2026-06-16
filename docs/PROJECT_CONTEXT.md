@@ -137,7 +137,8 @@ Current implementation state:
 - The service currently contains generated Spring Boot application and test skeletons.
 - The agreed package structure has been scaffolded in `auth-service` with `package-info.java` files so package directories are tracked.
 - Initial auth account, credential, OAuth connection, refresh token entities, and related enums have been added.
-- Security, API contracts, repository, service, controller, Flyway schema migrations, and token strategy are not yet implemented.
+- Initial auth account, credential, OAuth connection, and refresh token repositories have been added.
+- Security, API contracts, service, controller, Flyway schema migrations, and token strategy are not yet implemented.
 
 Auth-related decisions are recorded in `docs/agent/decisions.md`.
 
