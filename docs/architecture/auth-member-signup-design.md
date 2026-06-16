@@ -494,13 +494,13 @@ refresh token 폐기
 ### member-service
 
 ```text
-POST /internal/members/owners
+POST /api/members/internal/owners
 ```
 
 auth-service에서 OWNER 회원 생성 요청
 
 ```text
-POST /internal/members/workers
+POST /api/members/internal/workers
 ```
 
 auth-service에서 WORKER 회원 생성 요청
@@ -512,14 +512,15 @@ GET /api/members/me
 내 회원 정보 조회
 
 ```text
-GET /internal/members/{memberId}
+GET /api/members/internal/{memberId}
 ```
 
 서비스 간 회원 기본 정보 조회
 
 주의:
 
-- `/internal/**` API는 외부 클라이언트가 직접 호출하지 못하도록 제한한다.
+- `*/internal/**` 용도의 API도 URL은 `/api/**` 하위에 둔다.
+- 내부 API는 외부 클라이언트가 직접 호출하지 못하도록 gateway/security 정책으로 제한한다.
 - 초기에는 REST로 호출한다.
 - 추후 필요하면 이벤트 기반 복제나 비동기 상태 전파를 추가한다.
 
