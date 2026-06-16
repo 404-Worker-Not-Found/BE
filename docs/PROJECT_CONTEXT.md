@@ -138,7 +138,8 @@ Current implementation state:
 - The agreed package structure has been scaffolded in `auth-service` with `package-info.java` files so package directories are tracked.
 - Initial auth account, credential, OAuth connection, refresh token entities, and related enums have been added.
 - Initial auth account, credential, OAuth connection, and refresh token repositories have been added.
-- Security, API contracts, service, controller, Flyway schema migrations, and token strategy are not yet implemented.
+- Initial auth request/response DTOs and member-service client DTOs have been added.
+- Security, service, controller, Flyway schema migrations, and token strategy are not yet implemented.
 
 Auth-related decisions are recorded in `docs/agent/decisions.md`.
 
