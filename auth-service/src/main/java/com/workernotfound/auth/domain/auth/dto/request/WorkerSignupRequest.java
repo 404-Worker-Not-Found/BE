@@ -28,6 +28,10 @@ public record WorkerSignupRequest(
 	@Size(max = 20)
 	String phoneNumber,
 
+	@NotBlank
+	@Size(max = 100)
+	String deviceId,
+
 	@NotNull
 	@PositiveOrZero
 	Integer desiredHourlyWage,

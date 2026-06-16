@@ -25,6 +25,10 @@ public record OwnerSignupRequest(
 	String phoneNumber,
 
 	@NotBlank
+	@Size(max = 100)
+	String deviceId,
+
+	@NotBlank
 	@Size(max = 20)
 	String businessRegistrationNumber,
 

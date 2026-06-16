@@ -534,7 +534,7 @@ GET /api/members/internal/{memberId}
 6. auth-service가 SMS 인증번호를 Redis에 TTL로 저장하고 발송한다.
 7. 클라이언트가 SMS 인증번호 검증을 요청한다.
 8. auth-service가 검증 성공 플래그를 Redis에 TTL로 저장한다.
-9. 클라이언트가 이름, 이메일, 비밀번호, 휴대폰 번호, 역할별 추가 정보를 포함해 최종 회원가입을 요청한다.
+9. 클라이언트가 이름, 이메일, 비밀번호, 휴대폰 번호, `deviceId`, 역할별 추가 정보를 포함해 최종 회원가입을 요청한다.
 10. auth-service가 이메일/휴대폰 인증 완료 여부를 Redis에서 확인한다.
 11. auth-service가 비밀번호를 BCrypt로 암호화한다.
 12. auth-service가 member-service 내부 API를 호출해 Member와 역할별 프로필 생성을 요청한다.
@@ -542,7 +542,7 @@ GET /api/members/internal/{memberId}
 14. member-service가 생성된 `memberId`를 응답한다.
 15. auth-service가 `AuthAccount`, `LocalCredential`을 저장한다.
 16. auth-service가 access token과 refresh token을 발급한다.
-17. auth-service가 refresh token hash를 DB에 저장한다.
+17. auth-service가 refresh token hash와 `deviceId`를 DB에 저장한다.
 18. auth-service는 refresh token 원문을 클라이언트에만 반환한다.
 
 ## OAuth2 로그인 및 가입 흐름

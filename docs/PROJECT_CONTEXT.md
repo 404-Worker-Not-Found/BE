@@ -143,7 +143,8 @@ Current implementation state:
 - Redis-backed verification code service has been added.
 - Initial JWT access token issuance/validation and refresh token hashing support have been added.
 - Initial member-service REST client support has been added.
-- Security, controller, Flyway schema migrations, signup, and login services are not yet implemented.
+- Initial signup, login, token reissue, and logout service layer support has been added.
+- Security, controller, and Flyway schema migrations are not yet implemented.
 
 Auth-related decisions are recorded in `docs/agent/decisions.md`.
 
@@ -188,7 +189,6 @@ Likely next steps:
 
 These questions are not yet settled in code:
 
-- Where will refresh tokens be stored, if used?
 - What is the common API response format?
 - What is the common error format?
 - Will service-to-service communication initially use synchronous HTTP, events, or both?
