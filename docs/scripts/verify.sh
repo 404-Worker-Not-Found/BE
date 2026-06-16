@@ -22,5 +22,6 @@ run_gradle_build() {
 }
 
 run_gradle_build "$REPO_ROOT/auth-service"
+run_gradle_build "$REPO_ROOT/member-service"
 
 echo "==> Repository verification completed"

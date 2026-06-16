@@ -6,9 +6,10 @@ This repository contains the backend for an urgent job service.
 
 The project is being designed as an MSA-based backend where each service owns its own database boundary and communicates with other services through API or event contracts.
 
-The current repository is in an early backend setup stage. The only implemented service directory is:
+The current repository is in an early backend setup stage. Implemented service directories are:
 
 - `auth-service`
+- `member-service`
 
 The broader domain and service boundaries are currently represented in:
 
@@ -44,10 +45,13 @@ Current state:
 
 - `auth-service` exists as a Spring Boot service.
 - `auth-service` has generated application and test skeletons.
+- `member-service` exists as a Spring Boot service.
+- `member-service` has initial member, owner, worker, and location entities.
 - The repository has a first ERD draft for the MSA design.
 - A repository-wide verification script exists at `docs/scripts/verify.sh`.
 - The service package structure is defined in `docs/architecture/service-package-structure.md`.
 - `auth-service` tests use Testcontainers with MySQL for the test datasource.
+- `member-service` tests use Testcontainers with MySQL for the test datasource.
 - Agent work instructions exist in `AGENTS.md`.
 - Agent failure memory, decision memory, and checklist memory exist under `docs/agent/`.
 
@@ -69,6 +73,21 @@ Current `auth-service` scaffold:
 - Bean Validation
 - Lombok
 
+Current `member-service` scaffold:
+
+- Java 17
+- Spring Boot 4.1.0
+- Gradle
+- Spring Web MVC
+- Spring Security
+- Spring Data JPA
+- MySQL
+- Flyway
+- Testcontainers MySQL for integration-test datasource
+- Spring Boot Actuator
+- Bean Validation
+- Lombok
+
 The current scaffold matches the decided technology baseline in `docs/agent/decisions.md`.
 
 ## Service Map
@@ -76,10 +95,10 @@ The current scaffold matches the decided technology baseline in `docs/agent/deci
 Implemented:
 
 - `auth-service`: authentication service
+- `member-service`: member profile service
 
 Planned or represented in the ERD:
 
-- `user-service`
 - `job-service`
 - `matching-service`
 - `work-service`
@@ -120,6 +139,26 @@ Current implementation state:
 - Security, domain model, API contracts, persistence model, and token strategy are not yet implemented in code.
 
 Auth-related decisions are recorded in `docs/agent/decisions.md`.
+
+## Member Service Context
+
+`member-service` stores member profile data owned by the member domain.
+
+Expected responsibilities:
+
+- member basic information storage
+- owner profile storage
+- worker profile storage
+- location storage
+- member information lookup
+
+Current implementation state:
+
+- The service currently contains generated Spring Boot application and test skeletons.
+- Initial member, owner, worker, and location entities have been added.
+- Repository, service, controller, API contracts, and Flyway schema migrations are not yet implemented.
+
+Member signup design notes are recorded in `docs/architecture/auth-member-signup-design.md`.
 
 ## Current Persistence Dependencies
 
