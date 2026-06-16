@@ -138,14 +138,16 @@ Current implementation state:
 
 - The service currently contains generated Spring Boot application and test skeletons.
 - The agreed package structure has been scaffolded in `auth-service` with `package-info.java` files so package directories are tracked.
+- `auth-service` owns authentication state, LOCAL credentials, OAuth connections, verification flows, JWT issuance, refresh token rotation, and logout.
 - Initial auth account, credential, OAuth connection, refresh token entities, and related enums have been added.
 - Initial auth account, credential, OAuth connection, and refresh token repositories have been added.
 - Initial auth request/response DTOs and member-service client DTOs have been added.
 - Redis-backed verification code service has been added.
-- Initial JWT access token issuance/validation and refresh token hashing support have been added.
+- Initial JWT access token issuance/validation, refresh token rotation, and refresh token hashing support have been added.
 - Initial member-service REST client support has been added.
 - Initial member-service REST client calls include a shared internal secret header for service-to-service APIs.
-- Initial signup, login, token reissue, and logout service layer support has been added.
+- LOCAL signup/login, token reissue, and logout service layer support has been added.
+- LOCAL signup requires email verification, SMS verification, password input, and role-specific additional information before final account creation.
 - Initial auth controllers, Swagger/OpenAPI documentation, and basic stateless security configuration have been added.
 - Core auth logic tests cover refresh token rotation, LOCAL login, signup verification checks, token hashing, and JWT validation.
 - Initial KAKAO/NAVER OAuth2 login support has been added.
@@ -170,10 +172,12 @@ Expected responsibilities:
 Current implementation state:
 
 - The service currently contains generated Spring Boot application and test skeletons.
+- `member-service` owns member basic information, role-specific profile data, worker preferences, worker available times, and location data.
 - Initial member, owner, worker, and location entities have been added.
 - Initial repository, service, and controller layers have been added.
 - Basic member-service security configuration permits Swagger, internal member APIs, and the current `X-Member-Id` based member lookup endpoint.
 - Internal member APIs under `/api/members/internal/**` require the shared `X-Internal-Secret` header.
+- Location data stores both address and latitude/longitude so address can be used for display and coordinates can support future radius-based search.
 - API contracts and Flyway schema migrations are not yet implemented.
 
 Member signup design notes are recorded in `docs/architecture/auth-member-signup-design.md`.
@@ -200,5 +204,4 @@ These questions are not yet settled in code:
 
 - What is the common API response format?
 - What is the common error format?
-- Will service-to-service communication initially use synchronous HTTP, events, or both?
 - What deployment target and environment strategy will be used?

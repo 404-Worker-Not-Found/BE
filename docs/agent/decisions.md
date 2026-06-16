@@ -405,3 +405,67 @@ Related files:
 - `docs/agent/coding-rules.md`
 - `AGENTS.md`
 - `docs/architecture/service-package-structure.md`
+
+## 2026-06-16 - Initial Auth and Member Service Boundary
+
+Decision:
+- `auth-service` owns authentication accounts, LOCAL credentials, OAuth connections, verification flows, JWT issuance, refresh token rotation, and logout.
+- `member-service` owns member basic information, role-specific profile data, worker preferences, worker available times, and location data.
+- Cross-service references use external IDs such as `memberId`, not physical database foreign keys.
+
+Reason:
+- Authentication state and member profile data have different ownership, lifecycle, and persistence boundaries.
+- Keeping physical foreign keys inside a service preserves service autonomy.
+
+Implication for agents:
+- Do not add member profile fields to auth-service entities unless they are required for authentication.
+- Do not create physical database foreign keys between auth-service and member-service.
+- When auth-service needs member data creation, call member-service through the agreed internal API contract.
+
+Related files:
+- `auth-service`
+- `member-service`
+
+## 2026-06-16 - Initial Service-to-Service Communication
+
+Decision:
+- Use synchronous REST for initial communication between `auth-service` and `member-service`.
+- Put internal service-to-service APIs under `/api/{domain}/internal/**`.
+- Protect internal service-to-service APIs with the `X-Internal-Secret` shared secret header at this stage.
+
+Reason:
+- REST keeps the first cross-service signup flow simple and explicit while the project is still in an early implementation phase.
+- A shared secret header provides a minimal guard against direct external calls before API Gateway, service mesh, or mTLS is introduced.
+
+Implication for agents:
+- Do not expose internal APIs as unauthenticated public endpoints.
+- Do not hardcode the internal secret; inject it from configuration or environment variables.
+- Keep TODOs or extension points that allow this mechanism to be replaced by API Gateway, mTLS, or another service-to-service authentication mechanism later.
+
+Related files:
+- `auth-service/src/main/java/com/workernotfound/auth/external/client/member`
+- `member-service/src/main/java/com/workernotfound/member/global/security`
+
+## 2026-06-16 - Signup and OAuth Account Linking Policy
+
+Decision:
+- LOCAL signup is completed only after required email verification, SMS verification, password input, and role-specific additional information are provided.
+- OAuth2 supports only KAKAO and NAVER.
+- If an OAuth provider account is already connected, OAuth login signs in through that connection.
+- If no OAuth connection exists but the provider email matches an existing account, connect the OAuth account to the existing auth account.
+- If neither connection nor matching email exists, issue a Redis-backed OAuth signup ticket and complete signup after OWNER or WORKER additional information is provided.
+- OAuth signup does not create `LocalCredential`.
+
+Reason:
+- The policy avoids pending onboarding accounts and keeps final signup atomic from the user's perspective.
+- Same-email OAuth linking prevents duplicate auth accounts for the same user.
+- OAuth users do not need LOCAL password credentials.
+
+Implication for agents:
+- Do not introduce `PENDING` member status for signup.
+- Do not create `LocalCredential` during OAuth signup.
+- Preserve the same-email OAuth linking behavior unless the product policy changes.
+
+Related files:
+- `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service`
+- `auth-service/src/main/java/com/workernotfound/auth/domain/account/entity`
