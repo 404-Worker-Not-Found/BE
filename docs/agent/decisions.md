@@ -557,3 +557,32 @@ Related files:
 - `auth-service/src/main/resources/db/migration/V1__init_schema.sql`
 - `member-service/src/main/resources/db/migration/V1__init_schema.sql`
 - `.env.example`
+
+## 2026-06-17 - Auth Flow Safety Hardening
+
+Decision:
+- Refresh token reissue must validate that the auth account is `ACTIVE`.
+- Refresh token rotation must lock the refresh token row during reissue to reduce concurrent replay risk.
+- Verification code sending and verification attempts must be limited with Redis-backed counters.
+- If member-service creation succeeds but auth-service persistence fails during signup, auth-service should call a member-service internal compensation endpoint.
+- Verification code logging must be disabled by default and enabled only through local configuration.
+
+Reason:
+- Blocked or withdrawn accounts must not continue receiving new tokens through refresh token reissue.
+- Concurrent refresh token reuse can otherwise mint multiple valid rotated tokens.
+- Public verification endpoints need basic abuse protection.
+- Cross-service signup can leave orphan member records without compensation.
+- Verification codes are sensitive and should not be logged outside local testing.
+
+Implication for agents:
+- Preserve account status validation and row locking when changing refresh token rotation.
+- Do not remove verification rate/attempt limits without replacing them with equivalent protection.
+- Keep verification code logging behind configuration, defaulting to disabled.
+- Keep signup compensation behavior or replace it with a stronger consistency mechanism such as idempotency, pending state, or outbox-based cleanup.
+
+Related files:
+- `auth-service/src/main/java/com/workernotfound/auth/domain/token/service/TokenService.java`
+- `auth-service/src/main/java/com/workernotfound/auth/domain/token/repository/RefreshTokenRepository.java`
+- `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service/VerificationService.java`
+- `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service/SignupService.java`
+- `member-service/src/main/java/com/workernotfound/member/domain/member/controller/MemberInternalController.java`

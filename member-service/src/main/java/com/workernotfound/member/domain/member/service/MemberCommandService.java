@@ -27,6 +27,10 @@ public class MemberCommandService {
 		return memberRepository.save(member);
 	}
 
+	public void deleteMember(Member member) {
+		memberRepository.delete(member);
+	}
+
 	private void validateEmailAvailable(String email) {
 		if (memberRepository.existsByEmail(email)) {
 			throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");

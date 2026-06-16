@@ -1,6 +1,7 @@
 package com.workernotfound.auth.domain.token.service;
 
 import com.workernotfound.auth.domain.account.entity.AuthAccount;
+import com.workernotfound.auth.domain.account.entity.enums.MemberStatus;
 import com.workernotfound.auth.domain.token.dto.request.TokenReissueRequest;
 import com.workernotfound.auth.domain.token.dto.response.TokenResponse;
 import com.workernotfound.auth.domain.token.entity.RefreshToken;
@@ -22,6 +23,7 @@ public class TokenService {
 	public TokenResponse reissue(TokenReissueRequest request) {
 		LocalDateTime now = LocalDateTime.now();
 		RefreshToken oldRefreshToken = findUsableRefreshToken(request.refreshToken(), now);
+		validateActiveAccount(oldRefreshToken);
 		validateDevice(oldRefreshToken, request.deviceId());
 
 		String newRefreshToken = jwtTokenProvider.createRefreshToken();
@@ -56,7 +58,7 @@ public class TokenService {
 
 	private RefreshToken findUsableRefreshToken(String rawRefreshToken, LocalDateTime now) {
 		String tokenHash = tokenHasher.hash(rawRefreshToken);
-		RefreshToken refreshToken = refreshTokenRepository.findByTokenHash(tokenHash)
+		RefreshToken refreshToken = refreshTokenRepository.findByTokenHashForUpdate(tokenHash)
 			.orElseThrow(() -> new RefreshTokenException("refresh token을 찾을 수 없습니다."));
 		if (refreshToken.getRevokedAt() != null) {
 			throw new RefreshTokenException("이미 폐기된 refresh token입니다.");
@@ -66,6 +68,12 @@ public class TokenService {
 		}
 		refreshToken.markUsed(now);
 		return refreshToken;
+	}
+
+	private void validateActiveAccount(RefreshToken refreshToken) {
+		if (refreshToken.getAuthAccount().getStatus() != MemberStatus.ACTIVE) {
+			throw new RefreshTokenException("활성 상태의 계정만 token을 재발급할 수 있습니다.");
+		}
 	}
 
 	private void validateDevice(RefreshToken refreshToken, String deviceId) {

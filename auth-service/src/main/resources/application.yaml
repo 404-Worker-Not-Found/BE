@@ -18,6 +18,8 @@ server:
   port: ${AUTH_SERVICE_PORT:8081}
 
 auth:
+  verification:
+    log-code-enabled: ${AUTH_VERIFICATION_LOG_CODE_ENABLED:false}
   jwt:
     secret: ${AUTH_JWT_SECRET}
     access-token-expiration: 15m

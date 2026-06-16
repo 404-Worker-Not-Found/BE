@@ -68,4 +68,14 @@ public interface MemberInternalControllerDocs {
 		@Parameter(description = "회원 ID", required = true)
 		Long memberId
 	);
+
+	@Operation(summary = "회원가입 보상용 회원 삭제", description = "auth-service 회원가입 실패 보상 처리로 생성된 회원을 삭제합니다.")
+	@ApiResponses({
+		@ApiResponse(responseCode = "200", description = "회원 삭제 성공", content = @Content),
+		@ApiResponse(responseCode = "404", description = "회원을 찾을 수 없음", content = @Content)
+	})
+	ResponseEntity<com.workernotfound.member.global.response.ApiResponse<Void>> deleteMemberForSignupCompensation(
+		@Parameter(description = "회원 ID", required = true)
+		Long memberId
+	);
 }

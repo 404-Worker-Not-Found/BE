@@ -75,6 +75,17 @@ class TokenServiceTests extends IntegrationTestSupport {
 	}
 
 	@Test
+	void reissueFailsWithInactiveAccount() {
+		AuthAccount authAccount = saveAuthAccount("blocked@example.com", 105L);
+		TokenResponse issuedToken = tokenService.issue(authAccount, "device-1");
+		authAccount.block();
+
+		assertThatThrownBy(() -> tokenService.reissue(new TokenReissueRequest(issuedToken.refreshToken(), "device-1")))
+			.isInstanceOf(RefreshTokenException.class)
+			.hasMessage("활성 상태의 계정만 token을 재발급할 수 있습니다.");
+	}
+
+	@Test
 	void issueStoresOnlyRefreshTokenHash() {
 		AuthAccount authAccount = saveAuthAccount("hash-only@example.com", 104L);
 		TokenResponse issuedToken = tokenService.issue(authAccount, "device-1");

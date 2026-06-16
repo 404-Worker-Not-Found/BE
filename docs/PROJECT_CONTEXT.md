@@ -150,10 +150,13 @@ Current implementation state:
 - Initial member-service REST client calls include a shared internal secret header for service-to-service APIs.
 - LOCAL signup/login, token reissue, and logout service layer support has been added.
 - LOCAL signup requires email verification, SMS verification, password input, and role-specific additional information before final account creation.
+- Signup calls member-service first and compensates by deleting the created member if auth-service persistence fails afterward.
 - Initial auth controllers, Swagger/OpenAPI documentation, and basic stateless security configuration have been added.
 - Auth API responses and controller-level errors use the common `ApiResponse` envelope.
 - Auth security 401/403 responses are written as the common `ApiResponse` envelope.
 - Core auth logic tests cover refresh token rotation, LOCAL login, signup verification checks, token hashing, and JWT validation.
+- Refresh token reissue checks account status and locks the refresh token row during rotation.
+- Verification code sending has a Redis-backed short rate limit, and verification attempts are limited before the code is invalidated.
 - Initial KAKAO/NAVER OAuth2 login support has been added.
 - OAuth2 login connects to an existing OAuth connection, links same-email accounts when no connection exists, or issues a Redis-backed signup ticket for new users.
 - OAuth2 signup ticket completion supports OWNER/WORKER signup without creating `LocalCredential`.
@@ -182,6 +185,7 @@ Current implementation state:
 - Basic member-service security configuration permits Swagger and internal member APIs.
 - `member-service` verifies auth-service JWT access tokens directly for the current `/api/members/me` flow.
 - Internal member APIs under `/api/members/internal/**` require the shared `X-Internal-Secret` header.
+- An internal signup compensation endpoint can delete a member created before auth-service persistence fails.
 - Member API responses, controller-level errors, internal API secret failures, and security 401/403 responses use the common `ApiResponse` envelope.
 - Location data stores both address and latitude/longitude so address can be used for display and coordinates can support future radius-based search.
 - Initial Flyway schema migration has been added.

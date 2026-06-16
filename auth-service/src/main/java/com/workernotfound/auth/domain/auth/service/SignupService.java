@@ -25,11 +25,13 @@ import com.workernotfound.auth.external.client.member.dto.CreateWorkerMemberRequ
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class SignupService {
 
@@ -46,26 +48,36 @@ public class SignupService {
 	public SignupResponse signupOwner(OwnerSignupRequest request) {
 		validateSignupPrerequisites(request.email(), request.phoneNumber());
 		CreateMemberResponse memberResponse = memberServiceClient.createOwner(toCreateOwnerMemberRequest(request));
-		return saveLocalAccountAndIssueToken(
-			memberResponse.memberId(),
-			request.email(),
-			MemberRole.OWNER,
-			request.password(),
-			request.deviceId()
-		);
+		try {
+			return saveLocalAccountAndIssueToken(
+				memberResponse.memberId(),
+				request.email(),
+				MemberRole.OWNER,
+				request.password(),
+				request.deviceId()
+			);
+		} catch (RuntimeException exception) {
+			compensateCreatedMember(memberResponse.memberId(), exception);
+			throw exception;
+		}
 	}
 
 	@Transactional
 	public SignupResponse signupWorker(WorkerSignupRequest request) {
 		validateSignupPrerequisites(request.email(), request.phoneNumber());
 		CreateMemberResponse memberResponse = memberServiceClient.createWorker(toCreateWorkerMemberRequest(request));
-		return saveLocalAccountAndIssueToken(
-			memberResponse.memberId(),
-			request.email(),
-			MemberRole.WORKER,
-			request.password(),
-			request.deviceId()
-		);
+		try {
+			return saveLocalAccountAndIssueToken(
+				memberResponse.memberId(),
+				request.email(),
+				MemberRole.WORKER,
+				request.password(),
+				request.deviceId()
+			);
+		} catch (RuntimeException exception) {
+			compensateCreatedMember(memberResponse.memberId(), exception);
+			throw exception;
+		}
 	}
 
 	@Transactional
@@ -73,12 +85,17 @@ public class SignupService {
 		OAuthSignupTicket signupTicket = oAuthSignupTicketService.getAndDelete(request.signupTicket());
 		validateOAuthSignupPrerequisites(signupTicket, request.phoneNumber());
 		CreateMemberResponse memberResponse = memberServiceClient.createOwner(toCreateOwnerMemberRequest(request, signupTicket));
-		return saveOAuthAccountAndIssueToken(
-			memberResponse.memberId(),
-			signupTicket,
-			MemberRole.OWNER,
-			request.deviceId()
-		);
+		try {
+			return saveOAuthAccountAndIssueToken(
+				memberResponse.memberId(),
+				signupTicket,
+				MemberRole.OWNER,
+				request.deviceId()
+			);
+		} catch (RuntimeException exception) {
+			compensateCreatedMember(memberResponse.memberId(), exception);
+			throw exception;
+		}
 	}
 
 	@Transactional
@@ -86,12 +103,17 @@ public class SignupService {
 		OAuthSignupTicket signupTicket = oAuthSignupTicketService.getAndDelete(request.signupTicket());
 		validateOAuthSignupPrerequisites(signupTicket, request.phoneNumber());
 		CreateMemberResponse memberResponse = memberServiceClient.createWorker(toCreateWorkerMemberRequest(request, signupTicket));
-		return saveOAuthAccountAndIssueToken(
-			memberResponse.memberId(),
-			signupTicket,
-			MemberRole.WORKER,
-			request.deviceId()
-		);
+		try {
+			return saveOAuthAccountAndIssueToken(
+				memberResponse.memberId(),
+				signupTicket,
+				MemberRole.WORKER,
+				request.deviceId()
+			);
+		} catch (RuntimeException exception) {
+			compensateCreatedMember(memberResponse.memberId(), exception);
+			throw exception;
+		}
 	}
 
 	private void validateSignupPrerequisites(String email, String phoneNumber) {
@@ -128,7 +150,6 @@ public class SignupService {
 		String rawPassword,
 		String deviceId
 	) {
-		// TODO: member-service 생성 성공 후 auth-service 저장 실패 시 고아 member 보상 처리를 추가한다.
 		AuthAccount authAccount = authAccountRepository.save(AuthAccount.builder()
 			.memberId(memberId)
 			.email(email)
@@ -147,7 +168,6 @@ public class SignupService {
 		MemberRole role,
 		String deviceId
 	) {
-		// TODO: member-service 생성 성공 후 auth-service 저장 실패 시 고아 member 보상 처리를 추가한다.
 		AuthAccount authAccount = authAccountRepository.save(AuthAccount.builder()
 			.memberId(memberId)
 			.email(signupTicket.providerEmail())
@@ -173,6 +193,19 @@ public class SignupService {
 			.passwordChangedAt(LocalDateTime.now())
 			.build();
 		localCredentialRepository.save(localCredential);
+	}
+
+	private void compensateCreatedMember(Long memberId, RuntimeException originalException) {
+		try {
+			memberServiceClient.deleteMemberForSignupCompensation(memberId);
+		} catch (RuntimeException compensationException) {
+			log.warn(
+				"member-service 회원가입 보상 삭제에 실패했습니다. memberId={}",
+				memberId,
+				compensationException
+			);
+			originalException.addSuppressed(compensationException);
+		}
 	}
 
 	private CreateOwnerMemberRequest toCreateOwnerMemberRequest(OwnerSignupRequest request) {

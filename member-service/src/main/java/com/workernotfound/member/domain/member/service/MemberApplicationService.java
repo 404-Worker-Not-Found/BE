@@ -76,6 +76,12 @@ public class MemberApplicationService {
 		return toMemberInternalResponse(member);
 	}
 
+	@Transactional
+	public void deleteMemberForSignupCompensation(Long memberId) {
+		Member member = memberFindService.findMember(memberId);
+		memberCommandService.deleteMember(member);
+	}
+
 	@Transactional(readOnly = true)
 	public MyMemberResponse getMyMember(Long memberId) {
 		Member member = memberFindService.findActiveMember(memberId);

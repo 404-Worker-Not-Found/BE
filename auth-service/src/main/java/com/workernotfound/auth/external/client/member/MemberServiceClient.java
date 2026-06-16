@@ -31,6 +31,21 @@ public class MemberServiceClient {
 		return post(CREATE_WORKER_PATH, request);
 	}
 
+	public void deleteMemberForSignupCompensation(Long memberId) {
+		try {
+			memberServiceRestClient.delete()
+				.uri("/api/members/internal/{memberId}", memberId)
+				.retrieve()
+				.onStatus(HttpStatusCode::isError, (httpRequest, clientResponse) -> {
+					String responseBody = new String(clientResponse.getBody().readAllBytes());
+					throw new MemberServiceClientException(clientResponse.getStatusCode(), responseBody);
+				})
+				.toBodilessEntity();
+		} catch (RestClientException exception) {
+			throw new MemberServiceClientException(exception);
+		}
+	}
+
 	private CreateMemberResponse post(String path, Object request) {
 		try {
 			ApiResponse<CreateMemberResponse> response = memberServiceRestClient.post()
