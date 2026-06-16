@@ -7,6 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record MemberServiceProperties(
 	String baseUrl,
 	Duration connectTimeout,
-	Duration readTimeout
+	Duration readTimeout,
+	String internalSecret
 ) {
 }

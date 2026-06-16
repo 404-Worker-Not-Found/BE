@@ -38,5 +38,6 @@ public abstract class IntegrationTestSupport {
 		registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
 		registry.add("auth.jwt.secret", () -> "test-jwt-secret-key-for-auth-service-token-tests");
 		registry.add("auth.member-service.base-url", () -> "http://localhost:8081");
+		registry.add("auth.member-service.internal-secret", () -> "test-internal-secret");
 	}
 }

@@ -144,6 +144,7 @@ Current implementation state:
 - Redis-backed verification code service has been added.
 - Initial JWT access token issuance/validation and refresh token hashing support have been added.
 - Initial member-service REST client support has been added.
+- Initial member-service REST client calls include a shared internal secret header for service-to-service APIs.
 - Initial signup, login, token reissue, and logout service layer support has been added.
 - Initial auth controllers, Swagger/OpenAPI documentation, and basic stateless security configuration have been added.
 - Core auth logic tests cover refresh token rotation, LOCAL login, signup verification checks, token hashing, and JWT validation.
@@ -172,6 +173,7 @@ Current implementation state:
 - Initial member, owner, worker, and location entities have been added.
 - Initial repository, service, and controller layers have been added.
 - Basic member-service security configuration permits Swagger, internal member APIs, and the current `X-Member-Id` based member lookup endpoint.
+- Internal member APIs under `/api/members/internal/**` require the shared `X-Internal-Secret` header.
 - API contracts and Flyway schema migrations are not yet implemented.
 
 Member signup design notes are recorded in `docs/architecture/auth-member-signup-design.md`.

@@ -11,6 +11,7 @@ auth:
     base-url: ${MEMBER_SERVICE_BASE_URL}
     connect-timeout: 3s
     read-timeout: 5s
+    internal-secret: ${INTERNAL_API_SECRET}
   oauth2:
     connect-timeout: 3s
     read-timeout: 5s

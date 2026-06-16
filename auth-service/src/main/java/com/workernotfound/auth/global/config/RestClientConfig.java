@@ -20,6 +20,8 @@ public class RestClientConfig {
 
 		return RestClient.builder()
 			.baseUrl(memberServiceProperties.baseUrl())
+			// TODO: API Gateway나 mTLS 기반 서비스 간 인증으로 대체한다.
+			.defaultHeader("X-Internal-Secret", memberServiceProperties.internalSecret())
 			.requestFactory(requestFactory)
 			.build();
 	}
