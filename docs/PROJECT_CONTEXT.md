@@ -73,6 +73,7 @@ Current `auth-service` scaffold:
 - Spring Boot Actuator
 - Bean Validation
 - Lombok
+- Springdoc OpenAPI
 
 Current `member-service` scaffold:
 
@@ -144,7 +145,8 @@ Current implementation state:
 - Initial JWT access token issuance/validation and refresh token hashing support have been added.
 - Initial member-service REST client support has been added.
 - Initial signup, login, token reissue, and logout service layer support has been added.
-- Security, controller, and Flyway schema migrations are not yet implemented.
+- Initial auth controllers, Swagger/OpenAPI documentation, and basic stateless security configuration have been added.
+- Flyway schema migrations are not yet implemented.
 
 Auth-related decisions are recorded in `docs/agent/decisions.md`.
 
