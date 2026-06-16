@@ -22,6 +22,15 @@ class SecurityConfigTests extends IntegrationTestSupport {
 	}
 
 	@Test
+	void oauthLoginEndpointIsPublic() {
+		mockMvcTester.post()
+			.uri("/api/auth/oauth2/KAKAO/login")
+			.exchange()
+			.assertThat()
+			.hasStatus4xxClientError();
+	}
+
+	@Test
 	void protectedApiRequiresAuthentication() {
 		mockMvcTester.get()
 			.uri("/api/protected")

@@ -147,6 +147,9 @@ Current implementation state:
 - Initial signup, login, token reissue, and logout service layer support has been added.
 - Initial auth controllers, Swagger/OpenAPI documentation, and basic stateless security configuration have been added.
 - Core auth logic tests cover refresh token rotation, LOCAL login, signup verification checks, token hashing, and JWT validation.
+- Initial KAKAO/NAVER OAuth2 login support has been added.
+- OAuth2 login connects to an existing OAuth connection, links same-email accounts when no connection exists, or issues a Redis-backed signup ticket for new users.
+- OAuth2 signup ticket completion supports OWNER/WORKER signup without creating `LocalCredential`.
 - Flyway schema migrations are not yet implemented.
 
 Auth-related decisions are recorded in `docs/agent/decisions.md`.
