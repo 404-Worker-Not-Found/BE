@@ -146,6 +146,7 @@ Current implementation state:
 - Initial member-service REST client support has been added.
 - Initial signup, login, token reissue, and logout service layer support has been added.
 - Initial auth controllers, Swagger/OpenAPI documentation, and basic stateless security configuration have been added.
+- Core auth logic tests cover refresh token rotation, LOCAL login, signup verification checks, token hashing, and JWT validation.
 - Flyway schema migrations are not yet implemented.
 
 Auth-related decisions are recorded in `docs/agent/decisions.md`.

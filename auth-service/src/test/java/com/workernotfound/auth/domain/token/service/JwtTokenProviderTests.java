@@ -34,4 +34,17 @@ class JwtTokenProviderTests extends IntegrationTestSupport {
 		assertThat(refreshToken).isNotBlank();
 		assertThat(tokenHasher.hash(refreshToken)).hasSize(64);
 	}
+
+	@Test
+	void validateAccessTokenReturnsFalseForTamperedToken() {
+		String accessToken = jwtTokenProvider.createAccessToken(1L, 2L, MemberRole.OWNER);
+		String tamperedToken = accessToken.substring(0, accessToken.length() - 1) + "x";
+
+		assertThat(jwtTokenProvider.validateAccessToken(tamperedToken)).isFalse();
+	}
+
+	@Test
+	void validateAccessTokenReturnsFalseForInvalidFormat() {
+		assertThat(jwtTokenProvider.validateAccessToken("not-a-jwt")).isFalse();
+	}
 }

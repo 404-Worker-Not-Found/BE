@@ -33,6 +33,7 @@ public abstract class IntegrationTestSupport {
 		registry.add("spring.datasource.username", MYSQL::getUsername);
 		registry.add("spring.datasource.password", MYSQL::getPassword);
 		registry.add("spring.datasource.driver-class-name", MYSQL::getDriverClassName);
+		registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
 		registry.add("spring.data.redis.host", REDIS::getHost);
 		registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
 		registry.add("auth.jwt.secret", () -> "test-jwt-secret-key-for-auth-service-token-tests");
