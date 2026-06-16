@@ -1,10 +1,10 @@
 package com.workernotfound.auth.external.client.oauth;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.workernotfound.auth.domain.account.entity.enums.OAuthProvider;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
@@ -19,6 +19,9 @@ public class RestOAuthProviderClient implements OAuthProviderClient {
 
 	private static final String AUTHORIZATION_CODE = "authorization_code";
 	private static final String BEARER_PREFIX = "Bearer ";
+	private static final ParameterizedTypeReference<Map<String, Object>> MAP_RESPONSE_TYPE =
+		new ParameterizedTypeReference<>() {
+		};
 
 	private final RestClient oauthProviderRestClient;
 	private final OAuth2ClientProperties properties;
@@ -35,7 +38,7 @@ public class RestOAuthProviderClient implements OAuthProviderClient {
 
 		try {
 			String accessToken = requestAccessToken(provider, providerConfig, authorizationCode, redirectUri, state);
-			JsonNode userInfo = requestUserInfo(providerConfig, accessToken);
+			Map<String, Object> userInfo = requestUserInfo(providerConfig, accessToken);
 			return parseProfile(provider, userInfo);
 		} catch (RestClientException exception) {
 			throw new OAuth2ClientException(exception);
@@ -49,25 +52,25 @@ public class RestOAuthProviderClient implements OAuthProviderClient {
 		String redirectUri,
 		String state
 	) {
-		JsonNode response = oauthProviderRestClient.post()
+		Map<String, Object> response = oauthProviderRestClient.post()
 			.uri(providerConfig.tokenUri())
 			.contentType(MediaType.APPLICATION_FORM_URLENCODED)
 			.body(tokenRequest(provider, providerConfig, authorizationCode, redirectUri, state))
 			.retrieve()
-			.body(JsonNode.class);
-		String accessToken = response == null ? null : response.path("access_token").asText(null);
+			.body(MAP_RESPONSE_TYPE);
+		String accessToken = textValue(response, "access_token");
 		if (!StringUtils.hasText(accessToken)) {
 			throw new OAuth2ClientException("OAuth2 access token 응답이 올바르지 않습니다.");
 		}
 		return accessToken;
 	}
 
-	private JsonNode requestUserInfo(OAuth2ProviderConfig providerConfig, String accessToken) {
-		JsonNode response = oauthProviderRestClient.get()
+	private Map<String, Object> requestUserInfo(OAuth2ProviderConfig providerConfig, String accessToken) {
+		Map<String, Object> response = oauthProviderRestClient.get()
 			.uri(providerConfig.userInfoUri())
 			.header("Authorization", BEARER_PREFIX + accessToken)
 			.retrieve()
-			.body(JsonNode.class);
+			.body(MAP_RESPONSE_TYPE);
 		if (response == null) {
 			throw new OAuth2ClientException("OAuth2 user info 응답이 비어 있습니다.");
 		}
@@ -97,7 +100,7 @@ public class RestOAuthProviderClient implements OAuthProviderClient {
 		return form;
 	}
 
-	private OAuthProviderProfile parseProfile(OAuthProvider provider, JsonNode userInfo) {
+	private OAuthProviderProfile parseProfile(OAuthProvider provider, Map<String, Object> userInfo) {
 		if (provider == OAuthProvider.KAKAO) {
 			return parseKakaoProfile(userInfo);
 		}
@@ -107,17 +110,33 @@ public class RestOAuthProviderClient implements OAuthProviderClient {
 		throw new OAuth2ClientException("지원하지 않는 OAuth2 provider입니다.");
 	}
 
-	private OAuthProviderProfile parseKakaoProfile(JsonNode userInfo) {
-		String providerUserId = userInfo.path("id").asText(null);
-		String email = userInfo.path("kakao_account").path("email").asText(null);
+	private OAuthProviderProfile parseKakaoProfile(Map<String, Object> userInfo) {
+		String providerUserId = textValue(userInfo, "id");
+		String email = textValue(mapValue(userInfo, "kakao_account"), "email");
 		return validateProfile(new OAuthProviderProfile(OAuthProvider.KAKAO, providerUserId, email));
 	}
 
-	private OAuthProviderProfile parseNaverProfile(JsonNode userInfo) {
-		JsonNode response = userInfo.path("response");
-		String providerUserId = response.path("id").asText(null);
-		String email = response.path("email").asText(null);
+	private OAuthProviderProfile parseNaverProfile(Map<String, Object> userInfo) {
+		Map<String, Object> response = mapValue(userInfo, "response");
+		String providerUserId = textValue(response, "id");
+		String email = textValue(response, "email");
 		return validateProfile(new OAuthProviderProfile(OAuthProvider.NAVER, providerUserId, email));
+	}
+
+	private Map<String, Object> mapValue(Map<String, Object> source, String key) {
+		if (source == null || !(source.get(key) instanceof Map<?, ?> value)) {
+			return Map.of();
+		}
+		Map<String, Object> result = new LinkedHashMap<>();
+		value.forEach((mapKey, mapValue) -> result.put(String.valueOf(mapKey), mapValue));
+		return result;
+	}
+
+	private String textValue(Map<String, Object> source, String key) {
+		if (source == null || source.get(key) == null) {
+			return null;
+		}
+		return String.valueOf(source.get(key));
 	}
 
 	private OAuthProviderProfile validateProfile(OAuthProviderProfile profile) {
