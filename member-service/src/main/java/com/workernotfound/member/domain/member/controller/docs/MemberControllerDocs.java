@@ -1,8 +1,8 @@
 package com.workernotfound.member.domain.member.controller.docs;
 
 import com.workernotfound.member.domain.member.dto.response.MyMemberResponse;
+import com.workernotfound.member.global.security.AuthenticatedMember;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -24,7 +24,6 @@ public interface MemberControllerDocs {
 		@ApiResponse(responseCode = "404", description = "회원을 찾을 수 없음", content = @Content)
 	})
 	ResponseEntity<com.workernotfound.member.global.response.ApiResponse<MyMemberResponse>> getMyMember(
-		@Parameter(description = "인증 서비스 또는 게이트웨이가 전달한 회원 ID", required = true)
-		Long memberId
+		AuthenticatedMember authenticatedMember
 	);
 }

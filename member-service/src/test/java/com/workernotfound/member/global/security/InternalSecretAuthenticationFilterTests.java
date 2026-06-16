@@ -8,6 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
@@ -31,5 +32,11 @@ class InternalSecretAuthenticationFilterTests extends IntegrationTestSupport {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{}"))
 			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void myMemberApiRequiresJwtAuthentication() throws Exception {
+		mockMvc.perform(get("/api/members/me"))
+			.andExpect(status().isUnauthorized());
 	}
 }

@@ -157,7 +157,7 @@ Current implementation state:
 - Initial KAKAO/NAVER OAuth2 login support has been added.
 - OAuth2 login connects to an existing OAuth connection, links same-email accounts when no connection exists, or issues a Redis-backed signup ticket for new users.
 - OAuth2 signup ticket completion supports OWNER/WORKER signup without creating `LocalCredential`.
-- Flyway schema migrations are not yet implemented.
+- Initial Flyway schema migration has been added.
 
 Auth-related decisions are recorded in `docs/agent/decisions.md`.
 
@@ -179,11 +179,12 @@ Current implementation state:
 - `member-service` owns member basic information, role-specific profile data, worker preferences, worker available times, and location data.
 - Initial member, owner, worker, and location entities have been added.
 - Initial repository, service, and controller layers have been added.
-- Basic member-service security configuration permits Swagger, internal member APIs, and the current `X-Member-Id` based member lookup endpoint.
+- Basic member-service security configuration permits Swagger and internal member APIs.
+- `member-service` verifies auth-service JWT access tokens directly for the current `/api/members/me` flow.
 - Internal member APIs under `/api/members/internal/**` require the shared `X-Internal-Secret` header.
 - Member API responses, controller-level errors, internal API secret failures, and security 401/403 responses use the common `ApiResponse` envelope.
 - Location data stores both address and latitude/longitude so address can be used for display and coordinates can support future radius-based search.
-- API contracts and Flyway schema migrations are not yet implemented.
+- Initial Flyway schema migration has been added.
 
 Member signup design notes are recorded in `docs/architecture/auth-member-signup-design.md`.
 
@@ -199,7 +200,7 @@ Current persistence-related dependencies:
 
 Likely next steps:
 
-- Add first Flyway migration when the initial auth schema is confirmed.
+- Replace direct member-service JWT validation with API Gateway verified identity propagation when the gateway is introduced.
 - Keep project and agent documents aligned as decisions are made.
 
 ## Open Questions

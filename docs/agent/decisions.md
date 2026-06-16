@@ -517,3 +517,43 @@ Related files:
 - `auth-service/src/main/java/com/workernotfound/auth/global/exception`
 - `member-service/src/main/java/com/workernotfound/member/global/response/ApiResponse.java`
 - `member-service/src/main/java/com/workernotfound/member/global/exception`
+
+## 2026-06-16 - Initial Member API Authentication
+
+Decision:
+- `member-service` directly validates auth-service JWT access tokens for the initial `/api/members/me` flow.
+- The JWT secret is provided through configuration and must match auth-service's signing secret.
+- Internal member APIs remain protected separately by the `X-Internal-Secret` header.
+
+Reason:
+- This removes the temporary `X-Member-Id` external API dependency before an API Gateway exists.
+- Direct validation keeps the current local MSA flow testable without adding another service.
+
+Implication for agents:
+- Do not rely on client-supplied `X-Member-Id` for external member APIs.
+- Do not hardcode JWT secrets in member-service.
+- Keep TODOs or extension points for replacing direct validation with API Gateway verified identity propagation later.
+
+Related files:
+- `member-service/src/main/java/com/workernotfound/member/global/security`
+- `member-service/src/main/java/com/workernotfound/member/domain/member/controller/MemberController.java`
+
+## 2026-06-16 - Initial Flyway Schema Migrations
+
+Decision:
+- Add service-owned Flyway `V1__init_schema.sql` migrations for auth-service and member-service.
+- Keep local Hibernate `ddl-auto` at `none` by default so schema changes go through Flyway.
+
+Reason:
+- Runtime databases should be reproducible from versioned migrations instead of Hibernate auto-DDL.
+- Service-owned migrations preserve each service's persistence boundary.
+
+Implication for agents:
+- Add new schema changes through new Flyway migration files.
+- Do not set local or production `ddl-auto` to `update` as a substitute for migrations.
+- Do not modify existing Flyway migrations after they are shared unless the user explicitly approves it.
+
+Related files:
+- `auth-service/src/main/resources/db/migration/V1__init_schema.sql`
+- `member-service/src/main/resources/db/migration/V1__init_schema.sql`
+- `.env.example`

@@ -14,5 +14,7 @@ server:
   port: ${MEMBER_SERVICE_PORT:8082}
 
 member:
+  jwt:
+    secret: ${AUTH_JWT_SECRET}
   internal:
     secret: ${INTERNAL_API_SECRET}

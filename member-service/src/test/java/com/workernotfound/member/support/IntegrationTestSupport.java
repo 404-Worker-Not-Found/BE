@@ -27,6 +27,8 @@ public abstract class IntegrationTestSupport {
 		registry.add("spring.datasource.username", MYSQL::getUsername);
 		registry.add("spring.datasource.password", MYSQL::getPassword);
 		registry.add("spring.datasource.driver-class-name", MYSQL::getDriverClassName);
+		registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
 		registry.add("member.internal.secret", () -> "test-internal-secret");
+		registry.add("member.jwt.secret", () -> "test-jwt-secret-key-for-member-service-token-tests");
 	}
 }

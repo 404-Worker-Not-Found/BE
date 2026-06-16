@@ -4,10 +4,11 @@ import com.workernotfound.member.domain.member.controller.docs.MemberControllerD
 import com.workernotfound.member.domain.member.dto.response.MyMemberResponse;
 import com.workernotfound.member.domain.member.service.MemberApplicationService;
 import com.workernotfound.member.global.response.ApiResponse;
+import com.workernotfound.member.global.security.AuthenticatedMember;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -21,8 +22,10 @@ public class MemberController implements MemberControllerDocs {
 	@Override
 	@GetMapping("/me")
 	public ResponseEntity<ApiResponse<MyMemberResponse>> getMyMember(
-		@RequestHeader("X-Member-Id") Long memberId
+		@AuthenticationPrincipal AuthenticatedMember authenticatedMember
 	) {
-		return ResponseEntity.ok(ApiResponse.success(memberApplicationService.getMyMember(memberId)));
+		return ResponseEntity.ok(ApiResponse.success(
+			memberApplicationService.getMyMember(authenticatedMember.memberId())
+		));
 	}
 }
