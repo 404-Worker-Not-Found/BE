@@ -50,7 +50,7 @@ Current state:
 - The repository has a first ERD draft for the MSA design.
 - A repository-wide verification script exists at `docs/scripts/verify.sh`.
 - The service package structure is defined in `docs/architecture/service-package-structure.md`.
-- `auth-service` tests use Testcontainers with MySQL for the test datasource.
+- `auth-service` tests use Testcontainers with MySQL and Redis for integration-test dependencies.
 - `member-service` tests use Testcontainers with MySQL for the test datasource.
 - Agent work instructions exist in `AGENTS.md`.
 - Agent failure memory, decision memory, and checklist memory exist under `docs/agent/`.
@@ -69,6 +69,7 @@ Current `auth-service` scaffold:
 - Redis
 - Flyway
 - Testcontainers MySQL for integration-test datasource
+- Testcontainers Redis for integration-test Redis access
 - Spring Boot Actuator
 - Bean Validation
 - Lombok
@@ -139,7 +140,8 @@ Current implementation state:
 - Initial auth account, credential, OAuth connection, refresh token entities, and related enums have been added.
 - Initial auth account, credential, OAuth connection, and refresh token repositories have been added.
 - Initial auth request/response DTOs and member-service client DTOs have been added.
-- Security, service, controller, Flyway schema migrations, and token strategy are not yet implemented.
+- Redis-backed verification code service has been added.
+- Security, controller, Flyway schema migrations, JWT token strategy, signup, and login services are not yet implemented.
 
 Auth-related decisions are recorded in `docs/agent/decisions.md`.
 
