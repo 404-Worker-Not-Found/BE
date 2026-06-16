@@ -141,7 +141,8 @@ Current implementation state:
 - Initial auth account, credential, OAuth connection, and refresh token repositories have been added.
 - Initial auth request/response DTOs and member-service client DTOs have been added.
 - Redis-backed verification code service has been added.
-- Security, controller, Flyway schema migrations, JWT token strategy, signup, and login services are not yet implemented.
+- Initial JWT access token issuance/validation and refresh token hashing support have been added.
+- Security, controller, Flyway schema migrations, signup, and login services are not yet implemented.
 
 Auth-related decisions are recorded in `docs/agent/decisions.md`.
 
@@ -178,10 +179,8 @@ Current persistence-related dependencies:
 
 Likely next steps:
 
-- Define access token and refresh token handling details.
 - Define common API response and error response shape.
 - Add first Flyway migration when the initial auth schema is confirmed.
-- Add Redis Testcontainers support when tests start depending on Redis behavior.
 - Keep project and agent documents aligned as decisions are made.
 
 ## Open Questions

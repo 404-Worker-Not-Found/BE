@@ -1,3 +1,9 @@
 spring:
   application:
     name: auth-service
+
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET}
+    access-token-expiration: 15m
+    refresh-token-expiration: 14d
