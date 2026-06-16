@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -26,4 +27,12 @@ public class Location extends BaseEntity {
 
 	@Column(nullable = false, precision = 10, scale = 7)
 	private BigDecimal longitude;
+
+	@Builder
+	private Location(String address, String detailAddress, BigDecimal latitude, BigDecimal longitude) {
+		this.address = address;
+		this.detailAddress = detailAddress;
+		this.latitude = latitude;
+		this.longitude = longitude;
+	}
 }

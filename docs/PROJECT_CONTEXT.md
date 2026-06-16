@@ -156,7 +156,8 @@ Current implementation state:
 
 - The service currently contains generated Spring Boot application and test skeletons.
 - Initial member, owner, worker, and location entities have been added.
-- Repository, service, controller, API contracts, and Flyway schema migrations are not yet implemented.
+- Initial repository and service layers have been added.
+- Controller, API contracts, and Flyway schema migrations are not yet implemented.
 
 Member signup design notes are recorded in `docs/architecture/auth-member-signup-design.md`.
 

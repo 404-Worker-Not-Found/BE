@@ -16,6 +16,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -62,4 +63,22 @@ public class Member extends BaseEntity {
 
 	@OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	private WorkerProfile workerProfile;
+
+	@Builder
+	private Member(String name, String email, String phoneNumber, MemberRole role) {
+		this.name = name;
+		this.email = email;
+		this.phoneNumber = phoneNumber;
+		this.role = role;
+		this.status = MemberStatus.ACTIVE;
+		this.joinedAt = LocalDateTime.now();
+	}
+
+	public void registerOwnerProfile(OwnerProfile ownerProfile) {
+		this.ownerProfile = ownerProfile;
+	}
+
+	public void registerWorkerProfile(WorkerProfile workerProfile) {
+		this.workerProfile = workerProfile;
+	}
 }

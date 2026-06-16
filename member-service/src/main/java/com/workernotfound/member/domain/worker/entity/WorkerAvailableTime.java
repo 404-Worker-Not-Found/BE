@@ -13,6 +13,7 @@ import jakarta.persistence.UniqueConstraint;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -41,4 +42,17 @@ public class WorkerAvailableTime extends BaseEntity {
 
 	@Column(name = "end_time", nullable = false)
 	private LocalTime endTime;
+
+	@Builder
+	private WorkerAvailableTime(
+		WorkerProfile workerProfile,
+		DayOfWeek dayOfWeek,
+		LocalTime startTime,
+		LocalTime endTime
+	) {
+		this.workerProfile = workerProfile;
+		this.dayOfWeek = dayOfWeek;
+		this.startTime = startTime;
+		this.endTime = endTime;
+	}
 }

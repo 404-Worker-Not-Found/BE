@@ -15,6 +15,7 @@ import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -44,4 +45,19 @@ public class OwnerProfile extends BaseEntity {
 	@OneToOne(fetch = FetchType.LAZY, optional = false, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "store_location_id", nullable = false)
 	private Location storeLocation;
+
+	@Builder
+	private OwnerProfile(
+		Member member,
+		String businessRegistrationNumber,
+		String businessType,
+		BusinessVerificationStatus businessVerificationStatus,
+		Location storeLocation
+	) {
+		this.member = member;
+		this.businessRegistrationNumber = businessRegistrationNumber;
+		this.businessType = businessType;
+		this.businessVerificationStatus = businessVerificationStatus;
+		this.storeLocation = storeLocation;
+	}
 }

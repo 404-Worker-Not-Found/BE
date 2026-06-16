@@ -9,6 +9,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -30,4 +31,10 @@ public class WorkerPreferredBusinessType extends BaseEntity {
 
 	@Column(name = "business_type", nullable = false, length = 100)
 	private String businessType;
+
+	@Builder
+	private WorkerPreferredBusinessType(WorkerProfile workerProfile, String businessType) {
+		this.workerProfile = workerProfile;
+		this.businessType = businessType;
+	}
 }

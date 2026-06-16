@@ -15,6 +15,7 @@ import jakarta.persistence.UniqueConstraint;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -49,4 +50,30 @@ public class WorkerProfile extends BaseEntity {
 
 	@OneToMany(mappedBy = "workerProfile", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<WorkerAvailableTime> availableTimes = new ArrayList<>();
+
+	@Builder
+	private WorkerProfile(
+		Member member,
+		Integer desiredHourlyWage,
+		Integer activityRadiusKm,
+		boolean immediatelyAvailable,
+		Location baseLocation
+	) {
+		this.member = member;
+		this.desiredHourlyWage = desiredHourlyWage;
+		this.activityRadiusKm = activityRadiusKm;
+		this.immediatelyAvailable = immediatelyAvailable;
+		this.baseLocation = baseLocation;
+	}
+
+	public void addPreferredBusinessType(String businessType) {
+		preferredBusinessTypes.add(WorkerPreferredBusinessType.builder()
+			.workerProfile(this)
+			.businessType(businessType)
+			.build());
+	}
+
+	public void addAvailableTime(WorkerAvailableTime availableTime) {
+		availableTimes.add(availableTime);
+	}
 }
