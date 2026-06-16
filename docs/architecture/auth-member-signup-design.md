@@ -83,29 +83,30 @@ com.workernotfound.auth
 │   │   └── dto
 │   │       ├── request
 │   │       └── response
-│   ├── verification
+│   ├── auth
 │   │   ├── controller
+│   │   │   └── docs
 │   │   ├── service
+│   │   ├── entity
 │   │   └── dto
 │   │       ├── request
 │   │       └── response
 │   ├── token
 │   │   ├── controller
+│   │   │   └── docs
 │   │   ├── service
 │   │   ├── repository
 │   │   ├── entity
 │   │   └── dto
 │   │       ├── request
 │   │       └── response
-│   └── signup
-│       ├── controller
-│       ├── service
-│       └── dto
-│           ├── request
-│           └── response
+│   └── common
+│       └── entity
 └── external
     ├── client
-    │   └── member
+    │   ├── member
+    │   └── oauth
+    ├── event
     └── redis
 ```
 
@@ -411,23 +412,33 @@ ttl: 30분
 ### OAuth 회원가입 임시 티켓
 
 ```text
-key: auth:oauth:signup-ticket:{ticketId}
+key: auth:oauth2:signup-ticket:{ticketId}
 value: provider, providerUserId, providerEmail
-ttl: 10분
+ttl: 30분
 ```
 
-### 인증 요청 rate limit
+### 인증번호 발송 제한
 
 ```text
-key: auth:verification:rate:{channel}:{target}
-value: requestCount
-ttl: 1분 또는 1시간
+key: auth:verification:email:send-limit:{purpose}:{email}
+key: auth:verification:sms:send-limit:{purpose}:{phoneNumber}
+value: 1
+ttl: 1분
+```
+
+### 인증번호 검증 시도 제한
+
+```text
+key: auth:verification:email:attempts:{purpose}:{email}
+key: auth:verification:sms:attempts:{purpose}:{phoneNumber}
+value: failedAttemptCount
+ttl: 인증번호 TTL과 동일
 ```
 
 주의:
 
 - refresh token은 Redis가 아니라 DB에 hash로 저장한다.
-- Redis는 인증번호, 인증 성공 플래그, OAuth 임시 티켓, rate limit에 사용한다.
+- Redis는 인증번호, 인증 성공 플래그, OAuth 임시 티켓, 발송 제한, 검증 시도 제한에 사용한다.
 
 ## API 목록
 
@@ -452,18 +463,17 @@ POST /api/auth/login
 LOCAL 로그인
 
 ```text
-GET /api/auth/oauth2/kakao
-GET /api/auth/oauth2/naver
+POST /api/auth/oauth2/{provider}/login
 ```
 
-OAuth2 로그인 시작
+OAuth2 인가 코드 기반 로그인. `provider`는 `KAKAO` 또는 `NAVER`를 사용한다.
 
 ```text
-GET /api/auth/oauth2/kakao/callback
-GET /api/auth/oauth2/naver/callback
+POST /api/auth/oauth2/signup/owner
+POST /api/auth/oauth2/signup/worker
 ```
 
-OAuth2 콜백 처리
+OAuth signup ticket 기반 OWNER/WORKER 회원가입 완료
 
 ```text
 POST /api/auth/email-verifications/send
@@ -517,6 +527,12 @@ GET /api/members/internal/{memberId}
 
 서비스 간 회원 기본 정보 조회
 
+```text
+DELETE /api/members/internal/{memberId}
+```
+
+auth-service 회원가입 실패 보상용 회원 삭제
+
 주의:
 
 - `*/internal/**` 용도의 API도 URL은 `/api/**` 하위에 둔다.
@@ -556,6 +572,8 @@ GET /api/members/internal/{memberId}
 7. auth-service가 member-service에 회원 생성을 요청한다.
 8. auth-service가 `AuthAccount`, `OAuthConnection`을 저장한다.
 9. auth-service가 access token과 refresh token을 발급한다.
+
+현재 구현은 Spring Security OAuth2 redirect login이 아니라, 클라이언트가 받은 provider 인가 코드를 `POST /api/auth/oauth2/{provider}/login`으로 전달하면 auth-service가 provider token/userinfo API를 호출하는 방식이다.
 
 ## auth-service to member-service DTO
 
@@ -668,5 +686,6 @@ public interface BusinessVerificationService {
 - auth-service는 AuthAccount, LocalCredential 또는 OAuthConnection, RefreshToken을 자기 DB 트랜잭션으로 저장한다.
 - 두 서비스 사이에는 분산 트랜잭션을 사용하지 않는다.
 - auth-service가 member-service 회원 생성을 성공한 뒤 auth-service 저장에 실패할 수 있다.
-- 초기에는 보상 처리 또는 운영 정리 정책을 별도로 마련한다.
+- 초기에는 auth-service가 member-service의 내부 보상 삭제 API를 호출해 생성된 member/profile/location을 삭제한다.
+- member-service의 보상 삭제는 통합 테스트로 `Member`, 역할별 Profile, Location, Worker child record 삭제를 검증한다.
 - 추후 장애 격리와 재처리가 중요해지면 이벤트 기반 saga 또는 outbox 패턴을 검토한다.

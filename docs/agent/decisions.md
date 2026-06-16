@@ -215,20 +215,24 @@ Related files:
 ## 2026-06-15 - Test Datasource Strategy
 
 Decision:
-- Use Testcontainers with MySQL for `auth-service` integration-test datasource setup.
+- Use Testcontainers with MySQL for auth-service and member-service integration-test datasource setup.
+- Use Testcontainers with Redis for auth-service tests that depend on Redis behavior.
 
 Reason:
-- The service uses MySQL, JPA, and Flyway, so tests should run against a real MySQL-compatible database instead of an H2 approximation or a developer-managed local database.
+- The services use MySQL, JPA, and Flyway, so tests should run against a real MySQL-compatible database instead of an H2 approximation or a developer-managed local database.
+- Auth verification, OAuth signup ticket, and other Redis-backed auth flows need reproducible Redis behavior in tests.
 - Testcontainers keeps local and future CI verification reproducible.
 
 Implication for agents:
 - Do not replace the test datasource with H2 or a manually managed local MySQL database unless a later decision changes the strategy.
 - Put shared Spring Boot integration-test container setup in test support code.
-- Add Redis Testcontainers support later when tests start depending on Redis behavior.
+- Use Redis Testcontainers support for Redis-dependent auth-service integration tests.
 
 Related files:
 - `auth-service/build.gradle`
 - `auth-service/src/test/java/com/workernotfound/auth/support/IntegrationTestSupport.java`
+- `member-service/build.gradle`
+- `member-service/src/test/java/com/workernotfound/member/support/IntegrationTestSupport.java`
 - `docs/scripts/verify.sh`
 
 ## 2026-06-15 - Failure Memory Requires User Identification
@@ -586,3 +590,4 @@ Related files:
 - `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service/VerificationService.java`
 - `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service/SignupService.java`
 - `member-service/src/main/java/com/workernotfound/member/domain/member/controller/MemberInternalController.java`
+- `member-service/src/test/java/com/workernotfound/member/domain/member/service/MemberSignupCompensationTests.java`

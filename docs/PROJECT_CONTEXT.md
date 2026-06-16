@@ -44,13 +44,14 @@ The project is currently in the initial backend scaffolding stage.
 Current state:
 
 - `auth-service` exists as a Spring Boot service.
-- `auth-service` has generated application and test skeletons.
+- `auth-service` has implemented the initial LOCAL/OAuth authentication and signup flow.
 - `member-service` exists as a Spring Boot service.
-- `member-service` has initial member, owner, worker, and location entities.
+- `member-service` has implemented the initial member, owner, worker, and location profile flow.
 - The repository has a first ERD draft for the MSA design.
 - A repository-wide verification script exists at `docs/scripts/verify.sh`.
 - A local Docker Compose file exists at `compose.local.yml` for auth/member MySQL instances and auth Redis.
 - `.env.example` documents the local runtime environment variables; the real `.env` file is ignored by Git.
+- `scripts/local-run.sh` loads `.env` and runs each service locally.
 - The service package structure is defined in `docs/architecture/service-package-structure.md`.
 - `auth-service` tests use Testcontainers with MySQL and Redis for integration-test dependencies.
 - `member-service` tests use Testcontainers with MySQL for the test datasource.
@@ -124,7 +125,7 @@ The ERD describes service ownership and relationship types using:
 
 ## Auth Service Context
 
-`auth-service` is currently the first implemented service.
+`auth-service` is currently the authentication service.
 
 Expected responsibilities:
 
@@ -138,8 +139,6 @@ Expected responsibilities:
 
 Current implementation state:
 
-- The service currently contains generated Spring Boot application and test skeletons.
-- The agreed package structure has been scaffolded in `auth-service` with `package-info.java` files so package directories are tracked.
 - `auth-service` owns authentication state, LOCAL credentials, OAuth connections, verification flows, JWT issuance, refresh token rotation, and logout.
 - Initial auth account, credential, OAuth connection, refresh token entities, and related enums have been added.
 - Initial auth account, credential, OAuth connection, and refresh token repositories have been added.
@@ -160,6 +159,7 @@ Current implementation state:
 - Initial KAKAO/NAVER OAuth2 login support has been added.
 - OAuth2 login connects to an existing OAuth connection, links same-email accounts when no connection exists, or issues a Redis-backed signup ticket for new users.
 - OAuth2 signup ticket completion supports OWNER/WORKER signup without creating `LocalCredential`.
+- OAuth2 provider access currently uses provider authorization code exchange through backend API calls rather than Spring Security's redirect-based OAuth2 login flow.
 - Initial Flyway schema migration has been added.
 
 Auth-related decisions are recorded in `docs/agent/decisions.md`.
@@ -178,7 +178,6 @@ Expected responsibilities:
 
 Current implementation state:
 
-- The service currently contains generated Spring Boot application and test skeletons.
 - `member-service` owns member basic information, role-specific profile data, worker preferences, worker available times, and location data.
 - Initial member, owner, worker, and location entities have been added.
 - Initial repository, service, and controller layers have been added.
@@ -186,6 +185,7 @@ Current implementation state:
 - `member-service` verifies auth-service JWT access tokens directly for the current `/api/members/me` flow.
 - Internal member APIs under `/api/members/internal/**` require the shared `X-Internal-Secret` header.
 - An internal signup compensation endpoint can delete a member created before auth-service persistence fails.
+- Signup compensation deletion is covered by an integration test that verifies member, profile, location, and worker child records are deleted.
 - Member API responses, controller-level errors, internal API secret failures, and security 401/403 responses use the common `ApiResponse` envelope.
 - Location data stores both address and latitude/longitude so address can be used for display and coordinates can support future radius-based search.
 - Initial Flyway schema migration has been added.
