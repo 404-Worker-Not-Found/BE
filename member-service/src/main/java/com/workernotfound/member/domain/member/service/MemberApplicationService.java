@@ -79,6 +79,7 @@ public class MemberApplicationService {
 	@Transactional
 	public void deleteMemberForSignupCompensation(Long memberId) {
 		Member member = memberFindService.findMember(memberId);
+		initializeProfileGraph(member);
 		memberCommandService.deleteMember(member);
 	}
 
@@ -114,6 +115,23 @@ public class MemberApplicationService {
 			request.latitude(),
 			request.longitude()
 		);
+	}
+
+	private void initializeProfileGraph(Member member) {
+		OwnerProfile ownerProfile = member.getOwnerProfile();
+		if (ownerProfile != null) {
+			ownerProfile.getStoreLocation();
+			return;
+		}
+
+		WorkerProfile workerProfile = member.getWorkerProfile();
+		if (workerProfile == null) {
+			return;
+		}
+
+		workerProfile.getBaseLocation();
+		workerProfile.getPreferredBusinessTypes().size();
+		workerProfile.getAvailableTimes().size();
 	}
 
 	private void validateRole(MemberRole actual, MemberRole expected) {
