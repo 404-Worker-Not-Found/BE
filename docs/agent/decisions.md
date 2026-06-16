@@ -215,20 +215,24 @@ Related files:
 ## 2026-06-15 - Test Datasource Strategy
 
 Decision:
-- Use Testcontainers with MySQL for `auth-service` integration-test datasource setup.
+- Use Testcontainers with MySQL for auth-service and member-service integration-test datasource setup.
+- Use Testcontainers with Redis for auth-service tests that depend on Redis behavior.
 
 Reason:
-- The service uses MySQL, JPA, and Flyway, so tests should run against a real MySQL-compatible database instead of an H2 approximation or a developer-managed local database.
+- The services use MySQL, JPA, and Flyway, so tests should run against a real MySQL-compatible database instead of an H2 approximation or a developer-managed local database.
+- Auth verification, OAuth signup ticket, and other Redis-backed auth flows need reproducible Redis behavior in tests.
 - Testcontainers keeps local and future CI verification reproducible.
 
 Implication for agents:
 - Do not replace the test datasource with H2 or a manually managed local MySQL database unless a later decision changes the strategy.
 - Put shared Spring Boot integration-test container setup in test support code.
-- Add Redis Testcontainers support later when tests start depending on Redis behavior.
+- Use Redis Testcontainers support for Redis-dependent auth-service integration tests.
 
 Related files:
 - `auth-service/build.gradle`
 - `auth-service/src/test/java/com/workernotfound/auth/support/IntegrationTestSupport.java`
+- `member-service/build.gradle`
+- `member-service/src/test/java/com/workernotfound/member/support/IntegrationTestSupport.java`
 - `docs/scripts/verify.sh`
 
 ## 2026-06-15 - Failure Memory Requires User Identification
@@ -405,3 +409,185 @@ Related files:
 - `docs/agent/coding-rules.md`
 - `AGENTS.md`
 - `docs/architecture/service-package-structure.md`
+
+## 2026-06-16 - Initial Auth and Member Service Boundary
+
+Decision:
+- `auth-service` owns authentication accounts, LOCAL credentials, OAuth connections, verification flows, JWT issuance, refresh token rotation, and logout.
+- `member-service` owns member basic information, role-specific profile data, worker preferences, worker available times, and location data.
+- Cross-service references use external IDs such as `memberId`, not physical database foreign keys.
+
+Reason:
+- Authentication state and member profile data have different ownership, lifecycle, and persistence boundaries.
+- Keeping physical foreign keys inside a service preserves service autonomy.
+
+Implication for agents:
+- Do not add member profile fields to auth-service entities unless they are required for authentication.
+- Do not create physical database foreign keys between auth-service and member-service.
+- When auth-service needs member data creation, call member-service through the agreed internal API contract.
+
+Related files:
+- `auth-service`
+- `member-service`
+
+## 2026-06-16 - Initial Service-to-Service Communication
+
+Decision:
+- Use synchronous REST for initial communication between `auth-service` and `member-service`.
+- Put internal service-to-service APIs under `/api/{domain}/internal/**`.
+- Protect internal service-to-service APIs with the `X-Internal-Secret` shared secret header at this stage.
+
+Reason:
+- REST keeps the first cross-service signup flow simple and explicit while the project is still in an early implementation phase.
+- A shared secret header provides a minimal guard against direct external calls before API Gateway, service mesh, or mTLS is introduced.
+
+Implication for agents:
+- Do not expose internal APIs as unauthenticated public endpoints.
+- Do not hardcode the internal secret; inject it from configuration or environment variables.
+- Keep TODOs or extension points that allow this mechanism to be replaced by API Gateway, mTLS, or another service-to-service authentication mechanism later.
+
+Related files:
+- `auth-service/src/main/java/com/workernotfound/auth/external/client/member`
+- `member-service/src/main/java/com/workernotfound/member/global/security`
+
+## 2026-06-16 - Signup and OAuth Account Linking Policy
+
+Decision:
+- LOCAL signup is completed only after required email verification, SMS verification, password input, and role-specific additional information are provided.
+- OAuth2 supports only KAKAO and NAVER.
+- If an OAuth provider account is already connected, OAuth login signs in through that connection.
+- If no OAuth connection exists but the provider email matches an existing account, connect the OAuth account to the existing auth account.
+- If neither connection nor matching email exists, issue a Redis-backed OAuth signup ticket and complete signup after OWNER or WORKER additional information is provided.
+- OAuth signup does not create `LocalCredential`.
+
+Reason:
+- The policy avoids pending onboarding accounts and keeps final signup atomic from the user's perspective.
+- Same-email OAuth linking prevents duplicate auth accounts for the same user.
+- OAuth users do not need LOCAL password credentials.
+
+Implication for agents:
+- Do not introduce `PENDING` member status for signup.
+- Do not create `LocalCredential` during OAuth signup.
+- Preserve the same-email OAuth linking behavior unless the product policy changes.
+
+Related files:
+- `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service`
+- `auth-service/src/main/java/com/workernotfound/auth/domain/account/entity`
+
+## 2026-06-16 - Local Development Infrastructure
+
+Decision:
+- Use a repository-root local Docker Compose file for shared local infrastructure.
+- Keep auth-service and member-service databases separate, even in local development.
+- Reserve port `8080` for a future API Gateway.
+- Use `8081` for auth-service and `8082` for member-service in local development.
+- Commit `.env.example` as the local environment variable template, but keep the real `.env` ignored.
+
+Reason:
+- A root compose file lets developers start and stop the cross-service local infrastructure together.
+- Separate databases keep local development aligned with the MSA persistence boundary.
+- Reserving `8080` avoids later port churn when an API Gateway is introduced.
+
+Implication for agents:
+- Add shared local infrastructure to the root compose file unless there is a clear service-specific reason not to.
+- Do not commit real `.env` files or local secrets.
+- Keep service ports aligned with the local convention unless the user explicitly changes it.
+
+Related files:
+- `compose.local.yml`
+- `.env.example`
+
+## 2026-06-16 - Common API Response Format
+
+Decision:
+- Use a common `ApiResponse<T>` envelope for auth-service and member-service APIs.
+- Successful responses contain `success`, `status`, `code`, `message`, `data`, `path`, `timestamp`, and `reasons`.
+- Successful responses use `success=true`, `code=SUCCESS`, and `message=요청이 성공적으로 처리되었습니다.`
+- Error responses use `success=false`, an error code, an error message, request path, timestamp, and optional reasons.
+- Security 401/403 responses should also use the common envelope instead of servlet default error bodies.
+
+Reason:
+- A consistent response contract makes Swagger testing, frontend integration, and service debugging easier.
+- Security and validation failures should not return a different shape from controller responses.
+
+Implication for agents:
+- Wrap controller responses in the service-local `global.response.ApiResponse`.
+- Add or update `global.exception` handling when introducing new business exceptions.
+- Do not return JPA entities or raw DTOs directly from controllers.
+- If an internal service client consumes a wrapped response, unwrap and validate the `data` field at the client boundary.
+
+Related files:
+- `auth-service/src/main/java/com/workernotfound/auth/global/response/ApiResponse.java`
+- `auth-service/src/main/java/com/workernotfound/auth/global/exception`
+- `member-service/src/main/java/com/workernotfound/member/global/response/ApiResponse.java`
+- `member-service/src/main/java/com/workernotfound/member/global/exception`
+
+## 2026-06-16 - Initial Member API Authentication
+
+Decision:
+- `member-service` directly validates auth-service JWT access tokens for the initial `/api/members/me` flow.
+- The JWT secret is provided through configuration and must match auth-service's signing secret.
+- Internal member APIs remain protected separately by the `X-Internal-Secret` header.
+
+Reason:
+- This removes the temporary `X-Member-Id` external API dependency before an API Gateway exists.
+- Direct validation keeps the current local MSA flow testable without adding another service.
+
+Implication for agents:
+- Do not rely on client-supplied `X-Member-Id` for external member APIs.
+- Do not hardcode JWT secrets in member-service.
+- Keep TODOs or extension points for replacing direct validation with API Gateway verified identity propagation later.
+
+Related files:
+- `member-service/src/main/java/com/workernotfound/member/global/security`
+- `member-service/src/main/java/com/workernotfound/member/domain/member/controller/MemberController.java`
+
+## 2026-06-16 - Initial Flyway Schema Migrations
+
+Decision:
+- Add service-owned Flyway `V1__init_schema.sql` migrations for auth-service and member-service.
+- Keep local Hibernate `ddl-auto` at `none` by default so schema changes go through Flyway.
+
+Reason:
+- Runtime databases should be reproducible from versioned migrations instead of Hibernate auto-DDL.
+- Service-owned migrations preserve each service's persistence boundary.
+
+Implication for agents:
+- Add new schema changes through new Flyway migration files.
+- Do not set local or production `ddl-auto` to `update` as a substitute for migrations.
+- Do not modify existing Flyway migrations after they are shared unless the user explicitly approves it.
+
+Related files:
+- `auth-service/src/main/resources/db/migration/V1__init_schema.sql`
+- `member-service/src/main/resources/db/migration/V1__init_schema.sql`
+- `.env.example`
+
+## 2026-06-17 - Auth Flow Safety Hardening
+
+Decision:
+- Refresh token reissue must validate that the auth account is `ACTIVE`.
+- Refresh token rotation must lock the refresh token row during reissue to reduce concurrent replay risk.
+- Verification code sending and verification attempts must be limited with Redis-backed counters.
+- If member-service creation succeeds but auth-service persistence fails during signup, auth-service should call a member-service internal compensation endpoint.
+- Verification code logging must be disabled by default and enabled only through local configuration.
+
+Reason:
+- Blocked or withdrawn accounts must not continue receiving new tokens through refresh token reissue.
+- Concurrent refresh token reuse can otherwise mint multiple valid rotated tokens.
+- Public verification endpoints need basic abuse protection.
+- Cross-service signup can leave orphan member records without compensation.
+- Verification codes are sensitive and should not be logged outside local testing.
+
+Implication for agents:
+- Preserve account status validation and row locking when changing refresh token rotation.
+- Do not remove verification rate/attempt limits without replacing them with equivalent protection.
+- Keep verification code logging behind configuration, defaulting to disabled.
+- Keep signup compensation behavior or replace it with a stronger consistency mechanism such as idempotency, pending state, or outbox-based cleanup.
+
+Related files:
+- `auth-service/src/main/java/com/workernotfound/auth/domain/token/service/TokenService.java`
+- `auth-service/src/main/java/com/workernotfound/auth/domain/token/repository/RefreshTokenRepository.java`
+- `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service/VerificationService.java`
+- `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service/SignupService.java`
+- `member-service/src/main/java/com/workernotfound/member/domain/member/controller/MemberInternalController.java`
+- `member-service/src/test/java/com/workernotfound/member/domain/member/service/MemberSignupCompensationTests.java`

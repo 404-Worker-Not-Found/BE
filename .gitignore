@@ -1,1 +1,24 @@
+# OS / editor
+.DS_Store
 .idea/
+
+# Local environment and secrets
+.env
+.env.*
+*.env
+!.env.example
+application-local.yml
+application-local.yaml
+application-secret.yml
+application-secret.yaml
+application-*.local.yml
+application-*.local.yaml
+**/src/main/resources/application-local.yml
+**/src/main/resources/application-local.yaml
+**/src/main/resources/application-secret.yml
+**/src/main/resources/application-secret.yaml
+**/*.pem
+**/*.key
+**/*.p12
+**/*.jks
+**/secrets/
