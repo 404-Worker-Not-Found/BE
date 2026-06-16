@@ -142,6 +142,7 @@ Current implementation state:
 - Initial auth request/response DTOs and member-service client DTOs have been added.
 - Redis-backed verification code service has been added.
 - Initial JWT access token issuance/validation and refresh token hashing support have been added.
+- Initial member-service REST client support has been added.
 - Security, controller, Flyway schema migrations, signup, and login services are not yet implemented.
 
 Auth-related decisions are recorded in `docs/agent/decisions.md`.

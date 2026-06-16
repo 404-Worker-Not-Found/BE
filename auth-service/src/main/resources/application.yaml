@@ -7,3 +7,7 @@ auth:
     secret: ${AUTH_JWT_SECRET}
     access-token-expiration: 15m
     refresh-token-expiration: 14d
+  member-service:
+    base-url: ${MEMBER_SERVICE_BASE_URL}
+    connect-timeout: 3s
+    read-timeout: 5s
