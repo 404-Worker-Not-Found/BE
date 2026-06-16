@@ -151,6 +151,8 @@ Current implementation state:
 - LOCAL signup/login, token reissue, and logout service layer support has been added.
 - LOCAL signup requires email verification, SMS verification, password input, and role-specific additional information before final account creation.
 - Initial auth controllers, Swagger/OpenAPI documentation, and basic stateless security configuration have been added.
+- Auth API responses and controller-level errors use the common `ApiResponse` envelope.
+- Auth security 401/403 responses are written as the common `ApiResponse` envelope.
 - Core auth logic tests cover refresh token rotation, LOCAL login, signup verification checks, token hashing, and JWT validation.
 - Initial KAKAO/NAVER OAuth2 login support has been added.
 - OAuth2 login connects to an existing OAuth connection, links same-email accounts when no connection exists, or issues a Redis-backed signup ticket for new users.
@@ -179,6 +181,7 @@ Current implementation state:
 - Initial repository, service, and controller layers have been added.
 - Basic member-service security configuration permits Swagger, internal member APIs, and the current `X-Member-Id` based member lookup endpoint.
 - Internal member APIs under `/api/members/internal/**` require the shared `X-Internal-Secret` header.
+- Member API responses, controller-level errors, internal API secret failures, and security 401/403 responses use the common `ApiResponse` envelope.
 - Location data stores both address and latitude/longitude so address can be used for display and coordinates can support future radius-based search.
 - API contracts and Flyway schema migrations are not yet implemented.
 
@@ -196,7 +199,6 @@ Current persistence-related dependencies:
 
 Likely next steps:
 
-- Define common API response and error response shape.
 - Add first Flyway migration when the initial auth schema is confirmed.
 - Keep project and agent documents aligned as decisions are made.
 
@@ -204,6 +206,4 @@ Likely next steps:
 
 These questions are not yet settled in code:
 
-- What is the common API response format?
-- What is the common error format?
 - What deployment target and environment strategy will be used?

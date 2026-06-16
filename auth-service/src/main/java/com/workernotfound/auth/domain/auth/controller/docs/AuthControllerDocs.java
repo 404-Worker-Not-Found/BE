@@ -24,12 +24,12 @@ public interface AuthControllerDocs {
 		@ApiResponse(responseCode = "400", description = "로그인 요청 검증 실패", content = @Content),
 		@ApiResponse(responseCode = "401", description = "로그인 실패", content = @Content)
 	})
-	ResponseEntity<LoginResponse> login(LoginRequest request);
+	ResponseEntity<com.workernotfound.auth.global.response.ApiResponse<LoginResponse>> login(LoginRequest request);
 
 	@Operation(summary = "로그아웃", description = "refresh token을 폐기합니다.")
 	@ApiResponses({
 		@ApiResponse(responseCode = "204", description = "로그아웃 성공", content = @Content),
 		@ApiResponse(responseCode = "401", description = "인증되지 않은 요청", content = @Content)
 	})
-	ResponseEntity<Void> logout(LogoutRequest request);
+	ResponseEntity<com.workernotfound.auth.global.response.ApiResponse<Void>> logout(LogoutRequest request);
 }

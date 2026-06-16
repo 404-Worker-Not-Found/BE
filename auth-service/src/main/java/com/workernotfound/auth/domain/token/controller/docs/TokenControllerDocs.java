@@ -23,5 +23,5 @@ public interface TokenControllerDocs {
 		@ApiResponse(responseCode = "400", description = "토큰 재발급 요청 검증 실패", content = @Content),
 		@ApiResponse(responseCode = "401", description = "유효하지 않은 refresh token", content = @Content)
 	})
-	ResponseEntity<TokenResponse> reissue(TokenReissueRequest request);
+	ResponseEntity<com.workernotfound.auth.global.response.ApiResponse<TokenResponse>> reissue(TokenReissueRequest request);
 }

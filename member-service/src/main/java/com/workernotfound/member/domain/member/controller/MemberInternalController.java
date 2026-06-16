@@ -6,6 +6,7 @@ import com.workernotfound.member.domain.member.dto.request.CreateWorkerMemberReq
 import com.workernotfound.member.domain.member.dto.response.CreateMemberResponse;
 import com.workernotfound.member.domain.member.dto.response.MemberInternalResponse;
 import com.workernotfound.member.domain.member.service.MemberApplicationService;
+import com.workernotfound.member.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,27 +27,27 @@ public class MemberInternalController implements MemberInternalControllerDocs {
 
 	@Override
 	@PostMapping("/owners")
-	public ResponseEntity<CreateMemberResponse> createOwnerMember(
+	public ResponseEntity<ApiResponse<CreateMemberResponse>> createOwnerMember(
 		@Valid @RequestBody CreateOwnerMemberRequest request
 	) {
 		CreateMemberResponse response = memberApplicationService.createOwnerMember(request);
-		return ResponseEntity.status(HttpStatus.CREATED).body(response);
+		return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(HttpStatus.CREATED, response));
 	}
 
 	@Override
 	@PostMapping("/workers")
-	public ResponseEntity<CreateMemberResponse> createWorkerMember(
+	public ResponseEntity<ApiResponse<CreateMemberResponse>> createWorkerMember(
 		@Valid @RequestBody CreateWorkerMemberRequest request
 	) {
 		CreateMemberResponse response = memberApplicationService.createWorkerMember(request);
-		return ResponseEntity.status(HttpStatus.CREATED).body(response);
+		return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(HttpStatus.CREATED, response));
 	}
 
 	@Override
 	@GetMapping("/{memberId}")
-	public ResponseEntity<MemberInternalResponse> getMemberInternal(
+	public ResponseEntity<ApiResponse<MemberInternalResponse>> getMemberInternal(
 		@PathVariable Long memberId
 	) {
-		return ResponseEntity.ok(memberApplicationService.getMemberInternal(memberId));
+		return ResponseEntity.ok(ApiResponse.success(memberApplicationService.getMemberInternal(memberId)));
 	}
 }

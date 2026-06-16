@@ -8,6 +8,7 @@ import com.workernotfound.auth.domain.auth.dto.request.VerifySmsRequest;
 import com.workernotfound.auth.domain.auth.dto.response.VerificationResponse;
 import com.workernotfound.auth.domain.auth.entity.enums.VerificationPurpose;
 import com.workernotfound.auth.domain.auth.service.VerificationService;
+import com.workernotfound.auth.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -25,16 +26,18 @@ public class VerificationController implements VerificationControllerDocs {
 
 	@Override
 	@PostMapping("/email-verifications/send")
-	public ResponseEntity<VerificationResponse> sendEmailVerification(
+	public ResponseEntity<ApiResponse<VerificationResponse>> sendEmailVerification(
 		@Valid @RequestBody SendEmailVerificationRequest request
 	) {
 		verificationService.sendEmailVerificationCode(VerificationPurpose.SIGNUP, request.email());
-		return ResponseEntity.ok(new VerificationResponse(false, "이메일 인증번호를 발송했습니다."));
+		return ResponseEntity.ok(ApiResponse.success(
+			new VerificationResponse(false, "이메일 인증번호를 발송했습니다.")
+		));
 	}
 
 	@Override
 	@PostMapping("/email-verifications/verify")
-	public ResponseEntity<VerificationResponse> verifyEmail(
+	public ResponseEntity<ApiResponse<VerificationResponse>> verifyEmail(
 		@Valid @RequestBody VerifyEmailRequest request
 	) {
 		boolean verified = verificationService.verifyEmailCode(
@@ -42,21 +45,23 @@ public class VerificationController implements VerificationControllerDocs {
 			request.email(),
 			request.verificationCode()
 		);
-		return ResponseEntity.ok(new VerificationResponse(verified, verificationMessage(verified)));
+		return ResponseEntity.ok(ApiResponse.success(new VerificationResponse(verified, verificationMessage(verified))));
 	}
 
 	@Override
 	@PostMapping("/sms-verifications/send")
-	public ResponseEntity<VerificationResponse> sendSmsVerification(
+	public ResponseEntity<ApiResponse<VerificationResponse>> sendSmsVerification(
 		@Valid @RequestBody SendSmsVerificationRequest request
 	) {
 		verificationService.sendSmsVerificationCode(VerificationPurpose.SIGNUP, request.phoneNumber());
-		return ResponseEntity.ok(new VerificationResponse(false, "SMS 인증번호를 발송했습니다."));
+		return ResponseEntity.ok(ApiResponse.success(
+			new VerificationResponse(false, "SMS 인증번호를 발송했습니다.")
+		));
 	}
 
 	@Override
 	@PostMapping("/sms-verifications/verify")
-	public ResponseEntity<VerificationResponse> verifySms(
+	public ResponseEntity<ApiResponse<VerificationResponse>> verifySms(
 		@Valid @RequestBody VerifySmsRequest request
 	) {
 		boolean verified = verificationService.verifySmsCode(
@@ -64,7 +69,7 @@ public class VerificationController implements VerificationControllerDocs {
 			request.phoneNumber(),
 			request.verificationCode()
 		);
-		return ResponseEntity.ok(new VerificationResponse(verified, verificationMessage(verified)));
+		return ResponseEntity.ok(ApiResponse.success(new VerificationResponse(verified, verificationMessage(verified))));
 	}
 
 	private String verificationMessage(boolean verified) {

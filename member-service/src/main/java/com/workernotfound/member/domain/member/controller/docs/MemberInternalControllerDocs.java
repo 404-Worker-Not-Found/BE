@@ -27,7 +27,7 @@ public interface MemberInternalControllerDocs {
 		@ApiResponse(responseCode = "400", description = "잘못된 회원 생성 요청", content = @Content),
 		@ApiResponse(responseCode = "409", description = "이메일 또는 휴대폰 번호 중복", content = @Content)
 	})
-	ResponseEntity<CreateMemberResponse> createOwnerMember(
+	ResponseEntity<com.workernotfound.member.global.response.ApiResponse<CreateMemberResponse>> createOwnerMember(
 		@RequestBody(
 			description = "OWNER 회원 생성 요청",
 			required = true,
@@ -46,7 +46,7 @@ public interface MemberInternalControllerDocs {
 		@ApiResponse(responseCode = "400", description = "잘못된 회원 생성 요청", content = @Content),
 		@ApiResponse(responseCode = "409", description = "이메일 또는 휴대폰 번호 중복", content = @Content)
 	})
-	ResponseEntity<CreateMemberResponse> createWorkerMember(
+	ResponseEntity<com.workernotfound.member.global.response.ApiResponse<CreateMemberResponse>> createWorkerMember(
 		@RequestBody(
 			description = "WORKER 회원 생성 요청",
 			required = true,
@@ -64,7 +64,7 @@ public interface MemberInternalControllerDocs {
 		),
 		@ApiResponse(responseCode = "404", description = "회원을 찾을 수 없음", content = @Content)
 	})
-	ResponseEntity<MemberInternalResponse> getMemberInternal(
+	ResponseEntity<com.workernotfound.member.global.response.ApiResponse<MemberInternalResponse>> getMemberInternal(
 		@Parameter(description = "회원 ID", required = true)
 		Long memberId
 	);

@@ -23,7 +23,7 @@ public interface MemberControllerDocs {
 		@ApiResponse(responseCode = "401", description = "인증되지 않은 요청", content = @Content),
 		@ApiResponse(responseCode = "404", description = "회원을 찾을 수 없음", content = @Content)
 	})
-	ResponseEntity<MyMemberResponse> getMyMember(
+	ResponseEntity<com.workernotfound.member.global.response.ApiResponse<MyMemberResponse>> getMyMember(
 		@Parameter(description = "인증 서비스 또는 게이트웨이가 전달한 회원 ID", required = true)
 		Long memberId
 	);

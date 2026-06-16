@@ -29,7 +29,7 @@ public interface OAuthControllerDocs {
 		),
 		@ApiResponse(responseCode = "400", description = "OAuth2 로그인 요청 검증 실패", content = @Content)
 	})
-	ResponseEntity<OAuthLoginResponse> login(OAuthProvider provider, OAuthLoginRequest request);
+	ResponseEntity<com.workernotfound.auth.global.response.ApiResponse<OAuthLoginResponse>> login(OAuthProvider provider, OAuthLoginRequest request);
 
 	@Operation(summary = "OAuth2 OWNER 회원가입 완료", description = "OAuth2 signup ticket과 OWNER 추가 정보로 가입을 완료합니다.")
 	@ApiResponses({
@@ -40,7 +40,7 @@ public interface OAuthControllerDocs {
 		),
 		@ApiResponse(responseCode = "400", description = "OAuth2 OWNER 회원가입 요청 검증 실패", content = @Content)
 	})
-	ResponseEntity<SignupResponse> signupOwner(OAuthOwnerSignupRequest request);
+	ResponseEntity<com.workernotfound.auth.global.response.ApiResponse<SignupResponse>> signupOwner(OAuthOwnerSignupRequest request);
 
 	@Operation(summary = "OAuth2 WORKER 회원가입 완료", description = "OAuth2 signup ticket과 WORKER 추가 정보로 가입을 완료합니다.")
 	@ApiResponses({
@@ -51,5 +51,5 @@ public interface OAuthControllerDocs {
 		),
 		@ApiResponse(responseCode = "400", description = "OAuth2 WORKER 회원가입 요청 검증 실패", content = @Content)
 	})
-	ResponseEntity<SignupResponse> signupWorker(OAuthWorkerSignupRequest request);
+	ResponseEntity<com.workernotfound.auth.global.response.ApiResponse<SignupResponse>> signupWorker(OAuthWorkerSignupRequest request);
 }

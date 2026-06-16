@@ -3,6 +3,7 @@ package com.workernotfound.member.domain.member.controller;
 import com.workernotfound.member.domain.member.controller.docs.MemberControllerDocs;
 import com.workernotfound.member.domain.member.dto.response.MyMemberResponse;
 import com.workernotfound.member.domain.member.service.MemberApplicationService;
+import com.workernotfound.member.global.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,9 +20,9 @@ public class MemberController implements MemberControllerDocs {
 
 	@Override
 	@GetMapping("/me")
-	public ResponseEntity<MyMemberResponse> getMyMember(
+	public ResponseEntity<ApiResponse<MyMemberResponse>> getMyMember(
 		@RequestHeader("X-Member-Id") Long memberId
 	) {
-		return ResponseEntity.ok(memberApplicationService.getMyMember(memberId));
+		return ResponseEntity.ok(ApiResponse.success(memberApplicationService.getMyMember(memberId)));
 	}
 }

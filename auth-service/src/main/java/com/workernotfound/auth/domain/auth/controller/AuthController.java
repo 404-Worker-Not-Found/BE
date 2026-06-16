@@ -6,6 +6,7 @@ import com.workernotfound.auth.domain.auth.dto.response.LoginResponse;
 import com.workernotfound.auth.domain.auth.service.LoginService;
 import com.workernotfound.auth.domain.token.dto.request.LogoutRequest;
 import com.workernotfound.auth.domain.token.service.LogoutService;
+import com.workernotfound.auth.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -24,18 +25,18 @@ public class AuthController implements AuthControllerDocs {
 
 	@Override
 	@PostMapping("/login")
-	public ResponseEntity<LoginResponse> login(
+	public ResponseEntity<ApiResponse<LoginResponse>> login(
 		@Valid @RequestBody LoginRequest request
 	) {
-		return ResponseEntity.ok(loginService.login(request));
+		return ResponseEntity.ok(ApiResponse.success(loginService.login(request)));
 	}
 
 	@Override
 	@PostMapping("/logout")
-	public ResponseEntity<Void> logout(
+	public ResponseEntity<ApiResponse<Void>> logout(
 		@Valid @RequestBody LogoutRequest request
 	) {
 		logoutService.logout(request);
-		return ResponseEntity.noContent().build();
+		return ResponseEntity.ok(ApiResponse.success(null));
 	}
 }

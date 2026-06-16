@@ -4,6 +4,7 @@ import com.workernotfound.auth.domain.token.controller.docs.TokenControllerDocs;
 import com.workernotfound.auth.domain.token.dto.request.TokenReissueRequest;
 import com.workernotfound.auth.domain.token.dto.response.TokenResponse;
 import com.workernotfound.auth.domain.token.service.TokenService;
+import com.workernotfound.auth.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -21,9 +22,9 @@ public class TokenController implements TokenControllerDocs {
 
 	@Override
 	@PostMapping("/reissue")
-	public ResponseEntity<TokenResponse> reissue(
+	public ResponseEntity<ApiResponse<TokenResponse>> reissue(
 		@Valid @RequestBody TokenReissueRequest request
 	) {
-		return ResponseEntity.ok(tokenService.reissue(request));
+		return ResponseEntity.ok(ApiResponse.success(tokenService.reissue(request)));
 	}
 }

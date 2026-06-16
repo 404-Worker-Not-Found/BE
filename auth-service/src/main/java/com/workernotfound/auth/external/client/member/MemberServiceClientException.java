@@ -13,6 +13,12 @@ public class MemberServiceClientException extends RuntimeException {
 		this.responseBody = responseBody;
 	}
 
+	public MemberServiceClientException(String message) {
+		super(message);
+		this.statusCode = null;
+		this.responseBody = null;
+	}
+
 	public MemberServiceClientException(Throwable cause) {
 		super("member-service 호출 중 오류가 발생했습니다.", cause);
 		this.statusCode = null;

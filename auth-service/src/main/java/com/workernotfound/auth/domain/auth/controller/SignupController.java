@@ -5,6 +5,7 @@ import com.workernotfound.auth.domain.auth.dto.request.OwnerSignupRequest;
 import com.workernotfound.auth.domain.auth.dto.request.WorkerSignupRequest;
 import com.workernotfound.auth.domain.auth.dto.response.SignupResponse;
 import com.workernotfound.auth.domain.auth.service.SignupService;
+import com.workernotfound.auth.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -23,19 +24,19 @@ public class SignupController implements SignupControllerDocs {
 
 	@Override
 	@PostMapping("/owner")
-	public ResponseEntity<SignupResponse> signupOwner(
+	public ResponseEntity<ApiResponse<SignupResponse>> signupOwner(
 		@Valid @RequestBody OwnerSignupRequest request
 	) {
 		SignupResponse response = signupService.signupOwner(request);
-		return ResponseEntity.status(HttpStatus.CREATED).body(response);
+		return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(HttpStatus.CREATED, response));
 	}
 
 	@Override
 	@PostMapping("/worker")
-	public ResponseEntity<SignupResponse> signupWorker(
+	public ResponseEntity<ApiResponse<SignupResponse>> signupWorker(
 		@Valid @RequestBody WorkerSignupRequest request
 	) {
 		SignupResponse response = signupService.signupWorker(request);
-		return ResponseEntity.status(HttpStatus.CREATED).body(response);
+		return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(HttpStatus.CREATED, response));
 	}
 }

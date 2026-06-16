@@ -23,7 +23,7 @@ public interface SignupControllerDocs {
 		),
 		@ApiResponse(responseCode = "400", description = "회원가입 요청 검증 실패", content = @Content)
 	})
-	ResponseEntity<SignupResponse> signupOwner(OwnerSignupRequest request);
+	ResponseEntity<com.workernotfound.auth.global.response.ApiResponse<SignupResponse>> signupOwner(OwnerSignupRequest request);
 
 	@Operation(summary = "WORKER 회원가입", description = "이메일/SMS 인증 완료 후 WORKER 회원가입을 처리합니다.")
 	@ApiResponses({
@@ -34,5 +34,5 @@ public interface SignupControllerDocs {
 		),
 		@ApiResponse(responseCode = "400", description = "회원가입 요청 검증 실패", content = @Content)
 	})
-	ResponseEntity<SignupResponse> signupWorker(WorkerSignupRequest request);
+	ResponseEntity<com.workernotfound.auth.global.response.ApiResponse<SignupResponse>> signupWorker(WorkerSignupRequest request);
 }

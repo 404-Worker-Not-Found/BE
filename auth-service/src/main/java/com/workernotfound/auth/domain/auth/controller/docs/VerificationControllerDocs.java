@@ -25,7 +25,7 @@ public interface VerificationControllerDocs {
 		),
 		@ApiResponse(responseCode = "400", description = "요청 검증 실패", content = @Content)
 	})
-	ResponseEntity<VerificationResponse> sendEmailVerification(SendEmailVerificationRequest request);
+	ResponseEntity<com.workernotfound.auth.global.response.ApiResponse<VerificationResponse>> sendEmailVerification(SendEmailVerificationRequest request);
 
 	@Operation(summary = "이메일 인증번호 검증", description = "회원가입용 이메일 인증번호를 검증합니다.")
 	@ApiResponses({
@@ -36,7 +36,7 @@ public interface VerificationControllerDocs {
 		),
 		@ApiResponse(responseCode = "400", description = "요청 검증 실패", content = @Content)
 	})
-	ResponseEntity<VerificationResponse> verifyEmail(VerifyEmailRequest request);
+	ResponseEntity<com.workernotfound.auth.global.response.ApiResponse<VerificationResponse>> verifyEmail(VerifyEmailRequest request);
 
 	@Operation(summary = "SMS 인증번호 발송", description = "회원가입용 SMS 인증번호를 발송합니다.")
 	@ApiResponses({
@@ -47,7 +47,7 @@ public interface VerificationControllerDocs {
 		),
 		@ApiResponse(responseCode = "400", description = "요청 검증 실패", content = @Content)
 	})
-	ResponseEntity<VerificationResponse> sendSmsVerification(SendSmsVerificationRequest request);
+	ResponseEntity<com.workernotfound.auth.global.response.ApiResponse<VerificationResponse>> sendSmsVerification(SendSmsVerificationRequest request);
 
 	@Operation(summary = "SMS 인증번호 검증", description = "회원가입용 SMS 인증번호를 검증합니다.")
 	@ApiResponses({
@@ -58,5 +58,5 @@ public interface VerificationControllerDocs {
 		),
 		@ApiResponse(responseCode = "400", description = "요청 검증 실패", content = @Content)
 	})
-	ResponseEntity<VerificationResponse> verifySms(VerifySmsRequest request);
+	ResponseEntity<com.workernotfound.auth.global.response.ApiResponse<VerificationResponse>> verifySms(VerifySmsRequest request);
 }

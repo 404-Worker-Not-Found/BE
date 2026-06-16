@@ -9,6 +9,7 @@ import com.workernotfound.auth.domain.auth.dto.response.OAuthLoginResponse;
 import com.workernotfound.auth.domain.auth.dto.response.SignupResponse;
 import com.workernotfound.auth.domain.auth.service.OAuthLoginService;
 import com.workernotfound.auth.domain.auth.service.SignupService;
+import com.workernotfound.auth.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -29,26 +30,28 @@ public class OAuthController implements OAuthControllerDocs {
 
 	@Override
 	@PostMapping("/{provider}/login")
-	public ResponseEntity<OAuthLoginResponse> login(
+	public ResponseEntity<ApiResponse<OAuthLoginResponse>> login(
 		@PathVariable OAuthProvider provider,
 		@Valid @RequestBody OAuthLoginRequest request
 	) {
-		return ResponseEntity.ok(oAuthLoginService.login(provider, request));
+		return ResponseEntity.ok(ApiResponse.success(oAuthLoginService.login(provider, request)));
 	}
 
 	@Override
 	@PostMapping("/signup/owner")
-	public ResponseEntity<SignupResponse> signupOwner(
+	public ResponseEntity<ApiResponse<SignupResponse>> signupOwner(
 		@Valid @RequestBody OAuthOwnerSignupRequest request
 	) {
-		return ResponseEntity.status(HttpStatus.CREATED).body(signupService.signupOAuthOwner(request));
+		return ResponseEntity.status(HttpStatus.CREATED)
+			.body(ApiResponse.success(HttpStatus.CREATED, signupService.signupOAuthOwner(request)));
 	}
 
 	@Override
 	@PostMapping("/signup/worker")
-	public ResponseEntity<SignupResponse> signupWorker(
+	public ResponseEntity<ApiResponse<SignupResponse>> signupWorker(
 		@Valid @RequestBody OAuthWorkerSignupRequest request
 	) {
-		return ResponseEntity.status(HttpStatus.CREATED).body(signupService.signupOAuthWorker(request));
+		return ResponseEntity.status(HttpStatus.CREATED)
+			.body(ApiResponse.success(HttpStatus.CREATED, signupService.signupOAuthWorker(request)));
 	}
 }

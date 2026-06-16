@@ -492,3 +492,28 @@ Implication for agents:
 Related files:
 - `compose.local.yml`
 - `.env.example`
+
+## 2026-06-16 - Common API Response Format
+
+Decision:
+- Use a common `ApiResponse<T>` envelope for auth-service and member-service APIs.
+- Successful responses contain `success`, `status`, `code`, `message`, `data`, `path`, `timestamp`, and `reasons`.
+- Successful responses use `success=true`, `code=SUCCESS`, and `message=요청이 성공적으로 처리되었습니다.`
+- Error responses use `success=false`, an error code, an error message, request path, timestamp, and optional reasons.
+- Security 401/403 responses should also use the common envelope instead of servlet default error bodies.
+
+Reason:
+- A consistent response contract makes Swagger testing, frontend integration, and service debugging easier.
+- Security and validation failures should not return a different shape from controller responses.
+
+Implication for agents:
+- Wrap controller responses in the service-local `global.response.ApiResponse`.
+- Add or update `global.exception` handling when introducing new business exceptions.
+- Do not return JPA entities or raw DTOs directly from controllers.
+- If an internal service client consumes a wrapped response, unwrap and validate the `data` field at the client boundary.
+
+Related files:
+- `auth-service/src/main/java/com/workernotfound/auth/global/response/ApiResponse.java`
+- `auth-service/src/main/java/com/workernotfound/auth/global/exception`
+- `member-service/src/main/java/com/workernotfound/member/global/response/ApiResponse.java`
+- `member-service/src/main/java/com/workernotfound/member/global/exception`
