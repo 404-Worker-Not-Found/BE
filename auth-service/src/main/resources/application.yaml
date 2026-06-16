@@ -1,6 +1,21 @@
 spring:
   application:
     name: auth-service
+  datasource:
+    url: ${AUTH_DATASOURCE_URL}
+    username: ${AUTH_DATASOURCE_USERNAME}
+    password: ${AUTH_DATASOURCE_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${AUTH_REDIS_HOST:localhost}
+      port: ${AUTH_REDIS_PORT:6379}
+  jpa:
+    hibernate:
+      ddl-auto: ${AUTH_JPA_DDL_AUTO:none}
+
+server:
+  port: ${AUTH_SERVICE_PORT:8081}
 
 auth:
   jwt:

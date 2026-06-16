@@ -49,6 +49,8 @@ Current state:
 - `member-service` has initial member, owner, worker, and location entities.
 - The repository has a first ERD draft for the MSA design.
 - A repository-wide verification script exists at `docs/scripts/verify.sh`.
+- A local Docker Compose file exists at `compose.local.yml` for auth/member MySQL instances and auth Redis.
+- `.env.example` documents the local runtime environment variables; the real `.env` file is ignored by Git.
 - The service package structure is defined in `docs/architecture/service-package-structure.md`.
 - `auth-service` tests use Testcontainers with MySQL and Redis for integration-test dependencies.
 - `member-service` tests use Testcontainers with MySQL for the test datasource.

@@ -1,0 +1,56 @@
+services:
+  auth-mysql:
+    image: mysql:8.4
+    container_name: wnf-auth-mysql
+    environment:
+      MYSQL_DATABASE: ${AUTH_DB_NAME}
+      MYSQL_ROOT_PASSWORD: ${AUTH_DB_ROOT_PASSWORD}
+      MYSQL_USER: ${AUTH_DB_USERNAME}
+      MYSQL_PASSWORD: ${AUTH_DB_PASSWORD}
+      TZ: Asia/Seoul
+    ports:
+      - "3307:3306"
+    volumes:
+      - auth-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  member-mysql:
+    image: mysql:8.4
+    container_name: wnf-member-mysql
+    environment:
+      MYSQL_DATABASE: ${MEMBER_DB_NAME}
+      MYSQL_ROOT_PASSWORD: ${MEMBER_DB_ROOT_PASSWORD}
+      MYSQL_USER: ${MEMBER_DB_USERNAME}
+      MYSQL_PASSWORD: ${MEMBER_DB_PASSWORD}
+      TZ: Asia/Seoul
+    ports:
+      - "3308:3306"
+    volumes:
+      - member-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  auth-redis:
+    image: redis:7.4
+    container_name: wnf-auth-redis
+    ports:
+      - "${AUTH_REDIS_PORT}:6379"
+    volumes:
+      - auth-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  auth-mysql-data:
+  member-mysql-data:
+  auth-redis-data:

@@ -469,3 +469,26 @@ Implication for agents:
 Related files:
 - `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service`
 - `auth-service/src/main/java/com/workernotfound/auth/domain/account/entity`
+
+## 2026-06-16 - Local Development Infrastructure
+
+Decision:
+- Use a repository-root local Docker Compose file for shared local infrastructure.
+- Keep auth-service and member-service databases separate, even in local development.
+- Reserve port `8080` for a future API Gateway.
+- Use `8081` for auth-service and `8082` for member-service in local development.
+- Commit `.env.example` as the local environment variable template, but keep the real `.env` ignored.
+
+Reason:
+- A root compose file lets developers start and stop the cross-service local infrastructure together.
+- Separate databases keep local development aligned with the MSA persistence boundary.
+- Reserving `8080` avoids later port churn when an API Gateway is introduced.
+
+Implication for agents:
+- Add shared local infrastructure to the root compose file unless there is a clear service-specific reason not to.
+- Do not commit real `.env` files or local secrets.
+- Keep service ports aligned with the local convention unless the user explicitly changes it.
+
+Related files:
+- `compose.local.yml`
+- `.env.example`
