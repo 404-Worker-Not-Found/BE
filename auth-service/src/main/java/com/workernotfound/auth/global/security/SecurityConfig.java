@@ -29,7 +29,8 @@ public class SecurityConfig {
 					"/api/auth/sms-verifications/**",
 					"/v3/api-docs/**",
 					"/swagger-ui/**",
-					"/swagger-ui.html"
+					"/swagger-ui.html",
+					"/error"
 				).permitAll()
 				.anyRequest().authenticated()
 			)

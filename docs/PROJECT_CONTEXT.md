@@ -167,6 +167,7 @@ Current implementation state:
 - The service currently contains generated Spring Boot application and test skeletons.
 - Initial member, owner, worker, and location entities have been added.
 - Initial repository, service, and controller layers have been added.
+- Basic member-service security configuration permits Swagger, internal member APIs, and the current `X-Member-Id` based member lookup endpoint.
 - API contracts and Flyway schema migrations are not yet implemented.
 
 Member signup design notes are recorded in `docs/architecture/auth-member-signup-design.md`.
