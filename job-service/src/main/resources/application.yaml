@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: job-service
+
+  datasource:
+    url: ${JOB_DATASOURCE_URL}
+    username: ${JOB_DATASOURCE_USERNAME}
+    password: ${JOB_DATASOURCE_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JOB_JPA_DDL_AUTO:none}
+
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET}
+
+server:
+  port: ${JOB_SERVICE_PORT:8083}
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
