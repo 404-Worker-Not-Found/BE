@@ -62,8 +62,8 @@ public class JobCommandService {
         if (!request.applicationDeadline().isAfter(now)) {
             throw new BusinessException(JobErrorCode.INVALID_APPLICATION_DEADLINE, "지원 마감 시간은 현재 시간 이후여야 합니다.");
         }
-        if (!request.applicationDeadline().isBefore(request.workDate().atStartOfDay())) {
-            throw new BusinessException(JobErrorCode.INVALID_APPLICATION_DEADLINE, "지원 마감 시간은 근무일 당일 자정 이전이어야 합니다.");
+        if (!request.applicationDeadline().isBefore(request.workDate().atTime(request.startTime()))) {
+            throw new BusinessException(JobErrorCode.INVALID_APPLICATION_DEADLINE, "지원 마감 시간은 근무 시작 시간 이전이어야 합니다.");
         }
     }
 }
