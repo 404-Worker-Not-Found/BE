@@ -1,7 +1,7 @@
 package com.workernotfound.job.domain.job.dto.response;
 
 import com.workernotfound.job.domain.job.entity.JobPost;
-import com.workernotfound.job.domain.job.entity.UrgencyLevel;
+import com.workernotfound.job.domain.job.entity.enums.UrgencyLevel;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;

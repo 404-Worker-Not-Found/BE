@@ -2,7 +2,6 @@ package com.workernotfound.job.global.exception;
 
 import com.workernotfound.job.global.response.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -12,24 +11,16 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(NoSuchElementException.class)
-    public ResponseEntity<ApiResponse<Void>> handleNotFound(
-            NoSuchElementException e, HttpServletRequest request
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBusinessException(
+            BusinessException e, HttpServletRequest request
     ) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiResponse.error(
-                        HttpStatus.NOT_FOUND.value(),
-                        "NOT_FOUND",
-                        e.getMessage(),
-                        request.getRequestURI(),
-                        null
-                ));
+        return error(e.getErrorCode(), e.getMessage(), request.getRequestURI(), null);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -42,69 +33,39 @@ public class GlobalExceptionHandler {
                         fe -> fe.getDefaultMessage() != null ? fe.getDefaultMessage() : "유효하지 않은 값입니다.",
                         (existing, replacement) -> existing
                 ));
-        return ResponseEntity.badRequest()
-                .body(ApiResponse.error(
-                        HttpStatus.BAD_REQUEST.value(),
-                        "INVALID_INPUT",
-                        "입력값이 올바르지 않습니다.",
-                        request.getRequestURI(),
-                        reasons
-                ));
+        return error(GlobalErrorCode.VALIDATION_ERROR, GlobalErrorCode.VALIDATION_ERROR.getMessage(), request.getRequestURI(), reasons);
     }
 
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiResponse<Void>> handleNotReadable(
-            HttpServletRequest request
-    ) {
-        return ResponseEntity.badRequest()
-                .body(ApiResponse.error(
-                        HttpStatus.BAD_REQUEST.value(),
-                        "INVALID_FORMAT",
-                        "요청 형식이 올바르지 않습니다.",
-                        request.getRequestURI(),
-                        null
-                ));
-    }
-
-    @ExceptionHandler({MethodArgumentTypeMismatchException.class, MissingServletRequestParameterException.class})
-    public ResponseEntity<ApiResponse<Void>> handleBadRequest(
+    @ExceptionHandler({
+            IllegalArgumentException.class,
+            HttpMessageNotReadableException.class,
+            MethodArgumentTypeMismatchException.class,
+            MissingServletRequestParameterException.class
+    })
+    public ResponseEntity<ApiResponse<Void>> handleInvalidRequest(
             Exception e, HttpServletRequest request
     ) {
-        return ResponseEntity.badRequest()
-                .body(ApiResponse.error(
-                        HttpStatus.BAD_REQUEST.value(),
-                        "BAD_REQUEST",
-                        e.getMessage(),
-                        request.getRequestURI(),
-                        null
-                ));
-    }
-
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(
-            IllegalArgumentException e, HttpServletRequest request
-    ) {
-        return ResponseEntity.badRequest()
-                .body(ApiResponse.error(
-                        HttpStatus.BAD_REQUEST.value(),
-                        "BAD_REQUEST",
-                        e.getMessage(),
-                        request.getRequestURI(),
-                        null
-                ));
+        return error(GlobalErrorCode.INVALID_REQUEST, e.getMessage(), request.getRequestURI(), null);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnexpected(
             Exception e, HttpServletRequest request
     ) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+        return error(GlobalErrorCode.INTERNAL_SERVER_ERROR, GlobalErrorCode.INTERNAL_SERVER_ERROR.getMessage(), request.getRequestURI(), null);
+    }
+
+    private ResponseEntity<ApiResponse<Void>> error(
+            ErrorCode errorCode, String message, String path, Map<String, Object> reasons
+    ) {
+        return ResponseEntity
+                .status(errorCode.getHttpStatus())
                 .body(ApiResponse.error(
-                        HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                        "INTERNAL_SERVER_ERROR",
-                        "서버 내부 오류가 발생했습니다.",
-                        request.getRequestURI(),
-                        null
+                        errorCode.getHttpStatus().value(),
+                        errorCode.getCode(),
+                        message,
+                        path,
+                        reasons
                 ));
     }
 }

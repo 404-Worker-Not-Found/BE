@@ -1,5 +1,6 @@
 package com.workernotfound.job.global.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.security.SecurityScheme;
@@ -10,6 +11,11 @@ import org.springframework.context.annotation.Configuration;
 public class OpenApiConfig {
 
 	public static final String BEARER_AUTH = "bearerAuth";
+
+	@Bean
+	public ObjectMapper objectMapper() {
+		return new ObjectMapper().findAndRegisterModules();
+	}
 
 	@Bean
 	public OpenAPI openAPI() {

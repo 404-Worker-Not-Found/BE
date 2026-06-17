@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.entity;
 
+import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;

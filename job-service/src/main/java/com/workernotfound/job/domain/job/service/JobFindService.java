@@ -6,10 +6,12 @@ import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
 import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
 import com.workernotfound.job.domain.job.entity.IndustryCategory;
 import com.workernotfound.job.domain.job.entity.JobPost;
-import com.workernotfound.job.domain.job.entity.JobStatus;
-import com.workernotfound.job.domain.job.entity.UrgencyLevel;
+import com.workernotfound.job.domain.job.entity.enums.JobStatus;
+import com.workernotfound.job.domain.job.entity.enums.UrgencyLevel;
+import com.workernotfound.job.domain.job.exception.JobErrorCode;
 import com.workernotfound.job.domain.job.repository.IndustryCategoryRepository;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
+import com.workernotfound.job.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,7 +20,6 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
 @Service
@@ -29,32 +30,57 @@ public class JobFindService {
     private final JobPostRepository jobPostRepository;
     private final IndustryCategoryRepository industryCategoryRepository;
 
-    public JobDetailResponse getJobDetail(Long jobId) {
+    public JobDetailResponse findJobDetail(Long jobId) {
         JobPost post = jobPostRepository.findById(jobId)
-                .orElseThrow(() -> new NoSuchElementException("공고를 찾을 수 없습니다. id=" + jobId));
+                .orElseThrow(() -> new BusinessException(JobErrorCode.JOB_NOT_FOUND));
         Map<Long, String> categoryNameMap = buildCategoryNameMap();
-        String categoryName = categoryNameMap.getOrDefault(post.getCategoryId(), "");
-        return JobDetailResponse.of(post, categoryName, 0);
+        String categoryName = resolveCategoryName(categoryNameMap, post.getCategoryId());
+        return JobDetailResponse.of(post, categoryName);
     }
 
-    public JobSearchResponse searchJobs(JobSearchRequest request) {
+    public JobSearchResponse findJobs(JobSearchRequest request) {
+        validateSearchRequest(request);
         List<JobPost> candidates = fetchCandidates(request);
         Map<Long, String> categoryNameMap = buildCategoryNameMap();
 
-        List<JobCardResponse> result = candidates.stream()
-                .filter(job -> filterByWage(job, request))
-                .filter(job -> filterByStartTime(job, request))
-                .filter(job -> filterByUrgency(job, request))
+        List<JobCardResponse> filtered = candidates.stream()
+                .filter(job -> matchesWage(job, request))
+                .filter(job -> matchesStartTime(job, request))
+                .filter(job -> matchesUrgency(job, request))
                 .filter(job -> job.getApplicationDeadline().isAfter(LocalDateTime.now()))
                 .map(job -> {
-                    double distanceKm = calculateDistance(job, request);
-                    return JobCardResponse.of(job, categoryNameMap.getOrDefault(job.getCategoryId(), ""), distanceKm);
+                    Double distanceKm = calculateDistance(job, request);
+                    return JobCardResponse.of(job, resolveCategoryName(categoryNameMap, job.getCategoryId()), distanceKm);
                 })
-                .filter(card -> filterByDistance(card, request))
-                .sorted(buildComparator(request))
+                .filter(card -> matchesDistance(card, request))
+                .sorted(buildComparator(request.type()))
                 .collect(Collectors.toList());
 
-        return JobSearchResponse.of(result);
+        int page = request.page() != null ? request.page() : 0;
+        int size = request.size() != null ? request.size() : 20;
+        int total = filtered.size();
+        int fromIndex = Math.min(page * size, total);
+        int toIndex = Math.min(fromIndex + size, total);
+
+        return JobSearchResponse.of(filtered.subList(fromIndex, toIndex), page, size, total);
+    }
+
+    private void validateSearchRequest(JobSearchRequest request) {
+        if (request.minWage() != null && request.maxWage() != null
+                && request.minWage() > request.maxWage()) {
+            throw new BusinessException(JobErrorCode.INVALID_SEARCH_CONDITION, "minWage는 maxWage보다 클 수 없습니다.");
+        }
+        if (request.startTimeFrom() != null && request.startTimeTo() != null
+                && request.startTimeFrom().isAfter(request.startTimeTo())) {
+            throw new BusinessException(JobErrorCode.INVALID_SEARCH_CONDITION, "startTimeFrom은 startTimeTo보다 이후일 수 없습니다.");
+        }
+        if (request.maxDistanceKm() != null && request.maxDistanceKm() < 0) {
+            throw new BusinessException(JobErrorCode.INVALID_SEARCH_CONDITION, "maxDistanceKm은 0 이상이어야 합니다.");
+        }
+        if (request.maxDistanceKm() != null
+                && (request.workerLat() == null || request.workerLng() == null)) {
+            throw new BusinessException(JobErrorCode.INVALID_SEARCH_CONDITION, "maxDistanceKm을 사용하려면 workerLat와 workerLng가 필요합니다.");
+        }
     }
 
     private List<JobPost> fetchCandidates(JobSearchRequest request) {
@@ -69,7 +95,15 @@ public class JobFindService {
                 .collect(Collectors.toMap(IndustryCategory::getId, IndustryCategory::getName));
     }
 
-    private boolean filterByWage(JobPost job, JobSearchRequest request) {
+    private String resolveCategoryName(Map<Long, String> categoryNameMap, Long categoryId) {
+        String name = categoryNameMap.get(categoryId);
+        if (name == null) {
+            throw new BusinessException(JobErrorCode.CATEGORY_NOT_FOUND);
+        }
+        return name;
+    }
+
+    private boolean matchesWage(JobPost job, JobSearchRequest request) {
         if (request.minWage() != null && job.getBaseHourlyWage() < request.minWage()) {
             return false;
         }
@@ -79,7 +113,7 @@ public class JobFindService {
         return true;
     }
 
-    private boolean filterByStartTime(JobPost job, JobSearchRequest request) {
+    private boolean matchesStartTime(JobPost job, JobSearchRequest request) {
         if (request.startTimeFrom() != null && job.getStartTime().isBefore(request.startTimeFrom())) {
             return false;
         }
@@ -89,26 +123,26 @@ public class JobFindService {
         return true;
     }
 
-    private boolean filterByUrgency(JobPost job, JobSearchRequest request) {
+    private boolean matchesUrgency(JobPost job, JobSearchRequest request) {
         if ("URGENT".equalsIgnoreCase(request.type())) {
             return job.getUrgencyLevel() == UrgencyLevel.HIGH;
         }
         return true;
     }
 
-    private boolean filterByDistance(JobCardResponse card, JobSearchRequest request) {
+    private boolean matchesDistance(JobCardResponse card, JobSearchRequest request) {
         if (request.workerLat() == null || request.workerLng() == null) {
             return true;
         }
         if (request.maxDistanceKm() == null) {
             return true;
         }
-        return card.distanceKm() <= request.maxDistanceKm();
+        return card.distanceKm() != null && card.distanceKm() <= request.maxDistanceKm();
     }
 
-    private double calculateDistance(JobPost job, JobSearchRequest request) {
+    private Double calculateDistance(JobPost job, JobSearchRequest request) {
         if (request.workerLat() == null || request.workerLng() == null) {
-            return 0.0;
+            return null;
         }
         return haversineKm(
                 request.workerLat().doubleValue(),
@@ -118,11 +152,11 @@ public class JobFindService {
         );
     }
 
-    private Comparator<JobCardResponse> buildComparator(JobSearchRequest request) {
-        if ("URGENT".equalsIgnoreCase(request.type())) {
+    private Comparator<JobCardResponse> buildComparator(String type) {
+        if ("URGENT".equalsIgnoreCase(type)) {
             return Comparator.comparingLong(JobCardResponse::remainingMinutes);
         }
-        return Comparator.comparingDouble(JobCardResponse::distanceKm);
+        return Comparator.comparing(JobCardResponse::distanceKm, Comparator.nullsLast(Double::compareTo));
     }
 
     private static double haversineKm(double lat1, double lng1, double lat2, double lng2) {

@@ -1,0 +1,2 @@
+ALTER TABLE job_posts
+    ADD COLUMN end_time_next_day BOOLEAN NOT NULL DEFAULT FALSE;

@@ -6,6 +6,7 @@ import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
 import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
 import com.workernotfound.job.global.config.OpenApiConfig;
 import com.workernotfound.job.global.response.ApiResponse;
+import com.workernotfound.job.global.security.MemberClaims;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -31,7 +32,7 @@ public interface JobControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청", content = @Content),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 요청", content = @Content)
     })
-    ResponseEntity<ApiResponse<Long>> create(Long ownerId, CreateJobRequest request);
+    ResponseEntity<ApiResponse<Long>> create(MemberClaims claims, CreateJobRequest request);
 
     @Operation(
             summary = "공고 상세 조회",

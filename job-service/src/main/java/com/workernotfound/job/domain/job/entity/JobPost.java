@@ -1,5 +1,7 @@
 package com.workernotfound.job.domain.job.entity;
 
+import com.workernotfound.job.domain.job.entity.enums.JobStatus;
+import com.workernotfound.job.domain.job.entity.enums.UrgencyLevel;
 import com.workernotfound.job.global.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -49,6 +51,9 @@ public class JobPost extends BaseEntity {
     private LocalTime endTime;
 
     @Column(nullable = false)
+    private boolean endTimeNextDay;
+
+    @Column(nullable = false)
     private Integer baseHourlyWage;
 
     private Integer extraWage;
@@ -85,6 +90,7 @@ public class JobPost extends BaseEntity {
             LocalDate workDate,
             LocalTime startTime,
             LocalTime endTime,
+            boolean endTimeNextDay,
             Integer baseHourlyWage,
             Integer extraWage,
             Integer recruitCount,
@@ -103,6 +109,7 @@ public class JobPost extends BaseEntity {
         this.workDate = workDate;
         this.startTime = startTime;
         this.endTime = endTime;
+        this.endTimeNextDay = endTimeNextDay;
         this.baseHourlyWage = baseHourlyWage;
         this.extraWage = extraWage;
         this.recruitCount = recruitCount;

@@ -6,10 +6,12 @@ import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
 import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
 import com.workernotfound.job.domain.job.service.JobApplicationService;
-import com.workernotfound.job.domain.job.service.JobFindService;
 import com.workernotfound.job.global.response.ApiResponse;
+import com.workernotfound.job.global.security.MemberClaims;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -18,16 +20,15 @@ import org.springframework.web.bind.annotation.*;
 public class JobController implements JobControllerDocs {
 
     private final JobApplicationService jobApplicationService;
-    private final JobFindService jobFindService;
 
     @Override
     @PostMapping
     public ResponseEntity<ApiResponse<Long>> create(
-            @RequestHeader("X-Owner-Id") Long ownerId,
-            @RequestBody CreateJobRequest request
+            @AuthenticationPrincipal MemberClaims claims,
+            @Valid @RequestBody CreateJobRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                jobApplicationService.create(ownerId, request)
+                jobApplicationService.create(claims.memberId(), request)
         ));
     }
 
@@ -37,17 +38,17 @@ public class JobController implements JobControllerDocs {
             @PathVariable Long id
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                jobFindService.getJobDetail(id)
+                jobApplicationService.getJobDetail(id)
         ));
     }
 
     @Override
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<JobSearchResponse>> search(
-            @ModelAttribute JobSearchRequest request
+            @Valid @ModelAttribute JobSearchRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                jobFindService.searchJobs(request)
+                jobApplicationService.getJobs(request)
         ));
     }
 }
