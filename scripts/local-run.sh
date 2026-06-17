@@ -11,6 +11,7 @@ Usage:
   ./scripts/local-run.sh infra     Start local MySQL/Redis containers
   ./scripts/local-run.sh member    Run member-service with .env
   ./scripts/local-run.sh auth      Run auth-service with .env
+  ./scripts/local-run.sh job       Run job-service with .env
   ./scripts/local-run.sh stop      Stop local containers
   ./scripts/local-run.sh status    Show local container status
 EOF
@@ -46,6 +47,11 @@ case "${1:-}" in
   auth)
     load_env
     cd "${ROOT_DIR}/auth-service"
+    ./gradlew bootRun
+    ;;
+  job)
+    load_env
+    cd "${ROOT_DIR}/job-service"
     ./gradlew bootRun
     ;;
   stop)

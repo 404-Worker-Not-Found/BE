@@ -1,22 +1,22 @@
 package com.workernotfound.job.domain.job.entity;
 
+import com.workernotfound.job.global.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+@Getter
 @Entity
 @Table(name = "industry_categories")
-@Getter
-@NoArgsConstructor
-public class IndustryCategory {
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class IndustryCategory extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
+    @Column(nullable = false)
     private String name;
 
     private Long parentId;
 
+    @Column(nullable = false)
     private Boolean isActive;
 }

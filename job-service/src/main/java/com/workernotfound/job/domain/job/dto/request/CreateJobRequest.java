@@ -1,6 +1,8 @@
 package com.workernotfound.job.domain.job.dto.request;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 public record CreateJobRequest(
@@ -8,6 +10,10 @@ public record CreateJobRequest(
         Long businessId,
 
         Long categoryId,
+
+        String storeName,
+
+        String address,
 
         String title,
 
@@ -21,7 +27,17 @@ public record CreateJobRequest(
 
         Integer baseHourlyWage,
 
-        Integer recruitCount
+        Integer extraWage,
+
+        Integer recruitCount,
+
+        BigDecimal latitude,
+
+        BigDecimal longitude,
+
+        String urgencyLevel,
+
+        LocalDateTime applicationDeadline
 
 ) {
 }
