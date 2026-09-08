@@ -11,6 +11,8 @@ import com.workernotfound.member.domain.member.repository.MemberRepository;
 import com.workernotfound.member.domain.owner.entity.OwnerProfile;
 import com.workernotfound.member.domain.owner.entity.enums.BusinessVerificationStatus;
 import com.workernotfound.member.domain.owner.repository.OwnerProfileRepository;
+import com.workernotfound.member.domain.owner.service.BusinessVerificationResult;
+import com.workernotfound.member.domain.owner.service.BusinessVerificationService;
 import com.workernotfound.member.domain.worker.entity.WorkerProfile;
 import com.workernotfound.member.domain.worker.repository.WorkerAvailableTimeRepository;
 import com.workernotfound.member.domain.worker.repository.WorkerPreferredBusinessTypeRepository;
@@ -21,11 +23,15 @@ import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 @Transactional
 class MemberSignupCompensationTests extends IntegrationTestSupport {
@@ -54,12 +60,23 @@ class MemberSignupCompensationTests extends IntegrationTestSupport {
 	@Autowired
 	private EntityManager entityManager;
 
+	@MockitoBean
+	private BusinessVerificationService businessVerificationService;
+
+	@BeforeEach
+	void setUpBusinessVerification() {
+		when(businessVerificationService.verify(anyString()))
+			.thenReturn(new BusinessVerificationResult(true, BusinessVerificationStatus.VERIFIED));
+	}
+
 	@Test
 	void deleteMemberForSignupCompensationDeletesOwnerProfileAndStoreLocation() {
 		CreateMemberResponse response = memberApplicationService.createOwnerMember(ownerRequest());
 		OwnerProfile ownerProfile = ownerProfileRepository.findByMember_Id(response.memberId()).orElseThrow();
 		Long ownerProfileId = ownerProfile.getId();
 		Long storeLocationId = ownerProfile.getStoreLocation().getId();
+		assertThat(ownerProfile.getStoreName()).isEqualTo("일하는 카페");
+		assertThat(ownerProfile.getBusinessVerificationStatus()).isEqualTo(BusinessVerificationStatus.VERIFIED);
 
 		memberApplicationService.deleteMemberForSignupCompensation(response.memberId());
 		flushAndClear();
@@ -93,8 +110,8 @@ class MemberSignupCompensationTests extends IntegrationTestSupport {
 			"01011112222",
 			MemberRole.OWNER,
 			"1234567890",
+			"일하는 카페",
 			"CAFE",
-			BusinessVerificationStatus.NOT_VERIFIED,
 			locationRequest()
 		);
 	}

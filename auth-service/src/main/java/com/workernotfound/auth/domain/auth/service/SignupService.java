@@ -18,7 +18,6 @@ import com.workernotfound.auth.domain.auth.entity.enums.VerificationPurpose;
 import com.workernotfound.auth.domain.token.dto.response.TokenResponse;
 import com.workernotfound.auth.domain.token.service.TokenService;
 import com.workernotfound.auth.external.client.member.MemberServiceClient;
-import com.workernotfound.auth.external.client.member.dto.BusinessVerificationStatus;
 import com.workernotfound.auth.external.client.member.dto.CreateMemberResponse;
 import com.workernotfound.auth.external.client.member.dto.CreateOwnerMemberRequest;
 import com.workernotfound.auth.external.client.member.dto.CreateWorkerMemberRequest;
@@ -215,8 +214,8 @@ public class SignupService {
 			request.phoneNumber(),
 			com.workernotfound.auth.external.client.member.dto.MemberRole.OWNER,
 			request.businessRegistrationNumber(),
+			request.storeName(),
 			request.businessType(),
-			BusinessVerificationStatus.NOT_VERIFIED,
 			toMemberLocationRequest(request.storeLocation())
 		);
 	}
@@ -269,8 +268,8 @@ public class SignupService {
 			request.phoneNumber(),
 			com.workernotfound.auth.external.client.member.dto.MemberRole.OWNER,
 			request.businessRegistrationNumber(),
+			request.storeName(),
 			request.businessType(),
-			BusinessVerificationStatus.NOT_VERIFIED,
 			toMemberLocationRequest(request.storeLocation())
 		);
 	}

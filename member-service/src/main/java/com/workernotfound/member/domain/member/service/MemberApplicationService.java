@@ -48,8 +48,8 @@ public class MemberApplicationService {
 		OwnerProfile ownerProfile = ownerCommandService.createOwnerProfile(
 			member,
 			request.businessRegistrationNumber(),
+			request.storeName(),
 			request.businessType(),
-			request.businessVerificationStatus(),
 			storeLocation
 		);
 		member.registerOwnerProfile(ownerProfile);
@@ -182,6 +182,7 @@ public class MemberApplicationService {
 		return new OwnerProfileResponse(
 			ownerProfile.getId(),
 			ownerProfile.getBusinessRegistrationNumber(),
+			ownerProfile.getStoreName(),
 			ownerProfile.getBusinessType(),
 			ownerProfile.getBusinessVerificationStatus(),
 			toLocationResponse(ownerProfile.getStoreLocation())

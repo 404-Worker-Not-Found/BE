@@ -28,6 +28,10 @@ public record OAuthOwnerSignupRequest(
 
 	@NotBlank
 	@Size(max = 100)
+	String storeName,
+
+	@NotBlank
+	@Size(max = 100)
 	String businessType,
 
 	@Valid

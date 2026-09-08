@@ -250,6 +250,7 @@ OWNER 역할의 추가 정보를 저장한다.
 
 - `memberId`: `Long`, member-service 내부 FK, unique
 - `businessRegistrationNumber`: `String`
+- `storeName`: `String`
 - `businessType`: `String`
 - `businessVerificationStatus`: `BusinessVerificationStatus`
 - `storeLocationId`: `Long`, member-service 내부 FK
@@ -586,8 +587,8 @@ public record CreateOwnerMemberRequest(
     String phoneNumber,
     MemberRole role,
     String businessRegistrationNumber,
+    String storeName,
     String businessType,
-    BusinessVerificationStatus businessVerificationStatus,
     LocationRequest storeLocation
 ) {
 }
@@ -661,11 +662,10 @@ public record MemberInternalResponse(
 }
 ```
 
-## 사업자 검증 확장 설계
+## 사업자 검증 설계
 
-초기에는 사업자등록번호 형식 검증과 검증 상태 저장까지만 설계한다.
-
-추후 국세청 사업자등록정보 API 상태조회/진위확인 연동이 가능하도록 member-service에 인터페이스를 둔다.
+점주 회원가입 시 member-service가 공공데이터포털 국세청 사업자등록 상태조회 API를 호출한다.
+가게명은 사용자가 직접 입력하며 국세청 조회 조건으로 사용하지 않는다.
 
 ```java
 public interface BusinessVerificationService {
@@ -673,12 +673,14 @@ public interface BusinessVerificationService {
 }
 ```
 
-초기 구현:
+현재 구현:
 
-- 사업자등록번호 형식만 검증한다.
-- 실제 외부 API 검증 전이면 `businessVerificationStatus = NOT_VERIFIED`로 저장한다.
-- 외부 API 연동 후 성공이면 `businessVerificationStatus = VERIFIED`로 저장한다.
-- 외부 API 연동 후 실패이면 `businessVerificationStatus = FAILED`로 저장한다.
+- 하이픈을 제거한 숫자 10자리 사업자등록번호로 상태조회를 요청한다.
+- 납세자상태 코드 `01`인 계속사업자만 가입을 허용하고 `VERIFIED`로 저장한다.
+- 휴업자, 폐업자, 미등록 번호는 가입을 거절한다.
+- 상태조회는 대표자 본인 여부나 사업장 소유권을 증명하지 않는다.
+- 외부 API가 응답하지 않거나 올바르지 않은 응답을 반환하면 임의로 통과시키지 않고 503 오류를 반환한다.
+- 검증 상태는 member-service가 계산하며 auth-service 요청에서 받지 않는다.
 
 ## 트랜잭션 및 일관성 경계
 

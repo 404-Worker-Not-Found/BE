@@ -591,3 +591,27 @@ Related files:
 - `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service/SignupService.java`
 - `member-service/src/main/java/com/workernotfound/member/domain/member/controller/MemberInternalController.java`
 - `member-service/src/test/java/com/workernotfound/member/domain/member/service/MemberSignupCompensationTests.java`
+
+## 2026-09-08 - Owner Signup Business Information Verification
+
+Decision:
+- OWNER signup requires a store name entered directly by the user.
+- member-service verifies the submitted business registration number through the National Tax Service business status API.
+- Only taxpayer status code `01` (operating business) is accepted for signup.
+- The status lookup uses only the business registration number; representative identity and ownership are not verified.
+- Business verification status is computed by member-service and is not accepted from auth-service.
+
+Reason:
+- The signup flow needs a store name for later job posting while the public status API does not provide it from a number-only lookup.
+- Number-only status lookup provides a lightweight operating-status check without collecting representative identity data.
+- Verification results must not be trusted when supplied by a client or another service request.
+
+Implication for agents:
+- Do not describe status lookup as representative or ownership verification.
+- Keep the store name as user-provided profile data unless a stronger verification policy is explicitly adopted.
+- Reject 휴업, 폐업, and unregistered numbers, and fail closed when the external status service is unavailable.
+
+Related files:
+- `auth-service/src/main/java/com/workernotfound/auth/domain/auth/dto/request/OwnerSignupRequest.java`
+- `member-service/src/main/java/com/workernotfound/member/domain/owner`
+- `member-service/src/main/java/com/workernotfound/member/external/client/nts`

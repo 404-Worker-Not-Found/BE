@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -80,6 +81,7 @@ class OAuthSignupServiceTests extends IntegrationTestSupport {
 		assertThat(localCredentialRepository.findByAuthAccount(authAccount)).isEmpty();
 		assertThat(oAuthConnectionRepository.findByProviderAndProviderUserId(OAuthProvider.KAKAO, "kakao-owner"))
 			.isPresent();
+		verify(memberServiceClient).createOwner(argThat(memberRequest -> "일하는 카페".equals(memberRequest.storeName())));
 	}
 
 	@Test
@@ -108,6 +110,7 @@ class OAuthSignupServiceTests extends IntegrationTestSupport {
 			"01022223333",
 			"device-1",
 			"1234567890",
+			"일하는 카페",
 			"CAFE",
 			new LocationRequest(
 				"서울시 강남구 테헤란로 1",

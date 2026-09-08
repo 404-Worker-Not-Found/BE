@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -85,6 +86,7 @@ class SignupServiceTests extends IntegrationTestSupport {
 		assertThat(response.tokenResponse().accessToken()).isNotBlank();
 		assertThat(response.tokenResponse().refreshToken()).isNotBlank();
 		assertThat(authAccountRepository.existsByEmail(request.email())).isTrue();
+		verify(memberServiceClient).createOwner(argThat(memberRequest -> "일하는 카페".equals(memberRequest.storeName())));
 	}
 
 	private OwnerSignupRequest ownerSignupRequest(String email, String phoneNumber) {
@@ -95,6 +97,7 @@ class SignupServiceTests extends IntegrationTestSupport {
 			phoneNumber,
 			"device-1",
 			"1234567890",
+			"일하는 카페",
 			"CAFE",
 			new LocationRequest(
 				"서울시 강남구 테헤란로 1",

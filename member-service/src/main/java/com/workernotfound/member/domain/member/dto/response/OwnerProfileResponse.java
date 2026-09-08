@@ -5,6 +5,7 @@ import com.workernotfound.member.domain.owner.entity.enums.BusinessVerificationS
 public record OwnerProfileResponse(
 	Long ownerProfileId,
 	String businessRegistrationNumber,
+	String storeName,
 	String businessType,
 	BusinessVerificationStatus businessVerificationStatus,
 	LocationResponse storeLocation

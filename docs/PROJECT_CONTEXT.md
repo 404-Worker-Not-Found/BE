@@ -188,6 +188,8 @@ Current implementation state:
 - Signup compensation deletion is covered by an integration test that verifies member, profile, location, and worker child records are deleted.
 - Member API responses, controller-level errors, internal API secret failures, and security 401/403 responses use the common `ApiResponse` envelope.
 - Location data stores both address and latitude/longitude so address can be used for display and coordinates can support future radius-based search.
+- OWNER signup stores a user-entered store name and accepts only business numbers that the National Tax Service status API reports as operating.
+- Business status lookup does not verify representative identity or business ownership.
 - Initial Flyway schema migration has been added.
 
 Member signup design notes are recorded in `docs/architecture/auth-member-signup-design.md`.
