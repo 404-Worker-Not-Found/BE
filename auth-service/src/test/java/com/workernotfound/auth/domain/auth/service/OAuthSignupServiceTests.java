@@ -12,21 +12,26 @@ import com.workernotfound.auth.domain.auth.dto.request.OAuthOwnerSignupRequest;
 import com.workernotfound.auth.domain.auth.dto.response.SignupResponse;
 import com.workernotfound.auth.domain.auth.entity.enums.VerificationPurpose;
 import com.workernotfound.auth.external.client.member.MemberServiceClient;
+import com.workernotfound.auth.external.client.member.MemberServiceClientException;
+import com.workernotfound.auth.external.client.member.MemberServiceErrorCode;
 import com.workernotfound.auth.external.client.member.dto.CreateMemberResponse;
 import com.workernotfound.auth.external.client.member.dto.MemberStatus;
 import com.workernotfound.auth.support.IntegrationTestSupport;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -35,6 +40,7 @@ import static org.mockito.Mockito.when;
 class OAuthSignupServiceTests extends IntegrationTestSupport {
 
 	private static final Duration VERIFIED_FLAG_TTL = Duration.ofMinutes(30);
+	private static final String OWNER_PHONE_NUMBER = "01022223333";
 
 	@Autowired
 	private SignupService signupService;
@@ -57,15 +63,20 @@ class OAuthSignupServiceTests extends IntegrationTestSupport {
 	@MockitoBean
 	private MemberServiceClient memberServiceClient;
 
+	@AfterEach
+	void deleteSmsVerification() {
+		redisTemplate.delete(smsVerificationKey(OWNER_PHONE_NUMBER));
+	}
+
 	@Test
 	void oauthOwnerSignupSucceedsWithoutLocalCredential() {
 		String email = "oauth-owner@example.com";
 		String ticket = saveSignupTicket(email);
-		saveSmsVerified("01022223333");
+		saveSmsVerified(OWNER_PHONE_NUMBER);
 		when(memberServiceClient.createOwner(any())).thenReturn(new CreateMemberResponse(
 			701L,
 			email,
-			"01022223333",
+			OWNER_PHONE_NUMBER,
 			com.workernotfound.auth.external.client.member.dto.MemberRole.OWNER,
 			MemberStatus.ACTIVE
 		));
@@ -80,6 +91,7 @@ class OAuthSignupServiceTests extends IntegrationTestSupport {
 		assertThat(localCredentialRepository.findByAuthAccount(authAccount)).isEmpty();
 		assertThat(oAuthConnectionRepository.findByProviderAndProviderUserId(OAuthProvider.KAKAO, "kakao-owner"))
 			.isPresent();
+		verify(memberServiceClient).createOwner(argThat(memberRequest -> "일하는 카페".equals(memberRequest.storeName())));
 	}
 
 	@Test
@@ -90,6 +102,23 @@ class OAuthSignupServiceTests extends IntegrationTestSupport {
 			.isInstanceOf(SignupException.class)
 			.hasMessage("휴대폰 인증이 완료되지 않았습니다.");
 		verify(memberServiceClient, never()).createOwner(any());
+	}
+
+	@Test
+	void oauthOwnerSignupRestoresTicketWhenBusinessVerificationIsUnavailable() {
+		String email = "oauth-owner-nts-unavailable@example.com";
+		String ticket = saveSignupTicket(email);
+		saveSmsVerified(OWNER_PHONE_NUMBER);
+		when(memberServiceClient.createOwner(any())).thenThrow(new MemberServiceClientException(
+			HttpStatus.SERVICE_UNAVAILABLE,
+			MemberServiceErrorCode.BUSINESS_VERIFICATION_UNAVAILABLE
+		));
+
+		assertThatThrownBy(() -> signupService.signupOAuthOwner(ownerSignupRequest(ticket)))
+			.isInstanceOf(MemberServiceClientException.class);
+
+		OAuthSignupTicket restoredTicket = oAuthSignupTicketService.getAndDelete(ticket);
+		assertThat(restoredTicket.providerEmail()).isEqualTo(email);
 	}
 
 	private String saveSignupTicket(String email) {
@@ -105,9 +134,10 @@ class OAuthSignupServiceTests extends IntegrationTestSupport {
 		return new OAuthOwnerSignupRequest(
 			ticket,
 			"오너",
-			"01022223333",
+			OWNER_PHONE_NUMBER,
 			"device-1",
 			"1234567890",
+			"일하는 카페",
 			"CAFE",
 			new LocationRequest(
 				"서울시 강남구 테헤란로 1",
@@ -119,7 +149,10 @@ class OAuthSignupServiceTests extends IntegrationTestSupport {
 	}
 
 	private void saveSmsVerified(String phoneNumber) {
-		String key = "auth:verification:sms:verified:%s:%s".formatted(VerificationPurpose.SIGNUP, phoneNumber);
-		redisTemplate.opsForValue().set(key, "true", VERIFIED_FLAG_TTL);
+		redisTemplate.opsForValue().set(smsVerificationKey(phoneNumber), "true", VERIFIED_FLAG_TTL);
+	}
+
+	private String smsVerificationKey(String phoneNumber) {
+		return "auth:verification:sms:verified:%s:%s".formatted(VerificationPurpose.SIGNUP, phoneNumber);
 	}
 }

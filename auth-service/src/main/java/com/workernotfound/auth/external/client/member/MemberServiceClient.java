@@ -1,9 +1,13 @@
 package com.workernotfound.auth.external.client.member;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workernotfound.auth.external.client.member.dto.CreateMemberResponse;
 import com.workernotfound.auth.external.client.member.dto.CreateOwnerMemberRequest;
 import com.workernotfound.auth.external.client.member.dto.CreateWorkerMemberRequest;
 import com.workernotfound.auth.global.response.ApiResponse;
+import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;
@@ -22,6 +26,7 @@ public class MemberServiceClient {
 		};
 
 	private final RestClient memberServiceRestClient;
+	private final ObjectMapper objectMapper;
 
 	public CreateMemberResponse createOwner(CreateOwnerMemberRequest request) {
 		return post(CREATE_OWNER_PATH, request);
@@ -37,8 +42,8 @@ public class MemberServiceClient {
 				.uri("/api/members/internal/{memberId}", memberId)
 				.retrieve()
 				.onStatus(HttpStatusCode::isError, (httpRequest, clientResponse) -> {
-					String responseBody = new String(clientResponse.getBody().readAllBytes());
-					throw new MemberServiceClientException(clientResponse.getStatusCode(), responseBody);
+					String responseBody = new String(clientResponse.getBody().readAllBytes(), StandardCharsets.UTF_8);
+					throw toClientException(clientResponse.getStatusCode(), responseBody);
 				})
 				.toBodilessEntity();
 		} catch (RestClientException exception) {
@@ -53,8 +58,8 @@ public class MemberServiceClient {
 				.body(request)
 				.retrieve()
 				.onStatus(HttpStatusCode::isError, (httpRequest, clientResponse) -> {
-					String responseBody = new String(clientResponse.getBody().readAllBytes());
-					throw new MemberServiceClientException(clientResponse.getStatusCode(), responseBody);
+					String responseBody = new String(clientResponse.getBody().readAllBytes(), StandardCharsets.UTF_8);
+					throw toClientException(clientResponse.getStatusCode(), responseBody);
 				})
 				.body(CREATE_MEMBER_RESPONSE_TYPE);
 			if (response == null || !response.success() || response.data() == null) {
@@ -63,6 +68,16 @@ public class MemberServiceClient {
 			return response.data();
 		} catch (RestClientException exception) {
 			throw new MemberServiceClientException(exception);
+		}
+	}
+
+	private MemberServiceClientException toClientException(HttpStatusCode statusCode, String responseBody) {
+		try {
+			JsonNode response = objectMapper.readTree(responseBody);
+			String code = response == null ? null : response.path("code").textValue();
+			return new MemberServiceClientException(statusCode, MemberServiceErrorCode.find(statusCode, code));
+		} catch (JsonProcessingException exception) {
+			return new MemberServiceClientException(statusCode, null);
 		}
 	}
 }

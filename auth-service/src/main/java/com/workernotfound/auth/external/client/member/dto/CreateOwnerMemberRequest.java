@@ -6,8 +6,8 @@ public record CreateOwnerMemberRequest(
 	String phoneNumber,
 	MemberRole role,
 	String businessRegistrationNumber,
+	String storeName,
 	String businessType,
-	BusinessVerificationStatus businessVerificationStatus,
 	LocationRequest storeLocation
 ) {
 }

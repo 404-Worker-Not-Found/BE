@@ -35,6 +35,9 @@ public class OwnerProfile extends BaseEntity {
 	@Column(name = "business_registration_number", nullable = false, length = 20)
 	private String businessRegistrationNumber;
 
+	@Column(name = "store_name", nullable = false, length = 100)
+	private String storeName;
+
 	@Column(name = "business_type", nullable = false, length = 100)
 	private String businessType;
 
@@ -50,12 +53,14 @@ public class OwnerProfile extends BaseEntity {
 	private OwnerProfile(
 		Member member,
 		String businessRegistrationNumber,
+		String storeName,
 		String businessType,
 		BusinessVerificationStatus businessVerificationStatus,
 		Location storeLocation
 	) {
 		this.member = member;
 		this.businessRegistrationNumber = businessRegistrationNumber;
+		this.storeName = storeName;
 		this.businessType = businessType;
 		this.businessVerificationStatus = businessVerificationStatus;
 		this.storeLocation = storeLocation;

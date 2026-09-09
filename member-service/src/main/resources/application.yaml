@@ -14,6 +14,11 @@ server:
   port: ${MEMBER_SERVICE_PORT:8082}
 
 member:
+  business-verification:
+    base-url: ${NTS_BUSINESS_API_BASE_URL:https://api.odcloud.kr}
+    service-key: ${NTS_BUSINESS_API_SERVICE_KEY:}
+    connect-timeout: 3s
+    read-timeout: 5s
   jwt:
     secret: ${AUTH_JWT_SECRET}
   internal:

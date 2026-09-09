@@ -1,7 +1,6 @@
 package com.workernotfound.member.domain.member.dto.request;
 
 import com.workernotfound.member.domain.member.entity.enums.MemberRole;
-import com.workernotfound.member.domain.owner.entity.enums.BusinessVerificationStatus;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -32,10 +31,11 @@ public record CreateOwnerMemberRequest(
 
 	@NotBlank
 	@Size(max = 100)
-	String businessType,
+	String storeName,
 
-	@NotNull
-	BusinessVerificationStatus businessVerificationStatus,
+	@NotBlank
+	@Size(max = 100)
+	String businessType,
 
 	@Valid
 	@NotNull
