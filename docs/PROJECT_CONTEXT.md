@@ -57,6 +57,7 @@ Current state:
 - `member-service` tests use Testcontainers with MySQL for the test datasource.
 - Agent work instructions exist in `AGENTS.md`.
 - Agent failure memory, decision memory, and checklist memory exist under `docs/agent/`.
+- Repository-specific CodeRabbit review settings exist in `.coderabbit.yaml`.
 
 ## Current Technical State
 

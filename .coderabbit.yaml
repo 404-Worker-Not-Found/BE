@@ -1,0 +1,125 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: ko-KR
+tone_instructions: >-
+  간결하고 구체적인 한국어로 설명하고, 취향보다 정확성·보안·서비스 경계·회귀 위험을 우선하세요.
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  review_details: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  suggested_labels: false
+  suggested_reviewers: false
+  in_progress_fortune: false
+  poem: false
+  enable_prompt_for_ai_agents: true
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 5
+    drafts: false
+    ignore_title_keywords:
+      - "WIP"
+
+  path_filters:
+    - "!**/build/**"
+    - "!**/.gradle/**"
+    - "!**/gradlew"
+    - "!**/gradlew.bat"
+    - "!**/*.drawio"
+    - "!**/.DS_Store"
+
+  path_instructions:
+    - path: "**/src/main/java/**"
+      instructions: |
+        - Java 17과 Spring Boot 4.1 호환성을 확인하세요.
+        - Controller -> Service -> Repository -> Entity 계층 방향과 도메인별 패키지 구조를 확인하세요.
+        - Controller에 비즈니스 로직이 들어가거나 JPA Entity가 API 응답으로 직접 노출되면 지적하세요.
+        - 요청 경계 검증, 명확한 도메인 오류, 공통 ApiResponse 형식이 유지되는지 확인하세요.
+        - 다른 서비스의 데이터는 외부 ID로 참조하고, 서비스 간 물리 FK나 저장소 직접 접근을 허용하지 마세요.
+
+    - path: "**/src/main/java/**/{security,auth,token}/**"
+      instructions: |
+        - 인증과 인가 우회, JWT 검증 누락, refresh token 회전·만료·폐기 오류를 우선 검토하세요.
+        - 비밀번호, 토큰, Authorization 헤더, 내부 API secret이 코드나 로그에 노출되지 않는지 확인하세요.
+        - 테스트 편의를 위해 운영 보안 설정을 약화하는 변경은 지적하세요.
+
+    - path: "**/src/main/java/**/external/**"
+      instructions: |
+        - 외부 API 실패, 타임아웃, 잘못된 응답과 재시도 시 중복 처리 위험을 확인하세요.
+        - 서비스 간 호출에서 X-Internal-Secret 보호와 데이터 소유권 경계가 유지되는지 확인하세요.
+        - 여러 서비스에 걸친 쓰기 작업은 트랜잭션 경계와 보상 동작이 명확한지 확인하세요.
+
+    - path: "**/src/main/resources/db/migration/**"
+      instructions: |
+        - 기존에 공유된 Flyway migration 파일을 수정하면 반드시 지적하세요. 스키마 변경은 새 버전 파일이어야 합니다.
+        - MySQL 8.4 호환성, 서비스 내부 FK, 인덱스·unique·null 제약, 롤아웃 시 데이터 손실과 잠금 위험을 확인하세요.
+
+    - path: "**/src/test/**"
+      instructions: |
+        - 정상 경로뿐 아니라 권한 오류, 검증 실패, 경계값, 외부 연동 실패와 트랜잭션 롤백을 검증하는지 확인하세요.
+        - DB 통합 테스트는 H2나 개발자 로컬 DB 대신 공용 Testcontainers 지원 코드를 사용해야 합니다.
+        - auth-service의 Redis 의존 테스트는 Redis Testcontainers 전략을 유지해야 합니다.
+
+    - path: "**/{build.gradle,settings.gradle,application.yaml,application.yml}"
+      instructions: |
+        - Java 17, Spring Boot 4.1, MySQL, Redis 기준과 서비스별 설정 일관성을 확인하세요.
+        - secret, token, password, 로컬 전용 값이 하드코딩되지 않았는지 확인하세요.
+
+    - path: "{compose.local.yml,.env.example,scripts/**,docs/scripts/**}"
+      instructions: |
+        - 셸 스크립트는 실패를 숨기지 않고 경로와 인자를 안전하게 처리하는지 확인하세요.
+        - 로컬 인프라가 서비스별 DB 경계를 유지하며 실제 credential을 포함하지 않는지 확인하세요.
+        - 서비스가 추가되면 저장소 전체 검증 스크립트와 로컬 실행 구성이 함께 갱신되는지 확인하세요.
+
+  pre_merge_checks:
+    title:
+      mode: warning
+      requirements: >-
+        PR 제목은 [feat], [fix], [docs], [refactor], [test], [build], [ci], [chore], [environment] 중 하나로 시작하고 한국어로 작성해야 합니다.
+    description:
+      mode: warning
+    issue_assessment:
+      mode: warning
+
+  tools:
+    github-checks:
+      enabled: true
+      timeout_ms: 900000
+    gitleaks:
+      enabled: true
+    pmd:
+      enabled: true
+    shellcheck:
+      enabled: true
+    yamllint:
+      enabled: true
+    actionlint:
+      enabled: true
+    checkov:
+      enabled: true
+
+chat:
+  art: false
+  auto_reply: true
+  allow_non_org_members: false
+
+knowledge_base:
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "docs/PROJECT_CONTEXT.md"
+      - "docs/agent/*.md"
+      - "docs/architecture/*.md"
+  learnings:
+    scope: local
+    approval_delay: 7

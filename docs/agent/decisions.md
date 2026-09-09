@@ -640,3 +640,29 @@ Related files:
 - `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service/SignupPersistenceService.java`
 - `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service/OAuthSignupTicketService.java`
 - `member-service/src/main/java/com/workernotfound/member/domain/member/service/MemberApplicationService.java`
+
+## 2026-09-09 - CodeRabbit Review Configuration
+
+Decision:
+- Keep repository-specific CodeRabbit settings in the root `.coderabbit.yaml` file.
+- Use Korean, balanced (`chill`) automatic reviews for non-draft pull requests targeting the default branch.
+- Use `AGENTS.md`, `docs/agent/*.md`, `docs/architecture/*.md`, and `docs/PROJECT_CONTEXT.md` as review guidelines.
+- Apply focused path instructions for security, external integrations, Flyway migrations, tests, build configuration, and local infrastructure.
+- Keep CodeRabbit's request-changes workflow disabled so the existing teammate approval and merge process remains authoritative.
+
+Reason:
+- Version-controlled settings make review behavior visible and reviewable with the codebase.
+- Existing repository documents already contain the project's architecture, security, coding, and verification rules.
+- Focused review guidance reduces low-value style noise while prioritizing high-risk backend changes.
+
+Implication for agents:
+- Update `.coderabbit.yaml` when CodeRabbit review behavior or repository structure changes.
+- Keep reusable project rules in their owning agent or architecture document instead of duplicating them extensively in path instructions.
+- Do not enable automatic approval or replace the required teammate review without an explicit workflow decision.
+
+Related files:
+- `.coderabbit.yaml`
+- `AGENTS.md`
+- `docs/PROJECT_CONTEXT.md`
+- `docs/agent/checklists.md`
+- `docs/agent/coding-rules.md`
