@@ -3,6 +3,7 @@ package com.workernotfound.auth.domain.auth.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -25,13 +26,22 @@ public class OAuthSignupTicketService {
 	}
 
 	public OAuthSignupTicket getAndDelete(String ticket) {
-		String key = ticketKey(ticket);
-		String value = redisTemplate.opsForValue().get(key);
+		String value = redisTemplate.opsForValue().getAndDelete(ticketKey(ticket));
 		if (value == null) {
 			throw new SignupException("OAuth signup ticket이 유효하지 않습니다.");
 		}
-		redisTemplate.delete(key);
 		return deserialize(value);
+	}
+
+	public void restore(String ticket, OAuthSignupTicket signupTicket) {
+		Duration remainingTtl = Duration.between(
+			LocalDateTime.now(),
+			signupTicket.issuedAt().plus(TICKET_TTL)
+		);
+		if (remainingTtl.isZero() || remainingTtl.isNegative()) {
+			return;
+		}
+		redisTemplate.opsForValue().setIfAbsent(ticketKey(ticket), serialize(signupTicket), remainingTtl);
 	}
 
 	private String ticketKey(String ticket) {

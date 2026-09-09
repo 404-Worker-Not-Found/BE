@@ -150,6 +150,7 @@ Current implementation state:
 - LOCAL signup/login, token reissue, and logout service layer support has been added.
 - LOCAL signup requires email verification, SMS verification, password input, and role-specific additional information before final account creation.
 - Signup calls member-service first and compensates by deleting the created member if auth-service persistence fails afterward.
+- Signup service-to-service calls run outside the auth database transaction; auth account, credential or OAuth connection, and refresh token persistence use a separate short transaction.
 - Initial auth controllers, Swagger/OpenAPI documentation, and basic stateless security configuration have been added.
 - Auth API responses and controller-level errors use the common `ApiResponse` envelope.
 - Auth security 401/403 responses are written as the common `ApiResponse` envelope.
@@ -159,6 +160,7 @@ Current implementation state:
 - Initial KAKAO/NAVER OAuth2 login support has been added.
 - OAuth2 login connects to an existing OAuth connection, links same-email accounts when no connection exists, or issues a Redis-backed signup ticket for new users.
 - OAuth2 signup ticket completion supports OWNER/WORKER signup without creating `LocalCredential`.
+- OAuth2 signup tickets retain their original 30-minute expiration when restored after a retryable owner-signup rejection.
 - OAuth2 provider access currently uses provider authorization code exchange through backend API calls rather than Spring Security's redirect-based OAuth2 login flow.
 - Initial Flyway schema migration has been added.
 

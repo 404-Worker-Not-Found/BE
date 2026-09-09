@@ -414,9 +414,13 @@ ttl: 30분
 
 ```text
 key: auth:oauth2:signup-ticket:{ticketId}
-value: provider, providerUserId, providerEmail
+value: provider, providerUserId, providerEmail, issuedAt
 ttl: 30분
 ```
+
+- 티켓의 유효기간은 최초 발급 시각부터 30분으로 고정한다.
+- 재시도 가능한 가입 거절로 티켓을 복구할 때는 `issuedAt`을 기준으로 남은 TTL만 설정한다.
+- 최초 만료 시각이 지난 티켓은 복구하지 않는다.
 
 ### 인증번호 발송 제한
 
@@ -553,14 +557,14 @@ auth-service 회원가입 실패 보상용 회원 삭제
 8. auth-service가 검증 성공 플래그를 Redis에 TTL로 저장한다.
 9. 클라이언트가 이름, 이메일, 비밀번호, 휴대폰 번호, `deviceId`, 역할별 추가 정보를 포함해 최종 회원가입을 요청한다.
 10. auth-service가 이메일/휴대폰 인증 완료 여부를 Redis에서 확인한다.
-11. auth-service가 비밀번호를 BCrypt로 암호화한다.
-12. auth-service가 member-service 내부 API를 호출해 Member와 역할별 프로필 생성을 요청한다.
+11. auth-service가 기존 인증 계정의 중복 여부를 사전 확인한다.
+12. auth-service가 DB 트랜잭션 밖에서 member-service 내부 API를 호출해 Member와 역할별 프로필 생성을 요청한다.
 13. member-service가 회원 기본 정보, 역할별 프로필, 위치 정보를 자기 DB 트랜잭션으로 저장한다.
 14. member-service가 생성된 `memberId`를 응답한다.
-15. auth-service가 `AuthAccount`, `LocalCredential`을 저장한다.
-16. auth-service가 access token과 refresh token을 발급한다.
-17. auth-service가 refresh token hash와 `deviceId`를 DB에 저장한다.
-18. auth-service는 refresh token 원문을 클라이언트에만 반환한다.
+15. auth-service가 자기 DB 트랜잭션을 시작하고 중복 여부를 다시 확인한다.
+16. auth-service가 비밀번호를 BCrypt로 암호화하고 `AuthAccount`, `LocalCredential`을 저장한다.
+17. auth-service가 access token과 refresh token을 발급하고 refresh token hash와 `deviceId`를 저장한다.
+18. auth-service는 트랜잭션을 종료하고 refresh token 원문을 클라이언트에만 반환한다.
 
 ## OAuth2 로그인 및 가입 흐름
 
@@ -570,9 +574,10 @@ auth-service 회원가입 실패 보상용 회원 삭제
 4. 기존 `OAuthConnection`이 없지만 provider 이메일과 같은 `AuthAccount.email`이 있으면 해당 인증 계정에 OAuth 연결을 추가한다.
 5. 같은 이메일의 `AuthAccount`가 없으면 즉시 회원을 만들지 않고 OAuth signup ticket을 Redis에 저장한다.
 6. 클라이언트가 ticket과 함께 역할별 추가 정보, 휴대폰 인증, 필요한 기본 정보를 제출한다.
-7. auth-service가 member-service에 회원 생성을 요청한다.
-8. auth-service가 `AuthAccount`, `OAuthConnection`을 저장한다.
-9. auth-service가 access token과 refresh token을 발급한다.
+7. auth-service가 DB 트랜잭션 밖에서 member-service에 회원 생성을 요청한다.
+8. auth-service가 자기 DB 트랜잭션에서 중복 여부를 다시 확인하고 `AuthAccount`, `OAuthConnection`을 저장한다.
+9. auth-service가 같은 트랜잭션에서 access token과 refresh token을 발급하고 refresh token hash를 저장한다.
+10. 재시도 가능한 점주 사업자 검증 오류가 발생하면 OAuth signup ticket을 최초 만료 시각까지 남은 TTL로 복구한다.
 
 현재 구현은 Spring Security OAuth2 redirect login이 아니라, 클라이언트가 받은 provider 인가 코드를 `POST /api/auth/oauth2/{provider}/login`으로 전달하면 auth-service가 provider token/userinfo API를 호출하는 방식이다.
 
@@ -686,6 +691,9 @@ public interface BusinessVerificationService {
 
 - member-service는 Member, 역할별 Profile, Location을 자기 DB 트랜잭션으로 저장한다.
 - auth-service는 AuthAccount, LocalCredential 또는 OAuthConnection, RefreshToken을 자기 DB 트랜잭션으로 저장한다.
+- auth-service의 가입 흐름 조정과 member-service 호출은 auth DB 트랜잭션 밖에서 수행한다.
+- auth-service는 회원 생성 응답을 받은 뒤 `SignupPersistenceService`에서 auth 데이터 저장에 필요한 짧은 트랜잭션을 시작한다.
+- member-service의 점주 가입은 국세청 상태조회 호출을 member DB 트랜잭션 밖에서 수행한 뒤 검증된 회원 데이터를 저장한다.
 - 두 서비스 사이에는 분산 트랜잭션을 사용하지 않는다.
 - auth-service가 member-service 회원 생성을 성공한 뒤 auth-service 저장에 실패할 수 있다.
 - 초기에는 auth-service가 member-service의 내부 보상 삭제 API를 호출해 생성된 member/profile/location을 삭제한다.

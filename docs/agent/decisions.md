@@ -615,3 +615,28 @@ Related files:
 - `auth-service/src/main/java/com/workernotfound/auth/domain/auth/dto/request/OwnerSignupRequest.java`
 - `member-service/src/main/java/com/workernotfound/member/domain/owner`
 - `member-service/src/main/java/com/workernotfound/member/external/client/nts`
+
+## 2026-09-09 - Signup Transaction Boundary and OAuth Ticket Lifetime
+
+Decision:
+- Service-to-service and external API calls during signup run outside auth-service and member-service database transactions.
+- After member-service creates a member, auth-service persists AuthAccount, role-specific authentication data, and RefreshToken in a short local transaction.
+- OAuth signup tickets expire 30 minutes after their original issuance time.
+- A ticket restored after a retryable owner-signup rejection receives only its remaining original lifetime and is not restored after expiration.
+
+Reason:
+- Slow member-service or National Tax Service responses must not hold database connections and transactions open.
+- Retrying a rejected signup must not extend the lifetime of an OAuth credential beyond the original security policy.
+- Cross-service signup still needs compensation because local transactions cannot roll back data owned by another service.
+
+Implication for agents:
+- Do not move remote signup calls into a database transaction.
+- Keep auth signup persistence in a separate transactional service or an equivalent explicit transaction boundary.
+- Preserve the original OAuth signup ticket expiration when adding retry or restoration behavior.
+- Keep member-service compensation when auth persistence fails unless it is replaced with a stronger consistency mechanism.
+
+Related files:
+- `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service/SignupService.java`
+- `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service/SignupPersistenceService.java`
+- `auth-service/src/main/java/com/workernotfound/auth/domain/auth/service/OAuthSignupTicketService.java`
+- `member-service/src/main/java/com/workernotfound/member/domain/member/service/MemberApplicationService.java`

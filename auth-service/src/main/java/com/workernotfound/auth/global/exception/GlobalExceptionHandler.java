@@ -52,9 +52,26 @@ public class GlobalExceptionHandler {
 		return error(GlobalErrorCode.INVALID_REQUEST, exception.getMessage(), request.getRequestURI(), null);
 	}
 
-	@ExceptionHandler({MemberServiceClientException.class, OAuth2ClientException.class})
-	public ResponseEntity<ApiResponse<Void>> handleExternalClientException(
-		RuntimeException exception,
+	@ExceptionHandler(MemberServiceClientException.class)
+	public ResponseEntity<ApiResponse<Void>> handleMemberServiceClientException(
+		MemberServiceClientException exception,
+		HttpServletRequest request
+	) {
+		if (exception.getErrorCode() != null) {
+			return error(
+				exception.getErrorCode(),
+				exception.getErrorCode().getMessage(),
+				request.getRequestURI(),
+				null
+			);
+		}
+		return error(GlobalErrorCode.EXTERNAL_API_ERROR, GlobalErrorCode.EXTERNAL_API_ERROR.getMessage(),
+			request.getRequestURI(), null);
+	}
+
+	@ExceptionHandler(OAuth2ClientException.class)
+	public ResponseEntity<ApiResponse<Void>> handleOAuth2ClientException(
+		OAuth2ClientException exception,
 		HttpServletRequest request
 	) {
 		return error(GlobalErrorCode.EXTERNAL_API_ERROR, exception.getMessage(), request.getRequestURI(), null);

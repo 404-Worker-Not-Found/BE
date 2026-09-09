@@ -62,7 +62,10 @@ public class NtsBusinessVerificationService implements BusinessVerificationServi
 				.retrieve()
 				.body(NtsStatusResponse.class);
 		} catch (RestClientException exception) {
-			log.warn("국세청 사업자등록 상태조회 API 호출에 실패했습니다.", exception);
+			log.warn(
+				"국세청 사업자등록 상태조회 API 호출에 실패했습니다. cause={}",
+				exception.getClass().getSimpleName()
+			);
 			throw unavailable();
 		}
 	}

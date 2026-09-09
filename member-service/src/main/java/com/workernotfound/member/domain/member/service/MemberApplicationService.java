@@ -35,7 +35,6 @@ public class MemberApplicationService {
 	private final OwnerCommandService ownerCommandService;
 	private final WorkerCommandService workerCommandService;
 
-	@Transactional
 	public CreateMemberResponse createOwnerMember(CreateOwnerMemberRequest request) {
 		validateRole(request.role(), MemberRole.OWNER);
 		Member member = memberCommandService.createMember(
