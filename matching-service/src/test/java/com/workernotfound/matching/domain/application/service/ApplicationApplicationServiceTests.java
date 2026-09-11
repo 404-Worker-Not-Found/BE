@@ -24,6 +24,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -64,6 +65,13 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 
 	@MockitoBean
 	private JobServiceClient jobServiceClient;
+
+	@BeforeEach
+	void cleanUpPersistence() {
+		outboxEventRepository.deleteAll();
+		historyRepository.deleteAll();
+		applicationRepository.deleteAll();
+	}
 
 	@Test
 	void createsApplicationAndInitialHistoryAfterEligibilityChecks() throws Exception {

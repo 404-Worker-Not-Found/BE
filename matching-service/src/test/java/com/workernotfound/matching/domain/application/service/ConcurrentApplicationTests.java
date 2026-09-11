@@ -64,6 +64,9 @@ class ConcurrentApplicationTests extends IntegrationTestSupport {
 	@AfterEach
 	void tearDown() {
 		executorService.shutdownNow();
+		outboxEventRepository.deleteAll();
+		historyRepository.deleteAll();
+		applicationRepository.deleteAll();
 	}
 
 	@Test
