@@ -153,6 +153,8 @@
 
 최초 지원과 모든 상태 변경을 기록한다. `from_status`, `to_status`, 변경 주체 유형·ID, 사유 코드, 상세 사유, 변경 시각, 지원별 단조 증가 `revision`을 저장한다. 지원 레코드를 삭제해 이력을 잃지 않는다.
 
+변경 주체 유형은 `WORKER`, `OWNER`, `SYSTEM`을 사용한다. `WORKER`와 `OWNER`는 `actor_member_id`를 반드시 저장하고, `SYSTEM`은 회원 ID를 저장하지 않는다.
+
 `applications`를 참조하는 내부 외래 키는 `ON DELETE RESTRICT`를 사용한다. 데이터 보존 기간이 끝난 뒤 삭제나 익명화가 필요하면 상태 이력과 점수 스냅샷을 포함한 별도 정책으로 처리한다.
 
 ### `matching_score_snapshots`
