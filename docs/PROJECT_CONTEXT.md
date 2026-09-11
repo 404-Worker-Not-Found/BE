@@ -18,6 +18,8 @@ The broader domain and service boundaries are currently represented in:
 Architecture notes:
 
 - `docs/architecture/service-package-structure.md`
+- `docs/architecture/mvp-domain-flow.md`
+- `docs/architecture/matching-application-design.md`
 
 ## Domain
 
@@ -48,6 +50,7 @@ Current state:
 - `member-service` exists as a Spring Boot service.
 - `member-service` has implemented the initial member, owner, worker, and location profile flow.
 - The repository has a first ERD draft for the MSA design.
+- The matching application domain has a focused ERD and implementation design that supersede the application and scoring tables in the first ERD draft.
 - A repository-wide verification script exists at `docs/scripts/verify.sh`.
 - A local Docker Compose file exists at `compose.local.yml` for auth/member MySQL instances and auth Redis.
 - `.env.example` documents the local runtime environment variables; the real `.env` file is ignored by Git.
@@ -123,6 +126,8 @@ The ERD describes service ownership and relationship types using:
 - `FK`: foreign key inside the same service database
 - `EXT`: external service ID reference, not a physical database foreign key
 - `UQ`: unique constraint
+
+For the matching application domain, use `docs/architecture/matching-application-erd.drawio` and `docs/architecture/matching-application-design.md`. The application and scoring tables in the first repository-wide ERD are retained as an early draft and are not the implementation contract.
 
 ## Auth Service Context
 
