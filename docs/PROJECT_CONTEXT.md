@@ -56,7 +56,7 @@ Current state:
 - The repository has a first ERD draft for the MSA design.
 - The matching application domain has a focused ERD and implementation design that supersede the application and scoring tables in the first ERD draft.
 - A repository-wide verification script exists at `docs/scripts/verify.sh`.
-- A local Docker Compose file exists at `compose.local.yml` for auth/member/job/matching MySQL instances and auth Redis.
+- A local Docker Compose file exists at `compose.local.yml` for auth/member/job/matching MySQL instances and auth/matching Redis instances.
 - `.env.example` documents the local runtime environment variables; the real `.env` file is ignored by Git.
 - `scripts/local-run.sh` loads `.env` and runs each service locally.
 - The service package structure is defined in `docs/architecture/service-package-structure.md`.
@@ -109,15 +109,15 @@ Current `matching-service` scaffold:
 - Spring Web MVC
 - Spring Data JPA
 - MySQL
+- Redis
 - Flyway
 - Testcontainers MySQL for integration-test datasource
+- Testcontainers Redis for integration-test Redis access
 - Spring Boot Actuator
 - Bean Validation
 - Lombok
 - Spring Security
 - Springdoc OpenAPI
-
-Redis remains deferred until the recoverable application queue implementation unit.
 
 Current matching application implementation:
 
@@ -125,8 +125,11 @@ Current matching application implementation:
 - Application creation validates an `ACTIVE` `WORKER` through the existing member-service internal API.
 - The matching-service client for the job-service application-admission contract is implemented. The job-service endpoint still needs to be implemented by the job domain owner before end-to-end application creation can run.
 - Application creation and cancellation persist status history and a `PENDING` Outbox event in the same local transaction.
+- After the application transaction commits, the matching-service projects `APPLIED` application IDs into a job-specific Redis Set. Cancellation removes the ID from that Set.
+- A scheduled recovery rebuilds each application Set from MySQL, which remains the source of truth. Redis failures are logged and do not roll back an application transaction.
 - The exact cancellation deadline and penalty policy remain undecided. The current API allows cancellation only while the application is `APPLIED`.
-- Outbox relay, delivery retries, and Redis queue projection remain in the next matching-service implementation unit. Until that unit is complete, stored events are not published and Redis is not updated.
+- The current Redis projection uses an in-process after-commit listener. The durable Outbox relay and delivery retries remain a later implementation unit; Redis projection does not mark an Outbox event as `PUBLISHED`.
+- Ranked Redis queues remain deferred until score batches and snapshots are implemented. Missing rating, experience, no-show, online-status, and ETA inputs must be connected when their owning service contracts become available.
 
 The current scaffold matches the decided technology baseline in `docs/agent/decisions.md`.
 

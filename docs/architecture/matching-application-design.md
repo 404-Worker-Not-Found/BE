@@ -206,7 +206,7 @@
 
 - MySQL의 `applications`가 최종 기준이다.
 - 지원 저장과 Redis 쓰기를 하나의 성공 조건으로 묶지 않는다.
-- 지원 트랜잭션에서 Outbox를 저장하고 비동기 소비자가 Redis 대기열을 갱신한다.
+- 지원 트랜잭션에서 Outbox를 저장하고, 현재 구현에서는 커밋 후 인프로세스 이벤트 리스너가 Redis 대기열을 갱신한다. 내구성 있는 Outbox relay와 전달 재시도는 후속 범위로 둔다.
 - 공고별 지원 Set에는 현재 `APPLIED`인 `applicationId`를 저장한다. 이 Set은 점수 계산 전 지원과 점수 계산에 실패한 지원도 포함한다.
 - 점수 대기열은 공고 ID와 점수 묶음 ID를 키에 포함한 Sorted Set으로 구성한다. member는 `applicationId`, score는 `totalScore`를 사용하고 별도 metadata에 `scoreBatchId`와 `policyVersion`을 저장한다.
 - Redis 장애 시 MySQL의 `APPLIED` 지원으로 지원 Set을 복구한다. 최신 `READY` 점수 묶음과 그 묶음의 `READY` 스냅샷을 조회하고, 현재 상태가 `APPLIED`인 지원만 Sorted Set에 복구한다.
@@ -214,6 +214,8 @@
 - 선택 입력이 누락됐지만 정책에 따라 `READY`가 된 스냅샷은 복구 대상이다. 필수 입력 누락이나 계산 실패로 `FAILED`가 된 지원은 재계산 성공 전까지 후보에서 제외한다.
 - 취소, 거절, 선정, 공고 마감 시 대기열에서 제거한다.
 - Redis 점수는 후보 추출을 위한 복제 값이다. 동점자의 최종 순서는 MySQL에서 `applied_at`, `application_id`로 결정하고, 매칭 직전에 지원 상태와 점수 묶음·스냅샷 상태를 다시 확인한다.
+
+현재 구현 단계에서는 지원 트랜잭션 커밋 후 애플리케이션 이벤트 리스너가 지원 Set을 즉시 갱신하고, 주기적인 복구 작업이 MySQL 상태로 Set을 다시 구성한다. 복구 조회·교체와 이벤트 갱신은 공고별 Redis 잠금으로 직렬화하고 Set 교체는 원자적으로 실행한다. 이 리스너는 Redis 반영 실패를 기록하되 이미 커밋된 지원을 실패로 바꾸지 않는다. 서비스 간 이벤트를 내구성 있게 전달하는 Outbox relay와 재시도는 후속 범위이며, 로컬 Redis projection 성공만으로 Outbox 이벤트를 `PUBLISHED`로 변경하지 않는다.
 
 ## 조회와 권한
 
