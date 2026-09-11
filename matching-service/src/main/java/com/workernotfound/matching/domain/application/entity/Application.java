@@ -82,4 +82,12 @@ public class Application extends BaseEntity {
 		this.appliedAt = appliedAt;
 		this.revision = 1L;
 	}
+
+	public void cancel() {
+		if (status != ApplicationStatus.APPLIED) {
+			throw new IllegalStateException("접수된 지원만 취소할 수 있습니다.");
+		}
+		this.status = ApplicationStatus.CANCELED;
+		this.revision++;
+	}
 }
