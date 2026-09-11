@@ -52,7 +52,7 @@ Current state:
 - `member-service` exists as a Spring Boot service.
 - `member-service` has implemented the initial member, owner, worker, and location profile flow.
 - `job-service` has implemented the initial job posting domain.
-- `matching-service` has a Spring Boot scaffold with service-owned MySQL and Flyway configuration.
+- `matching-service` has service-owned MySQL and Flyway configuration plus the initial application and application status history persistence model.
 - The repository has a first ERD draft for the MSA design.
 - The matching application domain has a focused ERD and implementation design that supersede the application and scoring tables in the first ERD draft.
 - A repository-wide verification script exists at `docs/scripts/verify.sh`.
@@ -126,7 +126,7 @@ Implemented:
 - `auth-service`: authentication service
 - `member-service`: member profile service
 - `job-service`: job posting service
-- `matching-service`: application and matching service scaffold
+- `matching-service`: application and matching service
 
 Planned or represented in the ERD:
 
