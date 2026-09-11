@@ -1,0 +1,345 @@
+# MVP 도메인 흐름 및 상태 전이
+
+## 목적
+
+이 문서는 서비스 전체 흐름과 도메인 간 계약의 기준을 정의한다. API, 데이터베이스, 화면은 이 문서의 상태 이름과 전이 조건을 공통으로 사용한다.
+
+구체적인 제한 시간, 거리, 점수, 수수료 같은 정책 수치는 별도 결정 전까지 확정하지 않는다. 구현할 때 임시 값이 필요하면 설정으로 분리하고 문서에 근거를 남긴다.
+
+## 기능 범위
+
+### 포함
+
+- LOCAL 및 OAuth 회원가입과 로그인
+- 단일 사업장 기반 점주 프로필
+- 공고 등록, 탐색, 상세 조회, 수정, 마감, 재오픈
+- 위치 기반 공고 필터와 추천
+- 지원, 지원 취소, 지원자 관리
+- 수동 매칭, 점수 기반 자동 매칭, 폴백 매칭
+- 예정 근무, GPS 출근, 근무 진행, 완료, 취소, 실패, 노쇼
+- 알림, 1:1 채팅, 실시간 상태 갱신
+- 상호 리뷰, 신뢰 점수, 패널티
+- 급여 예치, 잠금, 정산, 취소 환불
+- 규칙 기반 노쇼 위험도와 후속 ML 모델
+
+### 제외
+
+- 한 점주가 여러 사업장을 관리하는 기능
+- 관리자 계정, 권한, API, 화면
+- 신고, 이의 제기, 분쟁 처리
+
+제외 기능은 현재 상태 모델과 서비스 계약에 넣지 않는다. 결제의 정상적인 취소와 환불은 분쟁 처리와 별개로 포함한다.
+
+## 구현 원칙
+
+- 각 서비스가 자기 데이터와 트랜잭션을 소유한다.
+- 다른 서비스의 식별자는 외부 ID로 저장하며 물리적 외래 키를 만들지 않는다.
+- MySQL을 업무 데이터의 최종 기준으로 사용한다.
+- Redis는 지원자 대기열, 캐시, 제한 시간처럼 복구 가능한 보조 상태에 사용한다.
+- 초기 서비스 간 조회와 명령은 REST HTTP를 기본으로 한다.
+- 알림, 채팅방 생성, 통계 반영처럼 비동기로 처리할 수 있는 후속 작업은 이벤트 계약을 사용한다.
+- 외부 결제 요청과 서비스 간 상태 변경 명령에는 멱등 키를 사용한다.
+- 공고, 지원, 매칭, 근무, 결제의 상태를 바꿀 때 변경 주체, 변경 시각, 변경 사유를 이력으로 남긴다.
+- 수동 매칭을 먼저 완성한 뒤 자동 매칭과 폴백 매칭을 연결한다.
+- 노쇼 위험도는 규칙 기반 기준선을 먼저 만들고, 평가 가능한 데이터가 준비되면 ML 모델과 비교한다.
+
+## 전체 흐름
+
+```text
+점주 가입과 사업장 정보 등록
+  → 급여 예치와 공고 등록
+  → 위치 기반 공고 노출
+  → 알바생 지원
+  → 지원자 평가와 매칭
+  → 결제 금액 잠금
+  → 예정 근무와 채팅방 생성
+  → GPS 출근과 근무 진행
+  → 근무 완료
+  → 급여 정산
+  → 상호 리뷰
+  → 신뢰 점수와 노쇼 위험도 갱신
+```
+
+## 상태 모델
+
+### 공고
+
+| 상태 | 의미 | 허용 전이 |
+| --- | --- | --- |
+| `OPEN` | 지원을 받는 상태 | `MATCHING`, `CLOSED` |
+| `MATCHING` | 지원 접수를 멈추고 매칭을 진행하는 상태 | `OPEN`, `CLOSED` |
+| `CLOSED` | 모집 또는 근무 연결이 끝난 상태 | 정책상 재오픈이 가능할 때 `OPEN` |
+
+규칙:
+
+- 새 공고는 필수 정보와 예치 조건을 충족한 뒤 `OPEN`으로 공개한다.
+- `OPEN` 상태에서만 신규 지원을 받는다.
+- 조기 마감이나 지원 마감 시각 도달 시 신규 지원을 막는다.
+- 매칭 후보가 모두 거절하거나 만료되면 조건을 확인한 뒤 `OPEN`으로 되돌릴 수 있다.
+- 공고 상태를 바꿀 때 상태 이력을 남긴다.
+
+### 지원
+
+| 상태 | 의미 | 허용 전이 |
+| --- | --- | --- |
+| `APPLIED` | 지원을 접수한 상태 | `CANCELED`, `SELECTED`, `REJECTED` |
+| `CANCELED` | 알바생이 지원을 취소한 상태 | 없음 |
+| `SELECTED` | 매칭 대상으로 선택된 상태 | 없음 |
+| `REJECTED` | 다른 후보가 선택되었거나 모집이 끝난 상태 | 없음 |
+
+규칙:
+
+- 같은 알바생은 같은 공고에 한 번만 유효하게 지원할 수 있다.
+- MySQL 지원 레코드를 최종 기준으로 삼는다.
+- Redis 대기열은 MySQL 데이터를 사용해 재구성할 수 있어야 한다.
+- 지원 취소 가능 시점과 취소 패널티는 구현 전 결정한다.
+- 다인 모집에서는 모집 인원만큼 `SELECTED` 상태를 허용한다.
+
+### 매칭
+
+| 상태 | 의미 | 허용 전이 |
+| --- | --- | --- |
+| `PENDING` | 후보의 응답을 기다리는 상태 | `CONFIRMED`, `DECLINED`, `EXPIRED`, `CANCELED` |
+| `CONFIRMED` | 점주와 알바생의 매칭이 확정된 상태 | `CANCELED` |
+| `DECLINED` | 후보가 제안을 거절한 상태 | 없음 |
+| `EXPIRED` | 응답 제한시간이 지난 상태 | 없음 |
+| `CANCELED` | 확정 전후의 매칭이 취소된 상태 | 없음 |
+
+규칙:
+
+- 수동 매칭은 점주가 유효한 지원자를 선택해 확정한다.
+- 자동 매칭은 종합 점수 순서대로 후보에게 제안한다.
+- 동점이면 먼저 지원한 후보를 우선한다.
+- 한 모집 자리에 둘 이상의 `CONFIRMED` 매칭을 만들지 않는다.
+- 후보가 거절하거나 응답하지 않으면 다음 후보로 이동한다.
+- 남은 후보가 없으면 공고를 재오픈할 수 있다.
+- 매칭 점수와 사용한 가중치, 모델 버전을 결과와 함께 보관한다.
+
+### 근무
+
+| 상태 | 의미 | 허용 전이 |
+| --- | --- | --- |
+| `SCHEDULED` | 매칭 후 출근을 기다리는 상태 | `CHECKED_IN`, `CANCELED`, `NO_SHOW` |
+| `CHECKED_IN` | 위치와 시간을 확인해 출근한 상태 | `IN_PROGRESS`, `CANCELED` |
+| `IN_PROGRESS` | 근무가 진행 중인 상태 | `COMPLETED`, `FAILED` |
+| `COMPLETED` | 근무가 정상 종료된 상태 | 없음 |
+| `CANCELED` | 근무 시작 전후에 취소된 상태 | 없음 |
+| `FAILED` | 출근 후 업무를 완료하지 못한 상태 | 없음 |
+| `NO_SHOW` | 허용 시각 안에 출근하지 않은 상태 | 없음 |
+
+규칙:
+
+- `CONFIRMED` 매칭 하나는 예정 근무 하나만 생성한다.
+- 출근은 설정된 시간 범위와 GPS 반경을 모두 충족해야 한다.
+- 노쇼는 자동 후보 판정 후 점주 확인이 필요한지 구현 전 결정한다.
+- 완료, 취소, 실패, 노쇼 상태는 결제와 신뢰도 후속 처리를 시작한다.
+
+### 결제
+
+| 상태 | 의미 | 허용 전이 |
+| --- | --- | --- |
+| `READY` | 결제 요청 전 상태 | `DEPOSITED`, `DEPOSIT_FAILED` |
+| `DEPOSITED` | 예상 급여를 예치한 상태 | `LOCKED`, `REFUND_PENDING` |
+| `LOCKED` | 매칭 확정 후 금액을 잠근 상태 | `SETTLEMENT_PENDING`, `REFUND_PENDING` |
+| `SETTLEMENT_PENDING` | 근무 완료 후 정산을 준비하는 상태 | `SETTLED`, `SETTLEMENT_FAILED` |
+| `SETTLED` | 정산이 끝난 상태 | 없음 |
+| `REFUND_PENDING` | 취소 또는 실패로 환불을 요청한 상태 | `REFUNDED`, `REFUND_FAILED` |
+| `REFUNDED` | 환불이 끝난 상태 | 없음 |
+| `DEPOSIT_FAILED` | 예치 요청이 실패한 상태 | 재시도 성공 시 `DEPOSITED` |
+| `SETTLEMENT_FAILED` | 정산 요청이 실패한 상태 | 재시도 성공 시 `SETTLED` |
+| `REFUND_FAILED` | 환불 요청이 실패한 상태 | 재시도 성공 시 `REFUNDED` |
+
+규칙:
+
+- 공고 공개 시점과 급여 예치 완료 시점의 선후 관계는 결제 연동 전에 확정한다.
+- 매칭 확정은 예치 금액 잠금과 함께 처리한다.
+- `COMPLETED` 근무만 정상 정산할 수 있다.
+- 취소, 실패, 노쇼의 환불 금액 정책은 결제 연동 전에 확정한다.
+- 결제 요청, 웹훅, 정산, 환불은 멱등 키로 중복 처리를 막는다.
+- 실패 상태에는 원래 요청의 멱등 키와 마지막 실패 원인을 보관하고 같은 키로 재시도한다.
+- 서비스 간 실패는 아래 매칭 확정 Saga의 보상 흐름으로 복구한다.
+
+## 서비스별 데이터 소유권
+
+서비스 경계는 구현 과정에서 검증할 수 있지만, 데이터 소유권은 아래 기준으로 시작한다.
+
+| 서비스 | 소유 데이터 |
+| --- | --- |
+| `auth-service` | 인증 계정, LOCAL 자격 증명, OAuth 연결, 인증 코드, Refresh Token |
+| `member-service` | 회원 프로필, 단일 점주 사업장 정보, 알바생 선호 조건, 리뷰, 신뢰 점수와 변경 이력 |
+| `job-service` | 공고, 업종 카테고리, 공고 상태 이력 |
+| `matching-service` | 지원, 지원자 대기열의 원본 정보, 매칭 시도와 결과, 매칭 점수 스냅샷, 노쇼 위험도 결과 |
+| `work-service` | 예정 근무, 출근 기록, 위치 검증 결과, 근무 상태 이력, 취소·실패·노쇼 기록 |
+| `payment-service` | 결제, 예치, 잠금, 정산, 환불, 멱등 요청, Saga 상태 |
+| `notification-service` | 알림, 읽음 상태, 전달 시도 이력 |
+| `chat-service` | 채팅방, 참여자, 메시지, 시스템 메시지 |
+
+소유권 규칙:
+
+- `matching-service`는 회원 평점과 근무 이력을 복제해 원본처럼 취급하지 않는다.
+- `work-service`는 공고와 매칭을 외부 ID로 참조한다.
+- `payment-service`는 근무 결과를 직접 변경하지 않는다.
+- 리뷰와 신뢰 점수는 `member-service`가 소유하고 근무 결과 이벤트를 반영한다.
+- ML 모델은 매칭 과정에서 사용하되, 근무 이력과 노쇼 결과는 소유 서비스에서 조회하거나 이벤트로 전달받는다.
+
+## 서비스 계약
+
+### 공통 필드
+
+비동기 이벤트는 최소한 다음 필드를 포함한다.
+
+| 필드 | 설명 |
+| --- | --- |
+| `eventId` | 중복 소비를 구분하는 이벤트 식별자 |
+| `eventType` | 이벤트 종류 |
+| `occurredAt` | 이벤트 발생 시각 |
+| `aggregateId` | 상태가 바뀐 핵심 데이터 식별자 |
+| `correlationId` | 하나의 서비스 간 흐름을 연결하는 식별자 |
+| `revision` | 같은 집계 안에서 단조 증가하는 상태 변경 순서 |
+| `version` | 이벤트 payload 스키마 버전 |
+
+소비 서비스는 집계별 마지막 `revision`보다 작은 이벤트를 무시한다. 같은 `revision`의 재전송은 `eventId`를 기준으로 한 번만 반영한다. `version`은 이벤트 형식의 호환성을 판단할 때만 사용하며 상태 순서를 판단하는 데 사용하지 않는다.
+
+### 핵심 이벤트
+
+| 이벤트 | 발행 서비스 | 주요 소비 서비스 | 결과 |
+| --- | --- | --- | --- |
+| `JobOpened` | `job-service` | `notification-service` | 조건이 맞는 알바생에게 공고 알림 생성 |
+| `ApplicationSubmitted` | `matching-service` | `job-service`, `notification-service` | 지원자 수와 지원 알림 갱신 |
+| `ApplicationCanceled` | `matching-service` | `job-service`, `notification-service` | 지원 현황 갱신 |
+| `MatchConfirmed` | `matching-service` | `job-service`, `notification-service` | 공고 상태와 매칭 완료 알림 갱신 |
+| `MatchCandidateExpired` | `matching-service` | `notification-service` | 후보 만료 알림 생성 |
+| `MatchingExhausted` | `matching-service` | `job-service`, `notification-service` | 공고 재오픈 검토와 알림 생성 |
+| `WorkCheckedIn` | `work-service` | `notification-service` | 출근 알림 생성 |
+| `WorkCompleted` | `work-service` | `payment-service`, `member-service`, `notification-service`, `chat-service` | 정산, 통계, 알림, 시스템 메시지 처리 |
+| `WorkCanceled` | `work-service` | `payment-service`, `member-service`, `notification-service`, `chat-service` | 환불, 패널티, 알림, 시스템 메시지 처리 |
+| `NoShowConfirmed` | `work-service` | `matching-service`, `payment-service`, `member-service`, `notification-service` | 재매칭, 환불, 신뢰도, 알림 처리 |
+| `PaymentDeposited` | `payment-service` | `job-service`, `notification-service` | 공고 공개 조건 확인과 결제 알림 생성 |
+| `SettlementCompleted` | `payment-service` | `notification-service` | 정산 완료 알림 생성 |
+| `TrustScoreUpdated` | `member-service` | `matching-service` | 매칭 점수 입력값 갱신 |
+
+이 표는 의미 계약을 정의한다. 메시지 브로커, Outbox, REST 후속 호출 등 전달 방식은 구현 단계에서 정한다.
+
+리뷰 작성과 신뢰 점수 갱신은 `member-service`의 한 로컬 트랜잭션에서 처리한다. `member-service`는 변경된 신뢰 점수를 저장한 뒤 `TrustScoreUpdated`를 발행하고, `matching-service`는 이 이벤트만 소비한다.
+
+### MatchConfirmed payload
+
+`MatchConfirmed`는 매칭 확정 Saga가 끝난 뒤 발행한다. 소비 서비스가 추가 조회 없이 공고 상태와 알림을 갱신할 수 있도록 다음 스냅샷을 포함한다.
+
+| 필드 | 설명 |
+| --- | --- |
+| `matchingId` | 확정된 매칭 ID |
+| `jobPostId` | 공고 ID |
+| `ownerMemberId` | 점주 회원 ID |
+| `workerMemberId` | 알바생 회원 ID |
+| `workId` | 생성된 예정 근무 ID |
+| `paymentId` | 잠긴 결제 ID |
+| `chatRoomId` | 생성된 채팅방 ID |
+| `workDate` | 근무 날짜 |
+| `startTime` | 근무 시작 시각 |
+| `endTime` | 근무 종료 시각 |
+| `lockedAmount` | 잠긴 급여 금액 |
+| `currency` | 결제 통화 |
+
+### 매칭 확정 Saga
+
+`matching-service`가 매칭 확정 Saga를 조정한다. Saga는 `matchingId`를 `correlationId`로 사용하고 `PROCESSING`, `COMPENSATING`, `COMPLETED`, `FAILED` 상태와 각 단계 결과를 저장한다.
+
+정상 실행 순서:
+
+1. `payment-service`에 `LockPayment` 명령을 보내 예치 금액을 잠근다.
+2. `work-service`에 `CreateScheduledWork` 명령을 보내 예정 근무를 만든다.
+3. `chat-service`에 `CreateChatRoom` 명령을 보내 1:1 채팅방을 만든다.
+4. 모든 단계가 성공하면 매칭을 `CONFIRMED`, Saga를 `COMPLETED`로 바꾸고 `MatchConfirmed`를 발행한다.
+
+각 명령은 `correlationId`, 명령 ID, 대상 ID를 포함하고 수신 서비스는 명령 ID를 멱등 키로 사용한다. 수신 서비스는 성공 이벤트나 실패 이벤트에 같은 `correlationId`와 명령 ID를 담아 반환한다.
+
+보상 실행 순서:
+
+1. 채팅방 생성 후 후속 단계가 실패했다면 `CloseChatRoom`으로 채팅방을 닫는다.
+2. 예정 근무 생성 후 후속 단계가 실패했다면 `CancelScheduledWork`로 예정 근무를 취소한다.
+3. 결제 잠금 후 후속 단계가 실패했다면 `ReleasePaymentLock`으로 금액 잠금을 해제한다.
+4. 모든 보상이 성공하면 매칭을 이전 상태로 돌리고 다음 후보 선택 또는 공고 재오픈을 진행한다.
+
+명령과 보상 명령은 설정된 횟수까지 재시도한다. 재시도가 끝난 뒤에도 실패하면 Saga를 `FAILED`로 유지하고 실패 단계와 마지막 오류를 기록한다. 실패한 Saga는 같은 `correlationId`로 재개할 수 있어야 하며, 새 후보 매칭을 시작하기 전에 기존 Saga가 종료되었는지 확인한다.
+
+## 주요 시나리오
+
+### 정상 흐름
+
+1. 점주가 급여를 예치하고 공고를 공개한다.
+2. 알바생이 공고에 지원한다.
+3. 점주가 지원자를 선택하거나 자동 매칭이 후보를 확정한다.
+4. 시스템이 결제 금액을 잠그고 예정 근무와 채팅방을 만든다.
+5. 알바생이 허용 시간과 반경 안에서 출근한다.
+6. 점주가 근무를 완료 처리한다.
+7. 시스템이 급여를 정산한다.
+8. 양쪽 사용자가 리뷰를 작성한다.
+9. 시스템이 신뢰 점수와 이후 매칭 입력값을 갱신한다.
+
+### 지원 취소
+
+1. 알바생이 `APPLIED` 지원을 취소한다.
+2. `matching-service`가 지원을 `CANCELED`로 변경한다.
+3. Redis 대기열에서 해당 지원자를 제거한다.
+4. 공고 지원 현황과 알림을 갱신한다.
+
+### 매칭 후보 실패와 폴백
+
+1. 자동 매칭이 최고 점수 후보를 `PENDING`으로 만든다.
+2. 후보가 거절하거나 제한시간 안에 응답하지 않는다.
+3. 현재 시도를 `DECLINED` 또는 `EXPIRED`로 종료한다.
+4. 다음 후보에게 같은 절차를 적용한다.
+5. 후보가 없으면 `MatchingExhausted`를 발행하고 공고 재오픈 조건을 확인한다.
+
+### 근무 취소
+
+1. 점주 또는 알바생이 취소를 요청한다.
+2. `work-service`가 현재 상태와 취소 가능 조건을 확인한다.
+3. 근무를 `CANCELED`로 변경하고 취소 주체와 사유를 기록한다.
+4. `payment-service`가 정책에 따라 환불한다.
+5. `member-service`가 정책에 따라 신뢰 점수를 조정한다.
+6. 알림과 채팅 시스템 메시지를 생성한다.
+
+### 노쇼와 재매칭
+
+1. 출근 허용 시간이 지났는데 유효한 출근 기록이 없다.
+2. `work-service`가 노쇼 조건을 확인하고 `NO_SHOW`로 변경한다.
+3. `member-service`가 노쇼 이력과 신뢰 점수를 갱신한다.
+4. `payment-service`가 환불 정책을 적용한다.
+5. 근무 시작까지 시간이 남고 대체 후보가 있으면 `matching-service`가 폴백 매칭을 시작한다.
+6. 후보가 없거나 시간이 부족하면 해당 근무를 종료한다.
+
+## 동시성과 복구 기준
+
+- 지원 테이블은 공고 ID와 알바생 ID 조합의 유효 지원 중복을 막는다.
+- 매칭 확정은 모집 인원을 넘지 않도록 잠금 또는 원자적 조건부 갱신을 사용한다.
+- Redis 대기열 갱신이 실패해도 MySQL 지원 데이터로 복구한다.
+- 예정 근무와 채팅방은 매칭 ID를 고유 키로 사용해 중복 생성을 막는다.
+- 결제 요청과 웹훅은 외부 요청 ID와 멱등 키를 함께 저장한다.
+- 이벤트 소비자는 Inbox의 `eventId` 고유 키 기록과 로컬 데이터 변경을 같은 트랜잭션으로 처리한다.
+- 외부 API 호출처럼 같은 트랜잭션에 묶을 수 없는 부작용은 Inbox에 `PROCESSING`, `COMPLETED`, `FAILED` 상태를 기록하고, 상태를 원자적으로 선점한 소비자만 실행한다. 중단된 `PROCESSING` 처리는 같은 멱등 키로 재시도한다.
+- 서비스 간 연쇄 작업은 부분 실패 상태를 기록하고 재시도 또는 보상할 수 있어야 한다.
+
+## 구현 전 결정 항목
+
+다음 항목은 기능 범위에 포함되지만 정책 값은 아직 확정하지 않았다.
+
+- 긴급도 단계, 시간대 가산 기준, 시급 가산 공식
+- 모집 반경의 최솟값과 최댓값
+- 공고 수정 가능 시점과 수정 가능 필드
+- 지원 취소 마감 시점과 패널티
+- 자동 매칭 점수 공식과 가중치
+- 후보 응답 제한시간과 최대 재시도 횟수
+- GPS 출근 인정 반경과 출근 가능 시간
+- 지각과 노쇼를 구분하는 시간
+- 근무 완료 확인 주체와 불일치 처리
+- 리뷰 점수 범위, 작성 기간, 수정·삭제 정책
+- 신뢰 점수의 범위, 감점·회복·시간 감쇠 공식
+- 사용할 결제대행사와 에스크로 방식
+- 취소, 실패, 노쇼의 환불 금액
+- 실시간 전달 방식과 재연결 처리
+- 알림 채널과 메시지 보관 기간
+- ML 학습 데이터, 기준 모델, 평가 지표, 배포 기준
+
+정책을 확정하면 `docs/agent/decisions.md`에 결정과 근거를 기록하고 이 목록에서 제거한다.
