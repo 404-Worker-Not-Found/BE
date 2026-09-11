@@ -117,16 +117,16 @@ Current `matching-service` scaffold:
 - Spring Security
 - Springdoc OpenAPI
 
-Redis remains deferred until the Outbox and recoverable application queue implementation unit.
+Redis remains deferred until the recoverable application queue implementation unit.
 
 Current matching application implementation:
 
 - JWT-authenticated `WORKER` members can create, read, list, and cancel their own applications.
 - Application creation validates an `ACTIVE` `WORKER` through the existing member-service internal API.
 - The matching-service client for the job-service application-admission contract is implemented. The job-service endpoint still needs to be implemented by the job domain owner before end-to-end application creation can run.
-- Application creation and cancellation persist status history in the same local transaction.
+- Application creation and cancellation persist status history and a `PENDING` Outbox event in the same local transaction.
 - The exact cancellation deadline and penalty policy remain undecided. The current API allows cancellation only while the application is `APPLIED`.
-- Outbox events and Redis queue projection remain in the next matching-service implementation unit. Until that unit is complete, application state changes do not publish events or update Redis.
+- Outbox relay, delivery retries, and Redis queue projection remain in the next matching-service implementation unit. Until that unit is complete, stored events are not published and Redis is not updated.
 
 The current scaffold matches the decided technology baseline in `docs/agent/decisions.md`.
 

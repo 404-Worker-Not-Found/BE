@@ -4,9 +4,11 @@ import com.workernotfound.matching.domain.application.entity.Application;
 import com.workernotfound.matching.domain.application.entity.ApplicationStatusHistory;
 import com.workernotfound.matching.domain.application.entity.enums.ApplicationActorType;
 import com.workernotfound.matching.domain.application.entity.enums.ApplicationStatus;
+import com.workernotfound.matching.domain.application.event.ApplicationEvent;
 import com.workernotfound.matching.domain.application.exception.ApplicationErrorCode;
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.application.repository.ApplicationStatusHistoryRepository;
+import com.workernotfound.matching.domain.outbox.service.OutboxEventCommandService;
 import com.workernotfound.matching.global.exception.BusinessException;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -22,13 +24,15 @@ public class ApplicationCommandService {
 
 	private final ApplicationRepository applicationRepository;
 	private final ApplicationStatusHistoryRepository historyRepository;
+	private final OutboxEventCommandService outboxEventCommandService;
 
 	@Transactional
 	public Application create(
 		Long jobPostId,
 		Long workerMemberId,
 		Long admissionId,
-		LocalDateTime appliedAt
+		LocalDateTime appliedAt,
+		String correlationId
 	) {
 		Application application = Application.builder()
 			.jobPostId(jobPostId)
@@ -38,11 +42,12 @@ public class ApplicationCommandService {
 			.build();
 		applicationRepository.saveAndFlush(application);
 		historyRepository.saveAndFlush(initialHistory(application));
+		outboxEventCommandService.saveApplicationEvent(ApplicationEvent.submitted(application, correlationId));
 		return application;
 	}
 
 	@Transactional
-	public Application cancel(Long applicationId, Long workerMemberId) {
+	public Application cancel(Long applicationId, Long workerMemberId, String correlationId) {
 		Application application = applicationRepository.findById(applicationId)
 			.orElseThrow(() -> new BusinessException(ApplicationErrorCode.APPLICATION_NOT_FOUND));
 		validateOwner(application, workerMemberId);
@@ -57,6 +62,9 @@ public class ApplicationCommandService {
 		application.cancel();
 		applicationRepository.flush();
 		historyRepository.saveAndFlush(cancelHistory(application, workerMemberId, changedAt));
+		outboxEventCommandService.saveApplicationEvent(
+			ApplicationEvent.canceled(application, correlationId, changedAt)
+		);
 		return application;
 	}
 
