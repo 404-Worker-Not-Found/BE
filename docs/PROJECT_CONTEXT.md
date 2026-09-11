@@ -52,7 +52,7 @@ Current state:
 - `member-service` exists as a Spring Boot service.
 - `member-service` has implemented the initial member, owner, worker, and location profile flow.
 - `job-service` has implemented the initial job posting domain.
-- `matching-service` has service-owned MySQL and Flyway configuration plus the initial application and application status history persistence model.
+- `matching-service` has service-owned MySQL and Flyway configuration, the application persistence model, and the worker-facing application create, read, list, and cancel APIs.
 - The repository has a first ERD draft for the MSA design.
 - The matching application domain has a focused ERD and implementation design that supersede the application and scoring tables in the first ERD draft.
 - A repository-wide verification script exists at `docs/scripts/verify.sh`.
@@ -114,8 +114,19 @@ Current `matching-service` scaffold:
 - Spring Boot Actuator
 - Bean Validation
 - Lombok
+- Spring Security
+- Springdoc OpenAPI
 
 Redis remains deferred until the Outbox and recoverable application queue implementation unit.
+
+Current matching application implementation:
+
+- JWT-authenticated `WORKER` members can create, read, list, and cancel their own applications.
+- Application creation validates an `ACTIVE` `WORKER` through the existing member-service internal API.
+- The matching-service client for the job-service application-admission contract is implemented. The job-service endpoint still needs to be implemented by the job domain owner before end-to-end application creation can run.
+- Application creation and cancellation persist status history in the same local transaction.
+- The exact cancellation deadline and penalty policy remain undecided. The current API allows cancellation only while the application is `APPLIED`.
+- Outbox events and Redis queue projection remain in the next matching-service implementation unit. Until that unit is complete, application state changes do not publish events or update Redis.
 
 The current scaffold matches the decided technology baseline in `docs/agent/decisions.md`.
 
