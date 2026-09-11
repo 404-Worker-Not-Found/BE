@@ -698,6 +698,9 @@ Decision:
 - Use `worker_member_id` with the authentication principal `memberId` as the cross-service worker identifier.
 - Do not persist current rank on the application. Store versioned score snapshots and calculate rank from a deterministic order.
 - Record unavailable score inputs as missing rather than assigning a fabricated zero. Connect them when their source services and contracts are implemented.
+- Require `job-service` to issue a short-lived application admission after atomically checking job status and deadline. The admission does not reserve a recruitment seat.
+- Use a separate application `revision`, starting at 1, for status-event ordering and keep `version` for optimistic locking.
+- Use only `READY` snapshots from a `READY` score batch for ranked queues and automatic matching.
 
 Reason:
 - Database uniqueness provides a reliable final guard against concurrent duplicate applications.
@@ -711,6 +714,8 @@ Implication for agents:
 - Do not use the stale `user-service.users.id` reference from the first ERD for matching-service implementation.
 - Keep score components nullable and record missing inputs until rating, experience, no-show, online-status, and ETA contracts exist.
 - Coordinate an application-eligibility contract with `job-service` rather than treating a public job detail read or a stub as an atomic eligibility check.
+- Send `X-Internal-Secret` on internal service calls and fail closed when internal authentication fails.
+- Rebuild Redis ranked queues from MySQL application state and the latest completed score batch, including its policy version.
 
 Related files:
 - `docs/architecture/matching-application-design.md`

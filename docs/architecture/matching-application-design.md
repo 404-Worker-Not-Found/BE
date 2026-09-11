@@ -58,10 +58,10 @@
 
 1. 인증된 `memberId`와 요청의 공고 ID를 받는다.
 2. `member-service`에서 회원이 `ACTIVE` 상태의 `WORKER`인지 확인한다.
-3. `job-service`의 내부 계약으로 공고가 지원 가능한지 확인한다.
-4. `applications`에 `APPLIED` 지원을 저장하고 최초 상태 이력을 같은 트랜잭션에 기록한다.
+3. `job-service`의 내부 계약으로 지원 접수 승인(`application admission`)을 발급받는다.
+4. 승인 만료 전에 `applications`에 승인 ID와 `APPLIED` 지원을 저장하고 최초 상태 이력을 같은 트랜잭션에 기록한다.
 5. 같은 트랜잭션에서 Outbox 이벤트를 저장한다.
-6. 커밋 후 `ApplicationSubmitted`를 전달하고 Redis 대기열에 반영한다.
+6. 커밋 후 `ApplicationSubmitted`를 전달한다. `job-service`는 승인을 사용 완료로 표시하고 Redis 대기열은 지원을 반영한다.
 
 같은 공고와 회원의 요청이 재전송되면 새 레코드를 만들지 않는다. 이미 `APPLIED`인 경우 기존 지원 결과를 반환하고, 종료 상태라면 재지원 불가 오류를 반환한다. 애플리케이션 계층의 선조회와 별개로 데이터베이스 유일 제약을 최종 동시성 방어선으로 사용한다.
 
@@ -80,21 +80,57 @@
 
 현재 `GET /api/members/internal/{memberId}`에서 `memberId`, `role`, `status`를 확인할 수 있다. 첫 지원 구현은 이 계약으로 `ACTIVE`와 `WORKER`를 검증한다.
 
+`matching-service`는 내부 호출마다 `X-Internal-Secret` 헤더를 보낸다. 양쪽 서비스는 `INTERNAL_API_SECRET` 환경 변수로 같은 값을 주입하고 코드, 로그, 저장소에 값을 남기지 않는다. 현재 `member-service`는 헤더가 없거나 값이 다르면 HTTP 401과 `GLOBAL-401-001` 응답을 반환한다. `matching-service`는 이 응답을 회원 인증 실패로 바꾸지 않고 지원 저장을 중단한 뒤 외부에는 의존 서비스 오류로 응답한다. 설정이 고쳐지기 전까지 같은 호출을 무의미하게 재시도하지 않는다.
+
 알바생 프로필, 평점, 경력, 근무·노쇼 요약을 지원자 목록에 표시하려면 별도의 내부 조회 계약이 필요하다. 이메일, 휴대전화, 정밀 위치 등 지원자 평가에 필요하지 않은 개인정보는 반환하지 않는다.
 
 ### 공고 담당 범위에 요청할 계약
 
-지원 저장 전에 `job-service`가 다음 값을 검증해 반환하는 내부 계약이 필요하다.
+단순 상세 조회 후 지원을 저장하면 조회 직후 공고가 마감되는 경쟁 조건이 생긴다. 이를 막기 위해 `job-service`가 단기 지원 접수 승인을 발급한다. 이 승인은 지원 접수 시점만 확정하며 모집 자리나 확정 인원을 차감하지 않는다. 모집 인원 동시성은 매칭 확정 계약에서 별도로 처리한다.
 
-- 공고 존재 여부
-- `OPEN` 상태 여부
-- 지원 마감 시각 경과 여부
-- 모집 인원과 확정 인원
-- 공고 버전
-- 점주 회원 ID
-- 업종 ID, 근무 일시, 위치처럼 점수 계산에 필요한 공고 스냅샷
+요청 계약:
 
-단순 상세 조회 후 지원을 저장하면 조회 직후 공고가 마감되는 경쟁 조건이 생긴다. 첫 구현에서는 공고 담당자와 지원 가능 여부 확인 또는 지원 슬롯 예약 방식 중 하나를 합의한다. 계약이 준비되기 전에는 stub 응답을 실제 검증으로 간주하지 않는다.
+| 항목 | 값 |
+| --- | --- |
+| Method/Path | `POST /api/jobs/internal/{jobPostId}/application-admissions` |
+| Header | `X-Internal-Secret: {configured secret}` |
+| Header | `Idempotency-Key: {application command id}` |
+| Body | `workerMemberId` |
+
+성공 응답에는 다음 값을 포함한다.
+
+- `admissionId`
+- `jobPostId`, `jobVersion`
+- `ownerMemberId`
+- 업종 ID, 근무 일시, 위도·경도 등 점수 계산용 공고 스냅샷
+- `admittedAt`, `expiresAt`
+
+`job-service`는 공고 행을 잠그거나 같은 효과의 조건부 갱신을 사용해 `OPEN` 상태와 `applicationDeadline > now`를 확인한 뒤 승인을 저장한다. 승인 생성 시각을 지원 접수의 선형화 시점으로 사용한다. 승인 직후 공고가 닫혀도 만료 전에 저장한 지원은 유효하다.
+
+같은 멱등 키의 재요청에는 같은 승인과 공고 스냅샷을 반환한다. `matching-service`는 `admissionId`를 지원 레코드에 저장하고 중복 사용을 막는다. 지원 저장이 실패하면 승인은 만료되며 모집 인원에는 영향을 주지 않는다. `ApplicationSubmitted`의 발생 시각이 승인 만료 시각 이전이면 이벤트 전달이 늦어져도 `job-service`는 승인을 사용 완료로 변경할 수 있다.
+
+`job-service`의 승인 레코드는 최소한 승인 ID, 공고 ID, 알바생 회원 ID, 멱등 키, 공고 버전, `RESERVED`·`CONSUMED`·`EXPIRED` 상태, 승인·만료·사용 시각을 보관한다. 공고 ID에는 서비스 내부 FK를 사용하고 알바생 회원 ID는 EXT로 저장한다. 멱등 키와 승인 ID에는 각각 유일 제약을 둔다.
+
+실패 계약:
+
+| HTTP | 오류 코드 | 처리 |
+| --- | --- | --- |
+| 401 | `GLOBAL-401-001` | 지원 저장 중단, 외부에는 의존 서비스 오류 반환 |
+| 404 | `JOB_NOT_FOUND` | 존재하지 않는 공고로 응답 |
+| 409 | `JOB_NOT_OPEN` | 마감된 공고로 응답 |
+| 409 | `APPLICATION_DEADLINE_PASSED` | 지원 마감으로 응답 |
+| 409 | `ADMISSION_EXPIRED` | 공고 조건을 다시 확인해 새 명령 ID로 재시도 |
+
+공고 담당자는 이 계약과 승인 저장 구조를 `job-service`에 구현해야 한다. 계약이 준비되기 전에는 공개 상세 조회나 stub 응답을 실제 지원 가능 검증으로 간주하지 않는다.
+
+## 상태 전이 동시성
+
+`applications.version`은 낙관적 잠금 값이고 `applications.revision`은 외부 이벤트에 공개하는 지원 상태 버전이다. 최초 지원은 `revision=1`로 저장한다. 이후 상태가 바뀔 때마다 `revision`을 1 증가시킨다.
+
+취소와 매칭 확정처럼 서로 다른 종료 전이가 경쟁하면 두 트랜잭션 모두 기대 상태 `APPLIED`와 읽은 `version`을 조건으로 갱신한다. 먼저 커밋한 전이만 상태, `version`, `revision`을 변경하고 같은 트랜잭션에서 상태 이력과 Outbox 이벤트를 기록한다. 조건부 갱신에 실패한 트랜잭션은 상태 이력과 이벤트를 남기지 않고 최신 상태를 다시 조회한다.
+
+- 최신 상태가 자신이 요청한 상태면 멱등 성공으로 처리한다.
+- 최신 상태가 다른 종료 상태면 `APPLICATION_STATE_CONFLICT`로 처리한다.
 
 ## 데이터 모델
 
@@ -107,10 +143,11 @@
 주요 제약과 인덱스:
 
 - `UNIQUE(job_post_id, worker_member_id)`
+- `UNIQUE(job_application_admission_id)`
 - `status`는 `VARCHAR(20)`으로 저장하고 `APPLIED`, `CANCELED`, `SELECTED`, `REJECTED`만 허용
 - 알바생의 지원 내역: `(worker_member_id, applied_at, id)`
 - 공고의 지원자 목록: `(job_post_id, status, applied_at, id)`
-- 낙관적 잠금을 위한 `version`
+- 낙관적 잠금을 위한 `version`과 이벤트 순서를 위한 `revision`
 
 ### `application_status_histories`
 
@@ -122,6 +159,8 @@
 
 `matching_score_batches`는 한 공고에 대해 같은 정책으로 계산한 점수 묶음을 나타낸다. 자동 매칭과 지원자 목록은 완료된 하나의 묶음을 사용해 조회 도중 순서가 바뀌지 않게 한다. 점수를 다시 계산할 때 기존 결과를 덮어쓰지 않고 새 묶음과 스냅샷을 추가한다.
 
+계산 중에는 점수 묶음을 `CALCULATING`으로 유지한다. 계산 대상마다 `READY` 또는 `FAILED` 스냅샷이 생겨 `PENDING`이 하나도 남지 않고, 하나 이상의 `READY` 스냅샷이 있으면 묶음을 `READY`로 바꾼다. 모든 스냅샷이 `FAILED`이거나 재시도 한도를 넘겨 계산을 끝내지 못하면 묶음을 `FAILED`로 바꾼다.
+
 각 점수 스냅샷은 다음 내용을 보관한다.
 
 - 계산 상태: `PENDING`, `READY`, `FAILED`
@@ -131,13 +170,19 @@
 - 계산 당시 원본 입력 JSON과 누락 입력 목록
 - 계산 시각
 
+점수 순위와 자동 매칭은 `READY` 상태인 점수 묶음의 `READY` 스냅샷만 사용한다. `PENDING`과 `FAILED` 스냅샷은 점수 순위와 자동 매칭 후보에서 제외한다. 전체 지원자 목록에는 해당 지원자를 점수 미계산 또는 계산 실패 상태로 별도 표시하고 0점 지원자처럼 정렬하지 않는다.
+
+점수 정책은 입력 항목별 필수 여부와 누락 처리 방식을 버전에 포함한다. 필수 입력이 없거나 계산이 실패하면 스냅샷을 `FAILED`로 저장한다. 선택 입력이 없더라도 정책에 명시된 기본값이나 가중치 재분배로 계산을 마쳤다면 `READY`로 저장하고 `missing_inputs`에 누락 항목을 남긴다.
+
 총점 정렬은 `total_score DESC, applied_at ASC, application_id ASC`로 고정한다. `priority_rank`는 조회 시 계산하는 파생값이며 지원 원본에 저장하지 않는다.
 
 ### `outbox_events`
 
 지원 상태 변경과 이벤트 저장을 같은 트랜잭션에 묶는다. Outbox는 `event_id`, 집계 유형·ID, 이벤트 유형, payload, 발행 상태, 발생·발행 시각, 재시도 횟수와 마지막 오류를 저장한다. 집계 ID는 논리 참조이므로 물리적 외래 키를 만들지 않는다.
 
-`ApplicationSubmitted`와 `ApplicationCanceled`에는 공통 이벤트 필드와 함께 `applicationId`, `jobPostId`, `workerMemberId`, 지원 상태, 상태 변경 시각을 넣는다. `job-service`는 이벤트 ID와 지원별 `revision`으로 중복·역순 이벤트를 걸러 지원자 수 projection을 갱신한다. projection 복구 방식은 공고 계약을 구현할 때 함께 확정한다.
+`ApplicationSubmitted`와 `ApplicationCanceled`에는 `revision`을 포함한 공통 이벤트 필드와 함께 `applicationId`, `admissionId`, `jobPostId`, `workerMemberId`, 지원 상태, 상태 변경 시각을 넣는다. 공통 `revision`은 지원 집계의 상태 버전이며 별도의 `applicationRevision`을 추가하지 않는다. 최초 지원 이벤트는 `revision=1`이고 상태가 바뀔 때마다 1 증가한다.
+
+`job-service`는 저장된 마지막 지원 `revision`보다 큰 이벤트만 반영한다. 같은 `revision`의 재전송은 `eventId`로 한 번만 처리하고 더 작은 `revision`은 무시한다. 이 기준으로 지원자 수 projection의 중복·역순 갱신을 막는다. projection 복구 방식은 공고 계약을 구현할 때 함께 확정한다.
 
 ## 아직 없는 점수 데이터의 후속 연동
 
@@ -160,9 +205,13 @@
 - MySQL의 `applications`가 최종 기준이다.
 - 지원 저장과 Redis 쓰기를 하나의 성공 조건으로 묶지 않는다.
 - 지원 트랜잭션에서 Outbox를 저장하고 비동기 소비자가 Redis 대기열을 갱신한다.
-- Redis 장애 시 Outbox 재시도 또는 MySQL의 `APPLIED` 지원 조회로 대기열을 재구성한다.
+- 공고별 지원 Set에는 현재 `APPLIED`인 `applicationId`를 저장한다. 이 Set은 점수 계산 전 지원과 점수 계산에 실패한 지원도 포함한다.
+- 점수 대기열은 공고 ID와 점수 묶음 ID를 키에 포함한 Sorted Set으로 구성한다. member는 `applicationId`, score는 `totalScore`를 사용하고 별도 metadata에 `scoreBatchId`와 `policyVersion`을 저장한다.
+- Redis 장애 시 MySQL의 `APPLIED` 지원으로 지원 Set을 복구한다. 최신 `READY` 점수 묶음과 그 묶음의 `READY` 스냅샷을 조회하고, 현재 상태가 `APPLIED`인 지원만 Sorted Set에 복구한다.
+- 완료된 점수 묶음이 없으면 해당 공고를 `UNSCORED`로 취급하고 자동 매칭을 시작하지 않는다. `PENDING` 또는 `FAILED` 스냅샷도 Redis 후보에 넣지 않는다.
+- 선택 입력이 누락됐지만 정책에 따라 `READY`가 된 스냅샷은 복구 대상이다. 필수 입력 누락이나 계산 실패로 `FAILED`가 된 지원은 재계산 성공 전까지 후보에서 제외한다.
 - 취소, 거절, 선정, 공고 마감 시 대기열에서 제거한다.
-- Redis 점수는 검색과 후보 추출을 위한 복제 값이며 최종 매칭 전 MySQL 상태와 점수 스냅샷을 다시 확인한다.
+- Redis 점수는 후보 추출을 위한 복제 값이다. 동점자의 최종 순서는 MySQL에서 `applied_at`, `application_id`로 결정하고, 매칭 직전에 지원 상태와 점수 묶음·스냅샷 상태를 다시 확인한다.
 
 ## 조회와 권한
 
@@ -175,13 +224,16 @@
 ## 필수 검증 시나리오
 
 - 같은 알바생의 동시 중복 지원
-- 지원 요청과 공고 마감의 경쟁
+- 내부 secret 누락·불일치 시 지원 저장 차단
+- 지원 접수 승인과 공고 마감의 경쟁, 멱등 재요청과 승인 만료
 - 지원 취소와 매칭 확정의 경쟁
 - 여러 명 모집 시 확정 인원 초과 방지
-- Redis 장애 중 지원 성공과 이후 재구성
+- Redis 장애 중 지원 성공과 지원 Set·점수 묶음·정책 버전 재구성
 - 같은 점수의 지원 시각·지원 ID 순서
-- 점수 입력 누락과 계산 실패
+- `PENDING`·`FAILED` 스냅샷의 점수 순위 및 자동 매칭 제외
+- 필수·선택 점수 입력 누락과 계산 실패
 - 점수 정책 버전 변경 후 재계산
+- 지원 이벤트의 중복·역순 `revision` 처리
 - 다른 점주나 알바생의 지원 조회·취소 차단
 - 지원 목록 페이지 이동 중 점수 변경
 
