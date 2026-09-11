@@ -14,11 +14,12 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class ApplicationQueueEventListener {
 
 	private final ApplicationQueueRepository applicationQueueRepository;
+	private final ApplicationQueueLockManager lockManager;
 
 	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 	public void updateQueue(ApplicationEvent event) {
 		try {
-			update(event);
+			lockManager.execute(event.jobPostId(), () -> update(event));
 		} catch (RuntimeException exception) {
 			log.warn(
 				"지원 대기열 반영에 실패했습니다. applicationId={}, eventType={}",

@@ -1,10 +1,12 @@
 package com.workernotfound.matching.external.redis.application;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -12,6 +14,13 @@ import org.springframework.stereotype.Repository;
 public class ApplicationQueueRepository {
 
 	private static final String KEY_FORMAT = "matching:applications:job:%d:active";
+	private static final DefaultRedisScript<Long> REPLACE_SCRIPT = new DefaultRedisScript<>("""
+		redis.call('DEL', KEYS[1])
+		if #ARGV > 0 then
+			redis.call('SADD', KEYS[1], unpack(ARGV))
+		end
+		return #ARGV
+		""", Long.class);
 
 	private final StringRedisTemplate redisTemplate;
 
@@ -24,11 +33,7 @@ public class ApplicationQueueRepository {
 	}
 
 	public void replace(Long jobPostId, Collection<Long> applicationIds) {
-		String key = key(jobPostId);
-		redisTemplate.delete(key);
-		if (!applicationIds.isEmpty()) {
-			redisTemplate.opsForSet().add(key, toValues(applicationIds));
-		}
+		redisTemplate.execute(REPLACE_SCRIPT, List.of(key(jobPostId)), toValues(applicationIds));
 	}
 
 	public Set<Long> findApplicationIds(Long jobPostId) {
@@ -41,10 +46,10 @@ public class ApplicationQueueRepository {
 			.collect(Collectors.toUnmodifiableSet());
 	}
 
-	private String[] toValues(Collection<Long> applicationIds) {
+	private Object[] toValues(Collection<Long> applicationIds) {
 		return applicationIds.stream()
 			.map(String::valueOf)
-			.toArray(String[]::new);
+			.toArray();
 	}
 
 	private String key(Long jobPostId) {
