@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: matching-service
+
+  datasource:
+    url: ${MATCHING_DATASOURCE_URL}
+    username: ${MATCHING_DATASOURCE_USERNAME}
+    password: ${MATCHING_DATASOURCE_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: ${MATCHING_JPA_DDL_AUTO:none}
+
+server:
+  port: ${MATCHING_SERVICE_PORT:8084}
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never

@@ -10,6 +10,8 @@ The current repository is in an early backend setup stage. Implemented service d
 
 - `auth-service`
 - `member-service`
+- `job-service`
+- `matching-service`
 
 The broader domain and service boundaries are currently represented in:
 
@@ -49,10 +51,12 @@ Current state:
 - `auth-service` has implemented the initial LOCAL/OAuth authentication and signup flow.
 - `member-service` exists as a Spring Boot service.
 - `member-service` has implemented the initial member, owner, worker, and location profile flow.
+- `job-service` has implemented the initial job posting domain.
+- `matching-service` has a Spring Boot scaffold with service-owned MySQL and Flyway configuration.
 - The repository has a first ERD draft for the MSA design.
 - The matching application domain has a focused ERD and implementation design that supersede the application and scoring tables in the first ERD draft.
 - A repository-wide verification script exists at `docs/scripts/verify.sh`.
-- A local Docker Compose file exists at `compose.local.yml` for auth/member MySQL instances and auth Redis.
+- A local Docker Compose file exists at `compose.local.yml` for auth/member/job/matching MySQL instances and auth Redis.
 - `.env.example` documents the local runtime environment variables; the real `.env` file is ignored by Git.
 - `scripts/local-run.sh` loads `.env` and runs each service locally.
 - The service package structure is defined in `docs/architecture/service-package-structure.md`.
@@ -97,6 +101,22 @@ Current `member-service` scaffold:
 - Bean Validation
 - Lombok
 
+Current `matching-service` scaffold:
+
+- Java 17
+- Spring Boot 4.1.0
+- Gradle
+- Spring Web MVC
+- Spring Data JPA
+- MySQL
+- Flyway
+- Testcontainers MySQL for integration-test datasource
+- Spring Boot Actuator
+- Bean Validation
+- Lombok
+
+Redis remains deferred until the Outbox and recoverable application queue implementation unit.
+
 The current scaffold matches the decided technology baseline in `docs/agent/decisions.md`.
 
 ## Service Map
@@ -105,11 +125,11 @@ Implemented:
 
 - `auth-service`: authentication service
 - `member-service`: member profile service
+- `job-service`: job posting service
+- `matching-service`: application and matching service scaffold
 
 Planned or represented in the ERD:
 
-- `job-service`
-- `matching-service`
 - `work-service`
 - `payment-service`
 - `notification-service`

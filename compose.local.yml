@@ -56,6 +56,25 @@ services:
       timeout: 5s
       retries: 10
 
+  matching-mysql:
+    image: mysql:8.4
+    container_name: wnf-matching-mysql
+    environment:
+      MYSQL_DATABASE: ${MATCHING_DB_NAME}
+      MYSQL_ROOT_PASSWORD: ${MATCHING_DB_ROOT_PASSWORD}
+      MYSQL_USER: ${MATCHING_DB_USERNAME}
+      MYSQL_PASSWORD: ${MATCHING_DB_PASSWORD}
+      TZ: Asia/Seoul
+    ports:
+      - "3310:3306"
+    volumes:
+      - matching-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   auth-redis:
     image: redis:7.4
     container_name: wnf-auth-redis
@@ -73,4 +92,5 @@ volumes:
   auth-mysql-data:
   member-mysql-data:
   job-mysql-data:
+  matching-mysql-data:
   auth-redis-data:
