@@ -12,6 +12,7 @@ Usage:
   ./scripts/local-run.sh member    Run member-service with .env
   ./scripts/local-run.sh auth      Run auth-service with .env
   ./scripts/local-run.sh job       Run job-service with .env
+  ./scripts/local-run.sh matching  Run matching-service with .env
   ./scripts/local-run.sh stop      Stop local containers
   ./scripts/local-run.sh status    Show local container status
 EOF
@@ -52,6 +53,11 @@ case "${1:-}" in
   job)
     load_env
     cd "${ROOT_DIR}/job-service"
+    ./gradlew bootRun
+    ;;
+  matching)
+    load_env
+    cd "${ROOT_DIR}/matching-service"
     ./gradlew bootRun
     ;;
   stop)
