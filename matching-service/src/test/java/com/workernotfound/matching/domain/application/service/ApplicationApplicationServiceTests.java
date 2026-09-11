@@ -1,5 +1,7 @@
 package com.workernotfound.matching.domain.application.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workernotfound.matching.domain.application.dto.request.CreateApplicationRequest;
 import com.workernotfound.matching.domain.application.dto.response.ApplicationResponse;
 import com.workernotfound.matching.domain.application.entity.ApplicationStatusHistory;
@@ -7,6 +9,9 @@ import com.workernotfound.matching.domain.application.entity.enums.ApplicationSt
 import com.workernotfound.matching.domain.application.exception.ApplicationErrorCode;
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.application.repository.ApplicationStatusHistoryRepository;
+import com.workernotfound.matching.domain.outbox.entity.OutboxEvent;
+import com.workernotfound.matching.domain.outbox.entity.enums.OutboxEventStatus;
+import com.workernotfound.matching.domain.outbox.repository.OutboxEventRepository;
 import com.workernotfound.matching.external.client.job.JobServiceClient;
 import com.workernotfound.matching.external.client.job.JobServiceClientException;
 import com.workernotfound.matching.external.client.job.dto.ApplicationAdmissionResponse;
@@ -48,6 +53,12 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 	@Autowired
 	private ApplicationStatusHistoryRepository historyRepository;
 
+	@Autowired
+	private OutboxEventRepository outboxEventRepository;
+
+	@Autowired
+	private ObjectMapper objectMapper;
+
 	@MockitoBean
 	private MemberServiceClient memberServiceClient;
 
@@ -55,7 +66,7 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 	private JobServiceClient jobServiceClient;
 
 	@Test
-	void createsApplicationAndInitialHistoryAfterEligibilityChecks() {
+	void createsApplicationAndInitialHistoryAfterEligibilityChecks() throws Exception {
 		stubEligibleWorker();
 		stubAdmission(30L);
 
@@ -70,6 +81,14 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 			.findByApplicationIdOrderByRevisionAsc(response.applicationId());
 		assertThat(histories).hasSize(1);
 		assertThat(histories.get(0).getToStatus()).isEqualTo(ApplicationStatus.APPLIED);
+		OutboxEvent event = outboxEventRepository.findAll().get(0);
+		JsonNode payload = objectMapper.readTree(event.getPayload());
+		assertThat(event.getEventType()).isEqualTo("ApplicationSubmitted");
+		assertThat(event.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
+		assertThat(event.getRevision()).isEqualTo(1L);
+		assertThat(payload.path("eventId").textValue()).isEqualTo(event.getEventId());
+		assertThat(payload.path("applicationId").longValue()).isEqualTo(response.applicationId());
+		assertThat(payload.path("status").textValue()).isEqualTo("APPLIED");
 	}
 
 	@Test
@@ -111,6 +130,9 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 		assertThat(historyRepository.findByApplicationIdOrderByRevisionAsc(created.applicationId()))
 			.extracting(ApplicationStatusHistory::getToStatus)
 			.containsExactly(ApplicationStatus.APPLIED, ApplicationStatus.CANCELED);
+		assertThat(outboxEventRepository.findAll())
+			.extracting(OutboxEvent::getEventType)
+			.containsExactly("ApplicationSubmitted", "ApplicationCanceled");
 	}
 
 	@Test

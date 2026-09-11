@@ -180,7 +180,7 @@
 
 ### `outbox_events`
 
-지원 상태 변경과 이벤트 저장을 같은 트랜잭션에 묶는다. Outbox는 `event_id`, 집계 유형·ID, 이벤트 유형, payload, 발행 상태, 발생·발행 시각, 재시도 횟수와 마지막 오류를 저장한다. 집계 ID는 논리 참조이므로 물리적 외래 키를 만들지 않는다.
+지원 상태 변경과 이벤트 저장을 같은 트랜잭션에 묶는다. Outbox는 `event_id`, 집계 유형·ID, 이벤트 유형, `correlation_id`, 집계 `revision`, payload 스키마 버전, payload, 발행 상태, 발생·발행 시각, 재시도 횟수와 마지막 오류를 저장한다. 집계 ID는 논리 참조이므로 물리적 외래 키를 만들지 않는다.
 
 `ApplicationSubmitted`와 `ApplicationCanceled`에는 `revision`을 포함한 공통 이벤트 필드와 함께 `applicationId`, `admissionId`, `jobPostId`, `workerMemberId`, 지원 상태, 상태 변경 시각을 넣는다. 공통 `revision`은 지원 집계의 상태 버전이며 별도의 `applicationRevision`을 추가하지 않는다. 최초 지원 이벤트는 `revision=1`이고 상태가 바뀔 때마다 1 증가한다.
 

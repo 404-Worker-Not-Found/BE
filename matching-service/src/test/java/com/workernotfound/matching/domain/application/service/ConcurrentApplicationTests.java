@@ -4,6 +4,7 @@ import com.workernotfound.matching.domain.application.dto.request.CreateApplicat
 import com.workernotfound.matching.domain.application.dto.response.ApplicationResponse;
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.application.repository.ApplicationStatusHistoryRepository;
+import com.workernotfound.matching.domain.outbox.repository.OutboxEventRepository;
 import com.workernotfound.matching.external.client.job.JobServiceClient;
 import com.workernotfound.matching.external.client.job.dto.ApplicationAdmissionResponse;
 import com.workernotfound.matching.external.client.member.MemberServiceClient;
@@ -41,6 +42,9 @@ class ConcurrentApplicationTests extends IntegrationTestSupport {
 	@Autowired
 	private ApplicationStatusHistoryRepository historyRepository;
 
+	@Autowired
+	private OutboxEventRepository outboxEventRepository;
+
 	@MockitoBean
 	private MemberServiceClient memberServiceClient;
 
@@ -51,6 +55,7 @@ class ConcurrentApplicationTests extends IntegrationTestSupport {
 
 	@BeforeEach
 	void setUp() {
+		outboxEventRepository.deleteAll();
 		historyRepository.deleteAll();
 		applicationRepository.deleteAll();
 		executorService = Executors.newFixedThreadPool(2);
@@ -83,6 +88,7 @@ class ConcurrentApplicationTests extends IntegrationTestSupport {
 			.isEqualTo(second.get(10, TimeUnit.SECONDS).applicationId());
 		assertThat(applicationRepository.count()).isOne();
 		assertThat(historyRepository.count()).isOne();
+		assertThat(outboxEventRepository.count()).isOne();
 	}
 
 	private Future<ApplicationResponse> submitApplication(Long workerMemberId, Long jobPostId) {

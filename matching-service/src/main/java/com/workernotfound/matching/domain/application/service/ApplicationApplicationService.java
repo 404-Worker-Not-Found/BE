@@ -43,14 +43,20 @@ public class ApplicationApplicationService {
 		}
 
 		validateWorker(workerMemberId);
-		ApplicationAdmissionResponse admission = createAdmission(request.jobPostId(), workerMemberId);
+		String correlationId = UUID.randomUUID().toString();
+		ApplicationAdmissionResponse admission = createAdmission(
+			request.jobPostId(),
+			workerMemberId,
+			correlationId
+		);
 		validateAdmission(admission, request.jobPostId());
 		try {
 			return ApplicationResponse.from(applicationCommandService.create(
 				admission.jobPostId(),
 				workerMemberId,
 				admission.admissionId(),
-				admission.admittedAt()
+				admission.admittedAt(),
+				correlationId
 			));
 		} catch (DataIntegrityViolationException exception) {
 			return resolveConcurrentApplication(request.jobPostId(), workerMemberId, exception);
@@ -71,7 +77,11 @@ public class ApplicationApplicationService {
 
 	public ApplicationResponse cancel(Long applicationId, Long workerMemberId) {
 		try {
-			return ApplicationResponse.from(applicationCommandService.cancel(applicationId, workerMemberId));
+			return ApplicationResponse.from(applicationCommandService.cancel(
+				applicationId,
+				workerMemberId,
+				UUID.randomUUID().toString()
+			));
 		} catch (OptimisticLockingFailureException exception) {
 			Application latest = applicationFindService.findOwnedApplication(applicationId, workerMemberId);
 			if (latest.getStatus() == ApplicationStatus.CANCELED) {
@@ -104,12 +114,16 @@ public class ApplicationApplicationService {
 		}
 	}
 
-	private ApplicationAdmissionResponse createAdmission(Long jobPostId, Long workerMemberId) {
+	private ApplicationAdmissionResponse createAdmission(
+		Long jobPostId,
+		Long workerMemberId,
+		String correlationId
+	) {
 		try {
 			return jobServiceClient.createApplicationAdmission(
 				jobPostId,
 				workerMemberId,
-				UUID.randomUUID().toString()
+				correlationId
 			);
 		} catch (JobServiceClientException exception) {
 			throw mapJobServiceError(exception);
