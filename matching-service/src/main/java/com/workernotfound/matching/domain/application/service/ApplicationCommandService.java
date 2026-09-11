@@ -12,6 +12,7 @@ import com.workernotfound.matching.domain.outbox.service.OutboxEventCommandServi
 import com.workernotfound.matching.global.exception.BusinessException;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +26,7 @@ public class ApplicationCommandService {
 	private final ApplicationRepository applicationRepository;
 	private final ApplicationStatusHistoryRepository historyRepository;
 	private final OutboxEventCommandService outboxEventCommandService;
+	private final ApplicationEventPublisher eventPublisher;
 
 	@Transactional
 	public Application create(
@@ -42,7 +44,7 @@ public class ApplicationCommandService {
 			.build();
 		applicationRepository.saveAndFlush(application);
 		historyRepository.saveAndFlush(initialHistory(application));
-		outboxEventCommandService.saveApplicationEvent(ApplicationEvent.submitted(application, correlationId));
+		publish(ApplicationEvent.submitted(application, correlationId));
 		return application;
 	}
 
@@ -62,10 +64,13 @@ public class ApplicationCommandService {
 		application.cancel();
 		applicationRepository.flush();
 		historyRepository.saveAndFlush(cancelHistory(application, workerMemberId, changedAt));
-		outboxEventCommandService.saveApplicationEvent(
-			ApplicationEvent.canceled(application, correlationId, changedAt)
-		);
+		publish(ApplicationEvent.canceled(application, correlationId, changedAt));
 		return application;
+	}
+
+	private void publish(ApplicationEvent event) {
+		outboxEventCommandService.saveApplicationEvent(event);
+		eventPublisher.publishEvent(event);
 	}
 
 	private ApplicationStatusHistory initialHistory(Application application) {

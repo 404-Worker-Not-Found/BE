@@ -88,9 +88,23 @@ services:
       timeout: 5s
       retries: 10
 
+  matching-redis:
+    image: redis:7.4
+    container_name: wnf-matching-redis
+    ports:
+      - "${MATCHING_REDIS_PORT}:6379"
+    volumes:
+      - matching-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   auth-mysql-data:
   member-mysql-data:
   job-mysql-data:
   matching-mysql-data:
   auth-redis-data:
+  matching-redis-data:

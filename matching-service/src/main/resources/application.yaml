@@ -12,6 +12,11 @@ spring:
     hibernate:
       ddl-auto: ${MATCHING_JPA_DDL_AUTO:none}
 
+  data:
+    redis:
+      host: ${MATCHING_REDIS_HOST:localhost}
+      port: ${MATCHING_REDIS_PORT:6381}
+
 matching:
   jwt:
     secret: ${AUTH_JWT_SECRET}
@@ -25,6 +30,9 @@ matching:
     connect-timeout: 3s
     read-timeout: 5s
     internal-secret: ${INTERNAL_API_SECRET}
+  application-queue:
+    recovery-interval: ${MATCHING_APPLICATION_QUEUE_RECOVERY_INTERVAL:5m}
+    recovery-initial-delay: ${MATCHING_APPLICATION_QUEUE_RECOVERY_INITIAL_DELAY:30s}
 
 server:
   port: ${MATCHING_SERVICE_PORT:8084}
