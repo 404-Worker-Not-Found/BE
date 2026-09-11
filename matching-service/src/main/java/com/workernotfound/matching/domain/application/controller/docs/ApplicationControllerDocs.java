@@ -10,7 +10,6 @@ import com.workernotfound.matching.global.security.AuthenticatedMember;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -28,7 +27,7 @@ public interface ApplicationControllerDocs {
 		@io.swagger.v3.oas.annotations.responses.ApiResponse(
 			responseCode = "200",
 			description = "지원 성공",
-			content = @Content(schema = @Schema(implementation = ApplicationResponse.class))
+			useReturnTypeSchema = true
 		),
 		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 요청", content = @Content),
 		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "지원할 수 없는 회원", content = @Content),
@@ -49,7 +48,7 @@ public interface ApplicationControllerDocs {
 		@io.swagger.v3.oas.annotations.responses.ApiResponse(
 			responseCode = "200",
 			description = "지원 조회 성공",
-			content = @Content(schema = @Schema(implementation = ApplicationResponse.class))
+			useReturnTypeSchema = true
 		),
 		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "다른 회원의 지원", content = @Content),
 		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "지원 없음", content = @Content)
@@ -68,7 +67,7 @@ public interface ApplicationControllerDocs {
 		@io.swagger.v3.oas.annotations.responses.ApiResponse(
 			responseCode = "200",
 			description = "지원 목록 조회 성공",
-			content = @Content(schema = @Schema(implementation = ApplicationListResponse.class))
+			useReturnTypeSchema = true
 		)
 	})
 	ResponseEntity<ApiResponse<ApplicationListResponse>> getApplications(
@@ -85,7 +84,7 @@ public interface ApplicationControllerDocs {
 		@io.swagger.v3.oas.annotations.responses.ApiResponse(
 			responseCode = "200",
 			description = "지원 취소 성공",
-			content = @Content(schema = @Schema(implementation = ApplicationResponse.class))
+			useReturnTypeSchema = true
 		),
 		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "다른 회원의 지원", content = @Content),
 		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "지원 없음", content = @Content),

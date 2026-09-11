@@ -2,6 +2,7 @@ package com.workernotfound.matching.global.config;
 
 import com.workernotfound.matching.external.client.job.JobServiceProperties;
 import com.workernotfound.matching.external.client.member.MemberServiceProperties;
+import java.net.URI;
 import java.time.Duration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -39,6 +40,7 @@ public class RestClientConfig {
 		Duration readTimeout,
 		String internalSecret
 	) {
+		validateSecureBaseUrl(baseUrl);
 		SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
 		requestFactory.setConnectTimeout(connectTimeout);
 		requestFactory.setReadTimeout(readTimeout);
@@ -49,5 +51,22 @@ public class RestClientConfig {
 			.defaultHeader("X-Internal-Secret", internalSecret)
 			.requestFactory(requestFactory)
 			.build();
+	}
+
+	private void validateSecureBaseUrl(String baseUrl) {
+		URI uri = URI.create(baseUrl);
+		if ("https".equalsIgnoreCase(uri.getScheme())) {
+			return;
+		}
+		if ("http".equalsIgnoreCase(uri.getScheme()) && isLoopbackHost(uri.getHost())) {
+			return;
+		}
+		throw new IllegalArgumentException("내부 서비스 URL은 HTTPS 또는 로컬 루프백 HTTP 주소여야 합니다.");
+	}
+
+	private boolean isLoopbackHost(String host) {
+		return "localhost".equalsIgnoreCase(host)
+			|| "127.0.0.1".equals(host)
+			|| "::1".equals(host);
 	}
 }
