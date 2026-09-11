@@ -687,3 +687,37 @@ Implication for agents:
 
 Related files:
 - `docs/architecture/mvp-domain-flow.md`
+
+## 2026-09-11 - Initial Application Domain Policy
+
+Decision:
+- `matching-service` owns applications, application status history, queue source data, and matching score snapshots.
+- MySQL application data is the source of truth; Redis is a recoverable queue projection.
+- A worker can create only one application for a job posting, including an application that was later canceled.
+- Keep an application `APPLIED` while a matching proposal is `PENDING`; change it to `SELECTED` only after matching confirmation completes.
+- Use `worker_member_id` with the authentication principal `memberId` as the cross-service worker identifier.
+- Do not persist current rank on the application. Store versioned score snapshots and calculate rank from a deterministic order.
+- Record unavailable score inputs as missing rather than assigning a fabricated zero. Connect them when their source services and contracts are implemented.
+- Require `job-service` to issue a short-lived application admission after atomically checking job status and deadline. The admission does not reserve a recruitment seat.
+- Use a separate application `revision`, starting at 1, for status-event ordering and keep `version` for optimistic locking.
+- Use only `READY` snapshots from a `READY` score batch for ranked queues and automatic matching.
+
+Reason:
+- Database uniqueness provides a reliable final guard against concurrent duplicate applications.
+- Separating application state from matching attempts avoids reversing application state after a declined or expired proposal.
+- Versioned snapshots preserve why a worker received a score while allowing the scoring policy and available inputs to evolve.
+- Treating Redis as a projection prevents a partial Redis failure from losing a valid application.
+
+Implication for agents:
+- Add a unique constraint on `(job_post_id, worker_member_id)` when implementing applications.
+- Do not allow reapplication after cancellation without a new explicit policy and schema change.
+- Do not use the stale `user-service.users.id` reference from the first ERD for matching-service implementation.
+- Keep score components nullable and record missing inputs until rating, experience, no-show, online-status, and ETA contracts exist.
+- Coordinate an application-eligibility contract with `job-service` rather than treating a public job detail read or a stub as an atomic eligibility check.
+- Send `X-Internal-Secret` on internal service calls and fail closed when internal authentication fails.
+- Rebuild Redis ranked queues from MySQL application state and the latest completed score batch, including its policy version.
+
+Related files:
+- `docs/architecture/matching-application-design.md`
+- `docs/architecture/matching-application-erd.drawio`
+- `docs/architecture/mvp-domain-flow.md`
