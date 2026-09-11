@@ -129,7 +129,8 @@ Current matching application implementation:
 - A scheduled recovery rebuilds each application Set from MySQL, which remains the source of truth. Redis failures are logged and do not roll back an application transaction.
 - The exact cancellation deadline and penalty policy remain undecided. The current API allows cancellation only while the application is `APPLIED`.
 - The current Redis projection uses an in-process after-commit listener. The durable Outbox relay and delivery retries remain a later implementation unit; Redis projection does not mark an Outbox event as `PUBLISHED`.
-- Ranked Redis queues remain deferred until score batches and snapshots are implemented. Missing rating, experience, no-show, online-status, and ETA inputs must be connected when their owning service contracts become available.
+- Versioned score batch and application score snapshot persistence is implemented with `CALCULATING`/`READY`/`FAILED` lifecycle states. Missing external inputs remain nullable and are distinguished through `missing_inputs` instead of fabricated zero scores.
+- The scoring formula, input adapters, ranked Redis Sorted Set, and owner-facing ranked applicant API remain later implementation units. Missing rating, experience, no-show, online-status, and ETA inputs must be connected when their owning service contracts become available.
 
 The current scaffold matches the decided technology baseline in `docs/agent/decisions.md`.
 
