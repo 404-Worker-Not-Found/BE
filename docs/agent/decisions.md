@@ -666,3 +666,24 @@ Related files:
 - `docs/PROJECT_CONTEXT.md`
 - `docs/agent/checklists.md`
 - `docs/agent/coding-rules.md`
+
+## 2026-09-11 - MVP Feature Scope
+
+Decision:
+- Include job posting, application, matching, work, notification, chat, review, trust score, payment, settlement, automatic rematching, and no-show prediction in the planned feature scope.
+- Support one business profile per owner in the current scope.
+- Exclude multi-business management, administrator systems, reports, appeals, and dispute handling from the current scope.
+- Keep ordinary payment cancellation and refund flows in scope.
+
+Reason:
+- The product needs the full matching-to-settlement journey and its advanced matching features.
+- Multi-business management and operator workflows can be added after the core user journey works end to end.
+- Excluding dispute handling does not remove the need to recover ordinary payment cancellation and failure cases.
+
+Implication for agents:
+- Use `docs/architecture/mvp-domain-flow.md` as the baseline for domain states and cross-service flows.
+- Do not add administrator, report, appeal, dispute, or multi-business features unless a later decision changes the scope.
+- Keep policy values that have not been decided configurable and document them before implementation.
+
+Related files:
+- `docs/architecture/mvp-domain-flow.md`
