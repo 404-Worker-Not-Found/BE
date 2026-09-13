@@ -767,3 +767,26 @@ Implication for agents:
 Related files:
 - `docs/architecture/matching-application-design.md`
 - `matching-service/src/main/java/com/workernotfound/matching/domain/matching`
+
+## 2026-09-14 - Worker Matching Proposal Response
+
+Decision:
+- Allow a worker to list and read only their own matching proposals and to decline a `PENDING` proposal.
+- Make repeated decline requests idempotent while rejecting decline from any other terminal matching status.
+- Keep the application `APPLIED` when a proposal becomes `DECLINED`.
+- Use application-row then matching-row lock order for both decline and application cancellation.
+- Defer proposal acceptance until the job-service seat reservation and the payment/work/chat confirmation Saga are available.
+
+Reason:
+- A decline ends the matching attempt but does not represent withdrawal of the underlying application.
+- Consistent lock order prevents a deadlock between matching response and application cancellation.
+- Confirmation without recruitment capacity and downstream resource guarantees would create a false completed state.
+
+Implication for agents:
+- Do not transition an application to `SELECTED` on proposal lookup or decline.
+- Exclude an application that already has a matching record when implementing later automatic candidate extraction, even if its application status remains `APPLIED`.
+- Implement acceptance together with the confirmation Saga instead of adding a temporary direct `CONFIRMED` transition.
+
+Related files:
+- `docs/architecture/matching-application-design.md`
+- `matching-service/src/main/java/com/workernotfound/matching/domain/matching`
