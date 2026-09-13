@@ -3,6 +3,7 @@ package com.workernotfound.matching.external.redis.application;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 public class ApplicationQueueLockManager {
 
 	private static final String KEY_FORMAT = "matching:applications:job:%d:lock";
+	private static final String FENCE_KEY_FORMAT = "matching:applications:job:%d:lock:fence";
 	private static final Duration LOCK_TTL = Duration.ofSeconds(30);
 	private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(5);
 	private static final long RETRY_INTERVAL_MILLIS = 20L;
@@ -26,14 +28,26 @@ public class ApplicationQueueLockManager {
 	private final StringRedisTemplate redisTemplate;
 
 	public void execute(Long jobPostId, Runnable task) {
+		execute(jobPostId, ignored -> task.run());
+	}
+
+	public void execute(Long jobPostId, Consumer<Long> task) {
 		String key = KEY_FORMAT.formatted(jobPostId);
 		String token = UUID.randomUUID().toString();
 		acquire(key, token);
 		try {
-			task.run();
+			task.accept(nextFenceToken(jobPostId));
 		} finally {
 			release(key, token);
 		}
+	}
+
+	private Long nextFenceToken(Long jobPostId) {
+		Long fenceToken = redisTemplate.opsForValue().increment(FENCE_KEY_FORMAT.formatted(jobPostId));
+		if (fenceToken == null) {
+			throw new IllegalStateException("지원 대기열 fencing token 발급에 실패했습니다.");
+		}
+		return fenceToken;
 	}
 
 	private void acquire(String key, String token) {

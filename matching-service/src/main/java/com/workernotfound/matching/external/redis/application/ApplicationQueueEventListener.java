@@ -2,6 +2,7 @@ package com.workernotfound.matching.external.redis.application;
 
 import com.workernotfound.matching.domain.application.event.ApplicationEvent;
 import com.workernotfound.matching.domain.application.event.ApplicationEventType;
+import com.workernotfound.matching.domain.score.service.MatchingScoreQueueService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -15,11 +16,12 @@ public class ApplicationQueueEventListener {
 
 	private final ApplicationQueueRepository applicationQueueRepository;
 	private final ApplicationQueueLockManager lockManager;
+	private final MatchingScoreQueueService matchingScoreQueueService;
 
 	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 	public void updateQueue(ApplicationEvent event) {
 		try {
-			lockManager.execute(event.jobPostId(), () -> update(event));
+			lockManager.execute(event.jobPostId(), fenceToken -> update(event, fenceToken));
 		} catch (RuntimeException exception) {
 			log.warn(
 				"지원 대기열 반영에 실패했습니다. applicationId={}, eventType={}",
@@ -30,13 +32,12 @@ public class ApplicationQueueEventListener {
 		}
 	}
 
-	private void update(ApplicationEvent event) {
+	private void update(ApplicationEvent event, Long fenceToken) {
 		if (ApplicationEventType.APPLICATION_SUBMITTED.value().equals(event.eventType())) {
 			applicationQueueRepository.add(event.jobPostId(), event.applicationId());
-			return;
-		}
-		if (ApplicationEventType.APPLICATION_CANCELED.value().equals(event.eventType())) {
+		} else if (ApplicationEventType.APPLICATION_CANCELED.value().equals(event.eventType())) {
 			applicationQueueRepository.remove(event.jobPostId(), event.applicationId());
 		}
+		matchingScoreQueueService.synchronize(event.jobPostId(), fenceToken);
 	}
 }

@@ -7,9 +7,12 @@ import com.workernotfound.matching.domain.application.repository.ApplicationStat
 import com.workernotfound.matching.domain.application.service.ApplicationCommandService;
 import com.workernotfound.matching.domain.application.service.ApplicationQueueRecoveryService;
 import com.workernotfound.matching.domain.outbox.repository.OutboxEventRepository;
+import com.workernotfound.matching.domain.score.repository.MatchingScoreBatchRepository;
+import com.workernotfound.matching.domain.score.repository.MatchingScoreSnapshotRepository;
 import com.workernotfound.matching.support.IntegrationTestSupport;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,16 +45,29 @@ class ApplicationQueueProjectionTests extends IntegrationTestSupport {
 	private OutboxEventRepository outboxEventRepository;
 
 	@Autowired
+	private MatchingScoreSnapshotRepository scoreSnapshotRepository;
+
+	@Autowired
+	private MatchingScoreBatchRepository scoreBatchRepository;
+
+	@Autowired
 	private StringRedisTemplate redisTemplate;
 
 	@BeforeEach
 	void cleanUp() {
+		scoreSnapshotRepository.deleteAll();
+		scoreBatchRepository.deleteAll();
 		outboxEventRepository.deleteAll();
 		historyRepository.deleteAll();
 		applicationRepository.deleteAll();
 		try (RedisConnection connection = redisTemplate.getConnectionFactory().getConnection()) {
 			connection.serverCommands().flushDb();
 		}
+	}
+
+	@AfterEach
+	void tearDown() {
+		cleanUp();
 	}
 
 	@Test
@@ -90,6 +106,7 @@ class ApplicationQueueProjectionTests extends IntegrationTestSupport {
 	void handlesDuplicateApplicationEventsIdempotently() {
 		Application application = createApplication(10L, 20L, 30L);
 		ApplicationEvent event = ApplicationEvent.submitted(application, "duplicate-correlation-id");
+		long scoreBatchCount = scoreBatchRepository.count();
 		applicationQueueRepository.replace(10L, List.of());
 
 		applicationQueueEventListener.updateQueue(event);
@@ -97,6 +114,7 @@ class ApplicationQueueProjectionTests extends IntegrationTestSupport {
 
 		assertThat(applicationQueueRepository.findApplicationIds(10L))
 			.containsExactly(application.getId());
+		assertThat(scoreBatchRepository.count()).isEqualTo(scoreBatchCount);
 	}
 
 	private Application createApplication(Long jobPostId, Long workerMemberId, Long admissionId) {

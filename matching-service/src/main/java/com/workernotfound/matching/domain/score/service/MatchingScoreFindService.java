@@ -5,6 +5,7 @@ import com.workernotfound.matching.domain.score.entity.MatchingScoreBatch;
 import com.workernotfound.matching.domain.score.entity.MatchingScoreSnapshot;
 import com.workernotfound.matching.domain.score.entity.enums.ScoreBatchStatus;
 import com.workernotfound.matching.domain.score.entity.enums.ScoreCalculationStatus;
+import com.workernotfound.matching.domain.score.model.RankedApplicationScore;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreBatchRepository;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreSnapshotRepository;
 import java.util.List;
@@ -34,6 +35,23 @@ public class MatchingScoreFindService {
 			ScoreBatchStatus.READY,
 			ScoreCalculationStatus.READY,
 			ApplicationStatus.APPLIED
+		);
+	}
+
+	public List<RankedApplicationScore> findRankedScores(Long scoreBatchId) {
+		return findRankedSnapshots(scoreBatchId).stream()
+			.map(snapshot -> new RankedApplicationScore(
+				snapshot.getApplication().getId(),
+				snapshot.getTotalScore()
+			))
+			.toList();
+	}
+
+	public List<Long> findReadyApplicationIds(Long scoreBatchId) {
+		return snapshotRepository.findApplicationIdsByScoreBatchId(
+			scoreBatchId,
+			ScoreBatchStatus.READY,
+			ScoreCalculationStatus.READY
 		);
 	}
 }

@@ -5,6 +5,8 @@ import com.workernotfound.matching.domain.application.dto.response.ApplicationRe
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.application.repository.ApplicationStatusHistoryRepository;
 import com.workernotfound.matching.domain.outbox.repository.OutboxEventRepository;
+import com.workernotfound.matching.domain.score.repository.MatchingScoreBatchRepository;
+import com.workernotfound.matching.domain.score.repository.MatchingScoreSnapshotRepository;
 import com.workernotfound.matching.external.client.job.JobServiceClient;
 import com.workernotfound.matching.external.client.job.dto.ApplicationAdmissionResponse;
 import com.workernotfound.matching.external.client.member.MemberServiceClient;
@@ -45,6 +47,12 @@ class ConcurrentApplicationTests extends IntegrationTestSupport {
 	@Autowired
 	private OutboxEventRepository outboxEventRepository;
 
+	@Autowired
+	private MatchingScoreSnapshotRepository scoreSnapshotRepository;
+
+	@Autowired
+	private MatchingScoreBatchRepository scoreBatchRepository;
+
 	@MockitoBean
 	private MemberServiceClient memberServiceClient;
 
@@ -55,15 +63,19 @@ class ConcurrentApplicationTests extends IntegrationTestSupport {
 
 	@BeforeEach
 	void setUp() {
-		outboxEventRepository.deleteAll();
-		historyRepository.deleteAll();
-		applicationRepository.deleteAll();
+		deletePersistence();
 		executorService = Executors.newFixedThreadPool(2);
 	}
 
 	@AfterEach
 	void tearDown() {
 		executorService.shutdownNow();
+		deletePersistence();
+	}
+
+	private void deletePersistence() {
+		scoreSnapshotRepository.deleteAll();
+		scoreBatchRepository.deleteAll();
 		outboxEventRepository.deleteAll();
 		historyRepository.deleteAll();
 		applicationRepository.deleteAll();
