@@ -120,6 +120,19 @@ class MatchingScoreCalculationServiceTests extends IntegrationTestSupport {
 	}
 
 	@Test
+	void excludesReadySnapshotUntilBatchIsReady() {
+		Application application = saveApplication(20L, 30L, BASE_TIME);
+		MatchingScoreBatch calculatingBatch = saveCalculatingBatch();
+		saveReadySnapshot(calculatingBatch, application);
+
+		List<MatchingScoreSnapshot> ranked = findService.findRankedSnapshots(
+			calculatingBatch.getId()
+		);
+
+		assertThat(ranked).isEmpty();
+	}
+
+	@Test
 	void rejectsInvalidApplicationPosition() {
 		assertThatThrownBy(() -> scorePolicy.calculate(1, 1))
 			.isInstanceOf(IllegalArgumentException.class);
@@ -156,14 +169,18 @@ class MatchingScoreCalculationServiceTests extends IntegrationTestSupport {
 	}
 
 	private MatchingScoreBatch saveReadyBatch() {
-		MatchingScoreBatch batch = batchRepository.saveAndFlush(MatchingScoreBatch.builder()
+		MatchingScoreBatch batch = saveCalculatingBatch();
+		batch.complete(BASE_TIME.plusSeconds(1));
+		batchRepository.flush();
+		return batch;
+	}
+
+	private MatchingScoreBatch saveCalculatingBatch() {
+		return batchRepository.saveAndFlush(MatchingScoreBatch.builder()
 			.jobPostId(JOB_POST_ID)
 			.policyVersion(ApplicationTimeScorePolicy.VERSION)
 			.startedAt(BASE_TIME)
 			.build());
-		batch.complete(BASE_TIME.plusSeconds(1));
-		batchRepository.flush();
-		return batch;
 	}
 
 	private void saveReadySnapshot(MatchingScoreBatch batch, Application application) {

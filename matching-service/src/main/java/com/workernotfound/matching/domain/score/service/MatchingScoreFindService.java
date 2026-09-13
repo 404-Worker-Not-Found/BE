@@ -31,6 +31,7 @@ public class MatchingScoreFindService {
 	public List<MatchingScoreSnapshot> findRankedSnapshots(Long scoreBatchId) {
 		return snapshotRepository.findRankedByScoreBatchId(
 			scoreBatchId,
+			ScoreBatchStatus.READY,
 			ScoreCalculationStatus.READY,
 			ApplicationStatus.APPLIED
 		);
