@@ -44,6 +44,7 @@ public class OwnerApplicantApplicationService {
 		int page,
 		int size
 	) {
+		applicationFindService.validateOwnerAccess(jobPostId, ownerMemberId);
 		MatchingScoreBatch batch = resolveBatch(jobPostId, requestedScoreBatchId);
 		Long scoreBatchId = batch == null ? null : batch.getId();
 		Page<OwnerApplicantRow> applicantPage = applicationFindService.findOwnerApplicants(

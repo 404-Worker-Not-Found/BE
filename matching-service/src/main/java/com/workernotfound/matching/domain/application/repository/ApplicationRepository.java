@@ -18,6 +18,10 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 
 	Page<Application> findByWorkerMemberId(Long workerMemberId, Pageable pageable);
 
+	boolean existsByJobPostId(Long jobPostId);
+
+	boolean existsByJobPostIdAndOwnerMemberId(Long jobPostId, Long ownerMemberId);
+
 	Optional<Application> findByIdAndJobPostIdAndOwnerMemberId(
 		Long id,
 		Long jobPostId,

@@ -4,6 +4,8 @@ import com.workernotfound.member.domain.member.entity.Member;
 import com.workernotfound.member.domain.member.entity.enums.MemberRole;
 import com.workernotfound.member.domain.member.repository.MemberRepository;
 import com.workernotfound.member.support.IntegrationTestSupport;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,5 +65,53 @@ class WorkerSummaryTests extends IntegrationTestSupport {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"memberIds\":[]}"))
 			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void rejectsNonPositiveWorkerId() throws Exception {
+		mockMvc.perform(post("/api/members/internal/workers/summaries")
+				.header("X-Internal-Secret", "test-internal-secret")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"memberIds\":[0]}"))
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void acceptsUpToOneHundredWorkerIds() throws Exception {
+		mockMvc.perform(post("/api/members/internal/workers/summaries")
+				.header("X-Internal-Secret", "test-internal-secret")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(workerIdsRequest(100)))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void rejectsMoreThanOneHundredWorkerIds() throws Exception {
+		mockMvc.perform(post("/api/members/internal/workers/summaries")
+				.header("X-Internal-Secret", "test-internal-secret")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(workerIdsRequest(101)))
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void rejectsMissingOrInvalidInternalSecret() throws Exception {
+		mockMvc.perform(post("/api/members/internal/workers/summaries")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"memberIds\":[1]}"))
+			.andExpect(status().isUnauthorized());
+
+		mockMvc.perform(post("/api/members/internal/workers/summaries")
+				.header("X-Internal-Secret", "invalid-secret")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"memberIds\":[1]}"))
+			.andExpect(status().isUnauthorized());
+	}
+
+	private String workerIdsRequest(int count) {
+		String memberIds = IntStream.rangeClosed(1, count)
+			.mapToObj(String::valueOf)
+			.collect(Collectors.joining(","));
+		return "{\"memberIds\":[%s]}".formatted(memberIds);
 	}
 }

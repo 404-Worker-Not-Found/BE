@@ -87,6 +87,21 @@ class OwnerApplicantApplicationServiceTests extends IntegrationTestSupport {
 			assertThat(exception.getErrorCode()).isEqualTo(ApplicationErrorCode.APPLICATION_FORBIDDEN));
 	}
 
+	@Test
+	void rejectsAnotherOwnerBeforeReturningScoreBatchMetadata() {
+		saveApplication(20L, 100L, 30L, BASE_TIME);
+		MatchingScoreBatch batch = scoreCalculationService.calculate(10L).orElseThrow();
+
+		assertThatThrownBy(() -> ownerApplicantApplicationService.getApplicants(
+			10L,
+			200L,
+			batch.getId(),
+			0,
+			20
+		)).isInstanceOfSatisfying(BusinessException.class, exception ->
+			assertThat(exception.getErrorCode()).isEqualTo(ApplicationErrorCode.APPLICATION_FORBIDDEN));
+	}
+
 	private Application saveApplication(
 		Long workerMemberId,
 		Long ownerMemberId,

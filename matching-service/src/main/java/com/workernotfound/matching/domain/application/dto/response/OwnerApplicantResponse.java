@@ -2,6 +2,7 @@ package com.workernotfound.matching.domain.application.dto.response;
 
 import com.workernotfound.matching.domain.application.entity.Application;
 import com.workernotfound.matching.domain.score.entity.MatchingScoreSnapshot;
+import com.workernotfound.matching.domain.score.entity.enums.ScoreCalculationStatus;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -35,6 +36,8 @@ public record OwnerApplicantResponse(
 		Long priorityRank,
 		List<String> missingInputs
 	) {
+		boolean scoreReady = snapshot != null
+			&& snapshot.getCalculationStatus() == ScoreCalculationStatus.READY;
 		return new OwnerApplicantResponse(
 			application.getId(),
 			application.getWorkerMemberId(),
@@ -42,17 +45,17 @@ public record OwnerApplicantResponse(
 			workerName != null,
 			application.getStatus().name(),
 			application.getAppliedAt(),
-			priorityRank,
+			scoreReady ? priorityRank : null,
 			snapshot == null ? "UNSCORED" : snapshot.getCalculationStatus().name(),
-			snapshot == null ? null : snapshot.getTotalScore(),
-			snapshot == null ? null : snapshot.getAppliedTimeScore(),
-			snapshot == null ? null : snapshot.getRatingScore(),
-			snapshot == null ? null : snapshot.getExperienceScore(),
-			snapshot == null ? null : snapshot.getActivityScore(),
-			snapshot == null ? null : snapshot.getArrivalScore(),
-			snapshot == null ? null : snapshot.getNoShowScore(),
-			snapshot == null ? null : snapshot.getExpectedArrivalMinutes(),
-			snapshot == null ? null : snapshot.getNoShowProbability(),
+			scoreReady ? snapshot.getTotalScore() : null,
+			scoreReady ? snapshot.getAppliedTimeScore() : null,
+			scoreReady ? snapshot.getRatingScore() : null,
+			scoreReady ? snapshot.getExperienceScore() : null,
+			scoreReady ? snapshot.getActivityScore() : null,
+			scoreReady ? snapshot.getArrivalScore() : null,
+			scoreReady ? snapshot.getNoShowScore() : null,
+			scoreReady ? snapshot.getExpectedArrivalMinutes() : null,
+			scoreReady ? snapshot.getNoShowProbability() : null,
 			missingInputs,
 			snapshot == null ? null : snapshot.getCalculatedAt()
 		);

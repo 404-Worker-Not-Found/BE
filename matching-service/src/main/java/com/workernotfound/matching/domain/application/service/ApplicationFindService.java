@@ -59,6 +59,13 @@ public class ApplicationFindService {
 		);
 	}
 
+	public void validateOwnerAccess(Long jobPostId, Long ownerMemberId) {
+		if (applicationRepository.existsByJobPostId(jobPostId)
+			&& !applicationRepository.existsByJobPostIdAndOwnerMemberId(jobPostId, ownerMemberId)) {
+			throw new BusinessException(ApplicationErrorCode.APPLICATION_FORBIDDEN);
+		}
+	}
+
 	public Application findOwnerApplicant(Long jobPostId, Long applicationId, Long ownerMemberId) {
 		return applicationRepository.findByIdAndJobPostIdAndOwnerMemberId(
 			applicationId,
