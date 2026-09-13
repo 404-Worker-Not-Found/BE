@@ -47,6 +47,7 @@ public class SecurityConfig {
 					"/error"
 				).permitAll()
 				.requestMatchers("/api/applications/**").hasRole("WORKER")
+				.requestMatchers("/api/jobs/*/applications/**").hasRole("OWNER")
 				.anyRequest().authenticated()
 			)
 			// TODO: API Gateway가 JWT를 검증하고 인증 헤더를 전달하는 방식으로 대체할 수 있다.

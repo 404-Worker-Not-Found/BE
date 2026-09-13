@@ -29,6 +29,18 @@ public class MatchingScoreFindService {
 		);
 	}
 
+	public Optional<MatchingScoreBatch> findReadyBatch(Long scoreBatchId, Long jobPostId) {
+		return batchRepository.findByIdAndJobPostIdAndStatus(
+			scoreBatchId,
+			jobPostId,
+			ScoreBatchStatus.READY
+		);
+	}
+
+	public Optional<MatchingScoreSnapshot> findSnapshot(Long scoreBatchId, Long applicationId) {
+		return snapshotRepository.findByScoreBatchIdAndApplicationId(scoreBatchId, applicationId);
+	}
+
 	public List<MatchingScoreSnapshot> findRankedSnapshots(Long scoreBatchId) {
 		return snapshotRepository.findRankedByScoreBatchId(
 			scoreBatchId,
