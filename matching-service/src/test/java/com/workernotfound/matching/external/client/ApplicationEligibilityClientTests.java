@@ -6,6 +6,8 @@ import com.workernotfound.matching.external.client.job.JobServiceClientException
 import com.workernotfound.matching.external.client.job.dto.ApplicationAdmissionResponse;
 import com.workernotfound.matching.external.client.member.MemberServiceClient;
 import com.workernotfound.matching.external.client.member.dto.MemberInternalResponse;
+import com.workernotfound.matching.external.client.member.dto.WorkerSummaryResponse;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -69,6 +71,28 @@ class ApplicationEligibilityClientTests {
 		ApplicationAdmissionResponse response = client.createApplicationAdmission(10L, 20L, "command-id");
 
 		assertThat(response.admissionId()).isEqualTo(30L);
+		server.verify();
+	}
+
+	@Test
+	void readsWorkerSummariesWithoutPrivateContactInformation() {
+		RestClient.Builder builder = RestClient.builder()
+			.baseUrl("http://member-service")
+			.defaultHeader("X-Internal-Secret", "test-secret");
+		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+		MemberServiceClient client = new MemberServiceClient(builder.build(), new ObjectMapper());
+		server.expect(requestTo("http://member-service/api/members/internal/workers/summaries"))
+			.andExpect(method(HttpMethod.POST))
+			.andExpect(header("X-Internal-Secret", "test-secret"))
+			.andRespond(withSuccess(
+				"{\"success\":true,\"status\":200,\"code\":\"SUCCESS\",\"message\":\"ok\","
+					+ "\"data\":[{\"memberId\":20,\"name\":\"지원자\"}]}",
+				MediaType.APPLICATION_JSON
+			));
+
+		List<WorkerSummaryResponse> response = client.getWorkerSummaries(List.of(20L));
+
+		assertThat(response).containsExactly(new WorkerSummaryResponse(20L, "지원자"));
 		server.verify();
 	}
 
