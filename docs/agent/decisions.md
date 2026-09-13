@@ -745,3 +745,25 @@ Implication for agents:
 Related files:
 - `docs/architecture/matching-application-design.md`
 - `matching-service/src/main/java/com/workernotfound/matching/domain/score`
+
+## 2026-09-14 - Manual Matching Candidate Foundation
+
+Decision:
+- Treat owner selection as a `MANUAL`, `PENDING` matching attempt, not as final confirmation.
+- Allow one matching record per application and preserve the selected `READY` score batch and snapshot when available.
+- Keep unavailable score references `NULL`; manual selection does not require a fabricated score.
+- Serialize manual selection and worker cancellation with a lock on the application row. If a pending matching exists when the worker cancels, cancel the matching and application in the same transaction.
+- Require job-service to atomically reserve recruitment capacity before the later confirmation Saga. Candidate selection itself does not reserve a seat.
+
+Reason:
+- Payment, scheduled work, chat, and the job-service capacity contract are not implemented yet, so marking the match confirmed would claim an end-to-end guarantee that does not exist.
+- A stable matching record and score basis are needed before those integrations, while the application row provides a shared concurrency boundary for selection and cancellation.
+
+Implication for agents:
+- Do not expose a `PENDING` manual matching as a completed hire.
+- Add the job-service seat reservation client only when its contract is implemented or the confirmation Saga unit begins.
+- Change the application to `SELECTED` only after all confirmation steps complete.
+
+Related files:
+- `docs/architecture/matching-application-design.md`
+- `matching-service/src/main/java/com/workernotfound/matching/domain/matching`

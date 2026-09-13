@@ -1,10 +1,10 @@
 <mxfile host="app.diagrams.net" modified="2026-09-14T00:00:00.000Z" agent="Codex" version="24.7.17">
   <diagram id="matching-application" name="지원 도메인">
-    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1800" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="title" value="matching-service · 지원 도메인 ERD" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=24;fontStyle=1;" vertex="1" parent="1">
+        <mxCell id="title" value="matching-service · 지원·매칭 도메인 ERD" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=24;fontStyle=1;" vertex="1" parent="1">
           <mxGeometry x="40" y="30" width="620" height="40" as="geometry" />
         </mxCell>
         <mxCell id="note" value="EXT는 외부 서비스 식별자이며 물리 FK를 생성하지 않는다.&#xa;현재 순위와 Redis 대기열은 파생·복제 데이터이므로 이 ERD의 원본 테이블에 저장하지 않는다." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacing=10;fontSize=13;" vertex="1" parent="1">
@@ -25,8 +25,14 @@
         <mxCell id="outbox_events" value="outbox_events&#xa;────────────────────────&#xa;PK  id BIGINT&#xa;UQ  event_id VARCHAR(36) NOT NULL&#xa;    aggregate_type VARCHAR(50) NOT NULL&#xa;    aggregate_id BIGINT NOT NULL&#xa;    event_type VARCHAR(100) NOT NULL&#xa;    correlation_id VARCHAR(36) NOT NULL&#xa;    revision BIGINT NOT NULL&#xa;    schema_version INT NOT NULL&#xa;    payload JSON NOT NULL&#xa;    status VARCHAR(20) NOT NULL&#xa;    occurred_at DATETIME(6) NOT NULL&#xa;    published_at DATETIME(6) NULL&#xa;    retry_count INT NOT NULL&#xa;    last_error VARCHAR(1000) NULL&#xa;────────────────────────&#xa;status: PENDING / PUBLISHED / FAILED&#xa;UQ (aggregate_type, aggregate_id, revision)&#xa;IX (status, occurred_at, id)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;verticalAlign=top;spacing=10;fontFamily=Courier New;fontSize=13;" vertex="1" parent="1">
           <mxGeometry x="1110" y="120" width="480" height="430" as="geometry" />
         </mxCell>
-        <mxCell id="external_contracts" value="외부 참조&#xa;────────────────────────&#xa;applications.job_post_id&#xa;  → job-service.job_posts.id&#xa;&#xa;applications.worker_member_id&#xa;  → member-service.members.id&#xa;&#xa;applications.owner_member_id&#xa;  → member-service.members.id&#xa;&#xa;applications.job_application_admission_id&#xa;  → job-service.application_admissions.id&#xa;&#xa;matching_score_batches.job_post_id&#xa;  → job-service.job_posts.id&#xa;&#xa;EXT 컬럼에는 물리 FK를 만들지 않는다." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;verticalAlign=top;spacing=12;fontFamily=Courier New;fontSize=13;" vertex="1" parent="1">
+        <mxCell id="external_contracts" value="외부 참조&#xa;────────────────────────&#xa;applications.job_post_id&#xa;  → job-service.job_posts.id&#xa;&#xa;applications.worker_member_id / owner_member_id&#xa;  → member-service.members.id&#xa;&#xa;applications.job_application_admission_id&#xa;  → job-service.application_admissions.id&#xa;&#xa;matching_score_batches.job_post_id&#xa;  → job-service.job_posts.id&#xa;&#xa;matchings.job_post_id&#xa;  → job-service.job_posts.id&#xa;&#xa;matchings.owner_member_id / worker_member_id&#xa;  → member-service.members.id&#xa;&#xa;EXT 컬럼에는 물리 FK를 만들지 않는다." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;verticalAlign=top;spacing=12;fontFamily=Courier New;fontSize=13;" vertex="1" parent="1">
           <mxGeometry x="1110" y="650" width="480" height="340" as="geometry" />
+        </mxCell>
+        <mxCell id="matchings" value="matchings&#xa;────────────────────────&#xa;PK  id BIGINT&#xa;FK  application_id BIGINT NOT NULL&#xa;EXT job_post_id BIGINT NOT NULL&#xa;EXT owner_member_id BIGINT NOT NULL&#xa;EXT worker_member_id BIGINT NOT NULL&#xa;FK  score_batch_id BIGINT NULL&#xa;FK  score_snapshot_id BIGINT NULL&#xa;    selection_type VARCHAR(20) NOT NULL&#xa;    status VARCHAR(20) NOT NULL&#xa;    selected_at DATETIME(6) NOT NULL&#xa;    expires_at DATETIME(6) NULL&#xa;    confirmed_at DATETIME(6) NULL&#xa;    version BIGINT NOT NULL&#xa;    revision BIGINT NOT NULL&#xa;    created_at DATETIME(6) NOT NULL&#xa;    updated_at DATETIME(6) NOT NULL&#xa;────────────────────────&#xa;selection: MANUAL / AUTOMATIC / FALLBACK&#xa;status: PENDING / CONFIRMED / DECLINED / EXPIRED / CANCELED&#xa;UQ (application_id)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=top;spacing=10;fontFamily=Courier New;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1090" width="480" height="510" as="geometry" />
+        </mxCell>
+        <mxCell id="matching_status_histories" value="matching_status_histories&#xa;────────────────────────&#xa;PK  id BIGINT&#xa;FK  matching_id BIGINT NOT NULL&#xa;    from_status VARCHAR(20) NULL&#xa;    to_status VARCHAR(20) NOT NULL&#xa;    actor_type VARCHAR(20) NOT NULL&#xa;EXT actor_member_id BIGINT NULL&#xa;    reason_code VARCHAR(50) NULL&#xa;    reason_detail VARCHAR(500) NULL&#xa;    revision BIGINT NOT NULL&#xa;    changed_at DATETIME(6) NOT NULL&#xa;────────────────────────&#xa;UQ (matching_id, revision)&#xa;IX (matching_id, changed_at)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=top;spacing=10;fontFamily=Courier New;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="600" y="1090" width="480" height="350" as="geometry" />
         </mxCell>
         <mxCell id="edge_application_history" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;startArrow=ERone;" edge="1" parent="1" source="applications" target="application_status_histories">
           <mxGeometry relative="1" as="geometry" />
@@ -40,6 +46,18 @@
           </mxGeometry>
         </mxCell>
         <mxCell id="edge_batch_score" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;startArrow=ERone;" edge="1" parent="1" source="matching_score_batches" target="matching_score_snapshots">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_application_matching" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;startArrow=ERone;" edge="1" parent="1" source="applications" target="matchings">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_matching_history" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;startArrow=ERone;" edge="1" parent="1" source="matchings" target="matching_status_histories">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_batch_matching" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;startArrow=ERone;dashed=1;" edge="1" parent="1" source="matching_score_batches" target="matchings">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_snapshot_matching" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;startArrow=ERone;dashed=1;" edge="1" parent="1" source="matching_score_snapshots" target="matchings">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>
