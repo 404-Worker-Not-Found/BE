@@ -47,6 +47,7 @@ public class SecurityConfig {
 					"/error"
 				).permitAll()
 				.requestMatchers("/api/applications/**").hasRole("WORKER")
+				.requestMatchers("/api/matchings/**").hasRole("WORKER")
 				.requestMatchers("/api/jobs/*/applications/**").hasRole("OWNER")
 				.anyRequest().authenticated()
 			)

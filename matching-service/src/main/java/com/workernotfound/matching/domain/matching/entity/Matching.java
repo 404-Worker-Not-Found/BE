@@ -129,4 +129,12 @@ public class Matching extends BaseEntity {
 		this.status = MatchingStatus.CANCELED;
 		this.revision++;
 	}
+
+	public void decline() {
+		if (status != MatchingStatus.PENDING) {
+			throw new IllegalStateException("대기 중인 매칭만 거절할 수 있습니다.");
+		}
+		this.status = MatchingStatus.DECLINED;
+		this.revision++;
+	}
 }
