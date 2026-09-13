@@ -8,6 +8,7 @@ import com.workernotfound.matching.domain.application.event.ApplicationEvent;
 import com.workernotfound.matching.domain.application.exception.ApplicationErrorCode;
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.application.repository.ApplicationStatusHistoryRepository;
+import com.workernotfound.matching.domain.matching.service.MatchingCancellationService;
 import com.workernotfound.matching.domain.outbox.service.OutboxEventCommandService;
 import com.workernotfound.matching.global.exception.BusinessException;
 import java.time.LocalDateTime;
@@ -25,6 +26,7 @@ public class ApplicationCommandService {
 
 	private final ApplicationRepository applicationRepository;
 	private final ApplicationStatusHistoryRepository historyRepository;
+	private final MatchingCancellationService matchingCancellationService;
 	private final OutboxEventCommandService outboxEventCommandService;
 	private final ApplicationEventPublisher eventPublisher;
 
@@ -52,7 +54,7 @@ public class ApplicationCommandService {
 
 	@Transactional
 	public Application cancel(Long applicationId, Long workerMemberId, String correlationId) {
-		Application application = applicationRepository.findById(applicationId)
+		Application application = applicationRepository.findByIdForUpdate(applicationId)
 			.orElseThrow(() -> new BusinessException(ApplicationErrorCode.APPLICATION_NOT_FOUND));
 		validateOwner(application, workerMemberId);
 		if (application.getStatus() == ApplicationStatus.CANCELED) {
@@ -63,6 +65,7 @@ public class ApplicationCommandService {
 		}
 
 		LocalDateTime changedAt = LocalDateTime.now();
+		matchingCancellationService.cancelPendingByApplication(applicationId, workerMemberId, changedAt);
 		application.cancel();
 		applicationRepository.flush();
 		historyRepository.saveAndFlush(cancelHistory(application, workerMemberId, changedAt));
