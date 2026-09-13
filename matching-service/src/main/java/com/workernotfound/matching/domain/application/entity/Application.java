@@ -51,6 +51,9 @@ public class Application extends BaseEntity {
 	@Column(name = "worker_member_id", nullable = false, updatable = false)
 	private Long workerMemberId;
 
+	@Column(name = "owner_member_id", updatable = false)
+	private Long ownerMemberId;
+
 	@Column(name = "job_application_admission_id", nullable = false, updatable = false)
 	private Long jobApplicationAdmissionId;
 
@@ -72,11 +75,13 @@ public class Application extends BaseEntity {
 	private Application(
 		Long jobPostId,
 		Long workerMemberId,
+		Long ownerMemberId,
 		Long jobApplicationAdmissionId,
 		LocalDateTime appliedAt
 	) {
 		this.jobPostId = jobPostId;
 		this.workerMemberId = workerMemberId;
+		this.ownerMemberId = ownerMemberId;
 		this.jobApplicationAdmissionId = jobApplicationAdmissionId;
 		this.status = ApplicationStatus.APPLIED;
 		this.appliedAt = appliedAt;

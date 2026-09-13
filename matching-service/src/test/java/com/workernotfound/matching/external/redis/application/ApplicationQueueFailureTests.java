@@ -72,6 +72,7 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 		Application application = applicationCommandService.create(
 			10L,
 			20L,
+			100L,
 			30L,
 			LocalDateTime.now(),
 			"correlation-id"
@@ -88,6 +89,7 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 		Application application = applicationCommandService.create(
 			10L,
 			20L,
+			100L,
 			30L,
 			LocalDateTime.now(),
 			"create-correlation-id"
@@ -120,6 +122,7 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 		Application application = applicationCommandService.create(
 			10L,
 			20L,
+			100L,
 			30L,
 			LocalDateTime.now(),
 			"correlation-id"

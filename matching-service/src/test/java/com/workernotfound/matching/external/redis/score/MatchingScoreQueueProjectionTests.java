@@ -203,6 +203,7 @@ class MatchingScoreQueueProjectionTests extends IntegrationTestSupport {
 		return applicationCommandService.create(
 			JOB_POST_ID,
 			workerMemberId,
+			100L,
 			admissionId,
 			appliedAt,
 			"create-correlation-id-" + admissionId
