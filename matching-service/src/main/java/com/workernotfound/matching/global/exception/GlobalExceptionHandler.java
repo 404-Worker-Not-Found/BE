@@ -10,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
@@ -41,6 +42,19 @@ public class GlobalExceptionHandler {
 			GlobalErrorCode.VALIDATION_ERROR.getMessage(),
 			request.getRequestURI(),
 			reasons
+		);
+	}
+
+	@ExceptionHandler(HandlerMethodValidationException.class)
+	public ResponseEntity<ApiResponse<Void>> handleMethodValidationException(
+		HandlerMethodValidationException exception,
+		HttpServletRequest request
+	) {
+		return error(
+			GlobalErrorCode.VALIDATION_ERROR,
+			GlobalErrorCode.VALIDATION_ERROR.getMessage(),
+			request.getRequestURI(),
+			null
 		);
 	}
 

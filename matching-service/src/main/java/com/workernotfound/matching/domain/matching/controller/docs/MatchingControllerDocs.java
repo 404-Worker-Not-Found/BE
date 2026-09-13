@@ -11,6 +11,8 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.http.ResponseEntity;
 
 @Tag(name = "Matching", description = "매칭 API")
@@ -35,8 +37,10 @@ public interface MatchingControllerDocs {
 	})
 	ResponseEntity<ApiResponse<MatchingResponse>> createManual(
 		@Parameter(hidden = true) AuthenticatedMember member,
-		@Parameter(description = "공고 ID", required = true) Long jobPostId,
-		@Parameter(description = "지원 ID", required = true) Long applicationId,
-		CreateManualMatchingRequest request
+		@Parameter(description = "공고 ID", required = true)
+		@Positive(message = "공고 ID는 양수여야 합니다.") Long jobPostId,
+		@Parameter(description = "지원 ID", required = true)
+		@Positive(message = "지원 ID는 양수여야 합니다.") Long applicationId,
+		@Valid CreateManualMatchingRequest request
 	);
 }

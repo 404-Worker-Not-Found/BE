@@ -6,7 +6,6 @@ import com.workernotfound.matching.domain.matching.dto.response.MatchingResponse
 import com.workernotfound.matching.domain.matching.service.MatchingApplicationService;
 import com.workernotfound.matching.global.response.ApiResponse;
 import com.workernotfound.matching.global.security.AuthenticatedMember;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -29,7 +28,7 @@ public class MatchingController implements MatchingControllerDocs {
 		@AuthenticationPrincipal AuthenticatedMember member,
 		@PathVariable Long jobPostId,
 		@PathVariable Long applicationId,
-		@Valid @RequestBody CreateManualMatchingRequest request
+		@RequestBody CreateManualMatchingRequest request
 	) {
 		return ResponseEntity.ok(ApiResponse.success(matchingApplicationService.createManual(
 			jobPostId,
