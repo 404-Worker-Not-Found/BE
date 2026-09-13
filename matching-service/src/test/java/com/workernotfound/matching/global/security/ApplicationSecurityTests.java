@@ -12,6 +12,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
@@ -70,6 +72,53 @@ class ApplicationSecurityTests extends IntegrationTestSupport {
 				.param("scoreBatchId", "0")
 				.header("Authorization", "Bearer " + token("OWNER")))
 			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void manualMatchingApiRequiresOwnerRole() throws Exception {
+		mockMvc.perform(post("/api/jobs/10/applications/20/matchings")
+				.contentType("application/json")
+				.content("{}")
+				.header("Authorization", "Bearer " + token("WORKER")))
+			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void manualMatchingApiRequiresAuthentication() throws Exception {
+		mockMvc.perform(post("/api/jobs/10/applications/20/matchings")
+				.contentType("application/json")
+				.content("{}"))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void manualMatchingApiRejectsNonPositiveJobPostId() throws Exception {
+		mockMvc.perform(post("/api/jobs/0/applications/20/matchings")
+				.contentType("application/json")
+				.content("{}")
+				.header("Authorization", "Bearer " + token("OWNER")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("GLOBAL-400-002"));
+	}
+
+	@Test
+	void manualMatchingApiRejectsNonPositiveApplicationId() throws Exception {
+		mockMvc.perform(post("/api/jobs/10/applications/0/matchings")
+				.contentType("application/json")
+				.content("{}")
+				.header("Authorization", "Bearer " + token("OWNER")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("GLOBAL-400-002"));
+	}
+
+	@Test
+	void manualMatchingApiRejectsNonPositiveScoreBatchId() throws Exception {
+		mockMvc.perform(post("/api/jobs/10/applications/20/matchings")
+				.contentType("application/json")
+				.content("{\"scoreBatchId\":0}")
+				.header("Authorization", "Bearer " + token("OWNER")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("GLOBAL-400-002"));
 	}
 
 	private String token(String role) throws Exception {

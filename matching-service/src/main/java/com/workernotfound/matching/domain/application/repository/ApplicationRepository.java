@@ -3,16 +3,22 @@ package com.workernotfound.matching.domain.application.repository;
 import com.workernotfound.matching.domain.application.entity.Application;
 import com.workernotfound.matching.domain.application.entity.enums.ApplicationStatus;
 import com.workernotfound.matching.domain.application.model.OwnerApplicantRow;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
 public interface ApplicationRepository extends JpaRepository<Application, Long> {
 
 	Optional<Application> findByJobPostIdAndWorkerMemberId(Long jobPostId, Long workerMemberId);
+
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select application from Application application where application.id = :applicationId")
+	Optional<Application> findByIdForUpdate(Long applicationId);
 
 	Optional<Application> findByJobApplicationAdmissionId(Long jobApplicationAdmissionId);
 

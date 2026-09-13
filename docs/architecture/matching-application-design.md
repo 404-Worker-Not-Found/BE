@@ -20,6 +20,7 @@
 
 ### 후속 구현
 
+- 모집 자리 예약과 매칭 확정 Saga
 - 점수 공식과 긴급도별 가중치
 - 평점, 업종 경력, 근무 이력, 노쇼 위험도 입력 연동
 - 온라인 상태와 예상 도착 시간 입력 연동
@@ -51,6 +52,29 @@
 | `APPLIED` | 모집 완료 | `REJECTED` | 모집 인원이 모두 확정되었고 해당 지원이 선택되지 않음 |
 
 후보에게 매칭을 제안해 `matchings.status=PENDING`인 동안 지원 상태는 `APPLIED`로 유지한다. 후보가 거절하거나 응답 기한이 만료되면 해당 매칭 시도만 종료한다. 지원은 매칭이 최종 확정될 때 `SELECTED`가 된다.
+
+## 수동 매칭 후보 선택
+
+점주는 `POST /api/jobs/{jobPostId}/applications/{applicationId}/matchings`로 본인 공고의 `APPLIED` 지원자를 선택한다. 요청의 선택적인 `scoreBatchId`에는 지원자 목록에서 사용한 `READY` 점수 묶음 ID를 전달한다. 생략하면 최신 `READY` 묶음을 사용하고 완료된 묶음이 없으면 점수 참조를 `NULL`로 둔다. 선택한 지원자의 `READY` 스냅샷이 없을 때도 점수를 만들거나 0점으로 바꾸지 않고 스냅샷 참조를 `NULL`로 둔다.
+
+후보 선택은 `MANUAL`, `PENDING` 매칭과 최초 상태 이력을 같은 트랜잭션에 저장한다. 동일 지원에 대한 같은 수동 선택 요청은 기존 `PENDING` 매칭을 반환한다. 지원 행의 비관적 잠금과 `matchings.application_id` 유일 제약으로 중복 선택을 방지한다.
+
+`PENDING`은 모집 자리 확정이나 최종 매칭을 의미하지 않는다. 이 단계에서는 `expires_at`을 `NULL`로 두며 후보 응답 제한시간 정책이 확정될 때 채운다. 알바생이 지원을 취소하면 같은 지원 행 잠금 안에서 매칭을 `CANCELED`, 지원을 `CANCELED`로 바꾸고 각각의 이력을 남긴다. 따라서 후보 선택과 지원 취소가 경쟁해도 취소된 지원에 `PENDING` 매칭이 남지 않는다.
+
+### 공고 담당 범위에 요청할 매칭 확정 계약
+
+최종 확정 전에 `job-service`가 공고별 남은 모집 자리를 원자적으로 예약해야 한다. 공개 공고 조회나 `matching-service` 내부 집계로 모집 인원을 판단하지 않는다. 후속 구현에서는 다음 계약을 사용한다.
+
+| 항목 | 값 |
+| --- | --- |
+| Method/Path | `POST /api/jobs/internal/{jobPostId}/matching-seat-reservations` |
+| Header | `X-Internal-Secret: {configured secret}` |
+| Header | `Idempotency-Key: {matchingId}` |
+| Body | `matchingId`, `applicationId`, `workerMemberId` |
+
+`job-service`는 공고 행 잠금 또는 같은 효과의 조건부 갱신으로 공고가 매칭 가능한 상태인지와 `confirmed + reserved < recruitCount`인지 확인한다. 성공 응답에는 `reservationId`, `jobPostId`, `ownerMemberId`, `jobVersion`, `reservedAt`, `expiresAt`을 포함한다. 예약은 `RESERVED`, `CONSUMED`, `RELEASED`, `EXPIRED` 상태를 보관하고 같은 멱등 키에는 같은 결과를 반환한다. 확정 Saga 완료 시 예약을 소비하고, 실패 또는 취소 시 같은 멱등 키로 해제한다.
+
+이 계약과 payment/work/chat 서비스가 준비되면 `matching-service`가 확정 Saga를 조정하고, 모든 단계 성공 뒤에만 매칭을 `CONFIRMED`, 지원을 `SELECTED`로 변경한다. 그전의 `PENDING` 매칭은 최종 채용 완료로 표시하지 않는다.
 
 초기 구현에서는 한 알바생이 같은 공고에 한 번만 지원할 수 있다. 취소한 지원도 기록으로 보존하며 재지원할 수 없다. 따라서 `applications(job_post_id, worker_member_id)`에 유일 제약을 둔다. 재지원을 허용하는 정책으로 바뀌면 기존 레코드를 재사용하지 않고 지원 회차와 활성 지원 유일성 설계를 별도로 추가한다.
 
@@ -210,6 +234,12 @@
 
 외부 입력이 준비되면 기존 배치나 스냅샷을 수정하지 않고 새 정책 버전으로 새 배치를 계산한다. 긴급도별 가중치와 다요소 총점 공식은 필요한 공고·회원·근무 계약과 함께 후속 정책으로 추가한다.
 
+### `matchings`와 `matching_status_histories`
+
+`matchings`는 지원별 매칭 시도와 현재 상태를 저장한다. 한 지원에는 매칭 레코드를 하나만 만들며 자동·폴백 재시도 세부 이력은 후속 시도 모델로 분리한다. 공고·점주·알바생 ID는 선택 시점 스냅샷인 외부 ID이고 물리 FK를 만들지 않는다. 선택 근거가 있는 경우 점수 묶음과 점수 스냅샷을 서비스 내부 FK로 참조하며, 점수가 없으면 두 값 모두 또는 스냅샷만 `NULL`일 수 있다.
+
+`matching_status_histories`는 최초 `PENDING`과 이후 모든 상태 변경을 지원 상태 이력과 같은 actor, reason, revision 방식으로 기록한다. 매칭의 `version`은 동시성 제어, `revision`은 상태 이력과 후속 이벤트 순서에 사용한다.
+
 ## Redis와 복구
 
 - MySQL의 `applications`가 최종 기준이다.
@@ -263,5 +293,7 @@
 3. 회원·공고 검증 계약, 지원 생성·조회·취소 API
 4. Outbox와 Redis 대기열, 장애 복구
 5. 점수 스냅샷과 지원자 정렬
-6. 자동 매칭과 폴백 매칭
-7. 실시간 상태 갱신
+6. 수동 매칭 후보 선택과 상태 이력
+7. 모집 자리 예약과 매칭 확정 Saga
+8. 자동 매칭과 폴백 매칭
+9. 실시간 상태 갱신
