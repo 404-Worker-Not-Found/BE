@@ -121,6 +121,54 @@ class ApplicationSecurityTests extends IntegrationTestSupport {
 			.andExpect(jsonPath("$.code").value("GLOBAL-400-002"));
 	}
 
+	@Test
+	void workerMatchingApiRejectsOwnerRole() throws Exception {
+		mockMvc.perform(get("/api/matchings")
+				.header("Authorization", "Bearer " + token("OWNER")))
+			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void workerMatchingApiAllowsWorkerRole() throws Exception {
+		mockMvc.perform(get("/api/matchings")
+				.header("Authorization", "Bearer " + token("WORKER")))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void workerMatchingApiRejectsNonPositiveMatchingId() throws Exception {
+		mockMvc.perform(get("/api/matchings/0")
+				.header("Authorization", "Bearer " + token("WORKER")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("GLOBAL-400-002"));
+	}
+
+	@Test
+	void workerMatchingApiRejectsInvalidPage() throws Exception {
+		mockMvc.perform(get("/api/matchings")
+				.param("page", "-1")
+				.header("Authorization", "Bearer " + token("WORKER")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("GLOBAL-400-002"));
+	}
+
+	@Test
+	void workerMatchingApiAcceptsMaximumPageSize() throws Exception {
+		mockMvc.perform(get("/api/matchings")
+				.param("size", "100")
+				.header("Authorization", "Bearer " + token("WORKER")))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void workerMatchingApiRejectsPageSizeOverMaximum() throws Exception {
+		mockMvc.perform(get("/api/matchings")
+				.param("size", "101")
+				.header("Authorization", "Bearer " + token("WORKER")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("GLOBAL-400-002"));
+	}
+
 	private String token(String role) throws Exception {
 		String header = encode("{\"alg\":\"HS256\",\"typ\":\"JWT\"}");
 		String payload = encode("{\"authAccountId\":1,\"memberId\":20,\"role\":\"%s\",\"exp\":%d}"

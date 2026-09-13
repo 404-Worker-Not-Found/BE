@@ -5,6 +5,7 @@ import com.workernotfound.matching.domain.application.entity.enums.ApplicationSt
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.application.repository.ApplicationStatusHistoryRepository;
 import com.workernotfound.matching.domain.application.service.ApplicationCommandService;
+import com.workernotfound.matching.domain.matching.entity.enums.MatchingStatus;
 import com.workernotfound.matching.domain.matching.repository.MatchingRepository;
 import com.workernotfound.matching.domain.matching.repository.MatchingStatusHistoryRepository;
 import com.workernotfound.matching.domain.outbox.repository.OutboxEventRepository;
@@ -29,6 +30,9 @@ class ConcurrentMatchingTests extends IntegrationTestSupport {
 
 	@Autowired
 	private MatchingCommandService matchingCommandService;
+
+	@Autowired
+	private MatchingDeclineService matchingDeclineService;
 
 	@Autowired
 	private ApplicationCommandService applicationCommandService;
@@ -92,7 +96,35 @@ class ConcurrentMatchingTests extends IntegrationTestSupport {
 		Application latest = applicationRepository.findById(application.getId()).orElseThrow();
 		assertThat(latest.getStatus()).isEqualTo(ApplicationStatus.CANCELED);
 		matchingRepository.findByApplicationId(application.getId()).ifPresent(matching ->
-			assertThat(matching.getStatus()).isEqualTo(com.workernotfound.matching.domain.matching.entity.enums.MatchingStatus.CANCELED));
+			assertThat(matching.getStatus()).isEqualTo(MatchingStatus.CANCELED));
+	}
+
+	@Test
+	void declineAndCancellationCannotLeavePendingMatchingForCanceledApplication() throws Exception {
+		Application application = applicationRepository.saveAndFlush(Application.builder()
+			.jobPostId(10L)
+			.workerMemberId(20L)
+			.ownerMemberId(100L)
+			.jobApplicationAdmissionId(30L)
+			.appliedAt(LocalDateTime.now())
+			.build());
+		Long matchingId = matchingCommandService.createManual(10L, application.getId(), 100L, null).getId();
+		CountDownLatch ready = new CountDownLatch(2);
+		CountDownLatch start = new CountDownLatch(1);
+
+		Future<Boolean> decline = executorService.submit(() -> runTogether(ready, start, () ->
+			matchingDeclineService.decline(matchingId, 20L)));
+		Future<Boolean> cancellation = executorService.submit(() -> runTogether(ready, start, () ->
+			applicationCommandService.cancel(application.getId(), 20L, "cancel-command")));
+		assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+		start.countDown();
+
+		decline.get(10, TimeUnit.SECONDS);
+		assertThat(cancellation.get(10, TimeUnit.SECONDS)).isTrue();
+		assertThat(applicationRepository.findById(application.getId()).orElseThrow().getStatus())
+			.isEqualTo(ApplicationStatus.CANCELED);
+		assertThat(matchingRepository.findById(matchingId).orElseThrow().getStatus())
+			.isIn(MatchingStatus.DECLINED, MatchingStatus.CANCELED);
 	}
 
 	private boolean runTogether(CountDownLatch ready, CountDownLatch start, Runnable command) {
