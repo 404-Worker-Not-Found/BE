@@ -1,7 +1,10 @@
 package com.workernotfound.member.domain.member.service;
 
 import com.workernotfound.member.domain.member.entity.Member;
+import com.workernotfound.member.domain.member.entity.enums.MemberRole;
 import com.workernotfound.member.domain.member.entity.enums.MemberStatus;
+import java.util.Collection;
+import java.util.List;
 import com.workernotfound.member.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,5 +25,13 @@ public class MemberFindService {
 	public Member findActiveMember(Long memberId) {
 		return memberRepository.findByIdAndStatus(memberId, MemberStatus.ACTIVE)
 			.orElseThrow(() -> new IllegalArgumentException("활성 회원을 찾을 수 없습니다."));
+	}
+
+	public List<Member> findActiveWorkers(Collection<Long> memberIds) {
+		return memberRepository.findByIdInAndRoleAndStatus(
+			memberIds,
+			MemberRole.WORKER,
+			MemberStatus.ACTIVE
+		);
 	}
 }

@@ -85,6 +85,10 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 
 		assertThat(response.status()).isEqualTo(ApplicationStatus.APPLIED);
 		assertThat(response.revision()).isEqualTo(1L);
+		assertThat(applicationRepository.findById(response.applicationId()))
+			.get()
+			.extracting(application -> application.getOwnerMemberId())
+			.isEqualTo(100L);
 		List<ApplicationStatusHistory> histories = historyRepository
 			.findByApplicationIdOrderByRevisionAsc(response.applicationId());
 		assertThat(histories).hasSize(1);

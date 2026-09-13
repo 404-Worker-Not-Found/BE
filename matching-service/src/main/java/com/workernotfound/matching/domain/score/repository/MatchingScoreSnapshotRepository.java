@@ -5,6 +5,7 @@ import com.workernotfound.matching.domain.score.entity.MatchingScoreSnapshot;
 import com.workernotfound.matching.domain.score.entity.enums.ScoreBatchStatus;
 import com.workernotfound.matching.domain.score.entity.enums.ScoreCalculationStatus;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
@@ -38,5 +39,10 @@ public interface MatchingScoreSnapshotRepository extends JpaRepository<MatchingS
 		Long scoreBatchId,
 		ScoreBatchStatus batchStatus,
 		ScoreCalculationStatus calculationStatus
+	);
+
+	Optional<MatchingScoreSnapshot> findByScoreBatchIdAndApplicationId(
+		Long scoreBatchId,
+		Long applicationId
 	);
 }

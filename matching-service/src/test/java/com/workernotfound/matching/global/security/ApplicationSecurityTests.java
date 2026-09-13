@@ -50,6 +50,28 @@ class ApplicationSecurityTests extends IntegrationTestSupport {
 			.andExpect(status().isBadRequest());
 	}
 
+	@Test
+	void ownerApplicantApiAllowsOwnerRole() throws Exception {
+		mockMvc.perform(get("/api/jobs/10/applications")
+				.header("Authorization", "Bearer " + token("OWNER")))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void ownerApplicantApiRejectsWorkerRole() throws Exception {
+		mockMvc.perform(get("/api/jobs/10/applications")
+				.header("Authorization", "Bearer " + token("WORKER")))
+			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void ownerApplicantListRejectsInvalidScoreBatchId() throws Exception {
+		mockMvc.perform(get("/api/jobs/10/applications")
+				.param("scoreBatchId", "0")
+				.header("Authorization", "Bearer " + token("OWNER")))
+			.andExpect(status().isBadRequest());
+	}
+
 	private String token(String role) throws Exception {
 		String header = encode("{\"alg\":\"HS256\",\"typ\":\"JWT\"}");
 		String payload = encode("{\"authAccountId\":1,\"memberId\":20,\"role\":\"%s\",\"exp\":%d}"

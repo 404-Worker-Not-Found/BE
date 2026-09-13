@@ -11,4 +11,10 @@ public interface MatchingScoreBatchRepository extends JpaRepository<MatchingScor
 		Long jobPostId,
 		ScoreBatchStatus status
 	);
+
+	Optional<MatchingScoreBatch> findByIdAndJobPostIdAndStatus(
+		Long id,
+		Long jobPostId,
+		ScoreBatchStatus status
+	);
 }

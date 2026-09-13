@@ -2,8 +2,10 @@ package com.workernotfound.member.domain.member.controller.docs;
 
 import com.workernotfound.member.domain.member.dto.request.CreateOwnerMemberRequest;
 import com.workernotfound.member.domain.member.dto.request.CreateWorkerMemberRequest;
+import com.workernotfound.member.domain.member.dto.request.WorkerSummaryRequest;
 import com.workernotfound.member.domain.member.dto.response.CreateMemberResponse;
 import com.workernotfound.member.domain.member.dto.response.MemberInternalResponse;
+import com.workernotfound.member.domain.member.dto.response.WorkerSummaryResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -12,6 +14,7 @@ import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
 
 @Tag(name = "Member Internal", description = "서비스 간 회원 내부 API")
@@ -67,6 +70,24 @@ public interface MemberInternalControllerDocs {
 	ResponseEntity<com.workernotfound.member.global.response.ApiResponse<MemberInternalResponse>> getMemberInternal(
 		@Parameter(description = "회원 ID", required = true)
 		Long memberId
+	);
+
+	@Operation(summary = "지원자 최소 정보 일괄 조회", description = "matching-service에서 활성 WORKER의 이름만 일괄 조회합니다.")
+	@ApiResponses({
+		@ApiResponse(
+			responseCode = "200",
+			description = "지원자 최소 정보 조회 성공",
+			useReturnTypeSchema = true
+		),
+		@ApiResponse(responseCode = "400", description = "잘못된 회원 ID 목록", content = @Content)
+	})
+	ResponseEntity<com.workernotfound.member.global.response.ApiResponse<List<WorkerSummaryResponse>>> getWorkerSummaries(
+		@RequestBody(
+			description = "조회할 WORKER 회원 ID 목록",
+			required = true,
+			content = @Content(schema = @Schema(implementation = WorkerSummaryRequest.class))
+		)
+		WorkerSummaryRequest request
 	);
 
 	@Operation(summary = "회원가입 보상용 회원 삭제", description = "auth-service 회원가입 실패 보상 처리로 생성된 회원을 삭제합니다.")

@@ -54,6 +54,7 @@ public class ApplicationApplicationService {
 			return ApplicationResponse.from(applicationCommandService.create(
 				admission.jobPostId(),
 				workerMemberId,
+				admission.ownerMemberId(),
 				admission.admissionId(),
 				admission.admittedAt(),
 				correlationId
@@ -136,6 +137,7 @@ public class ApplicationApplicationService {
 	) {
 		if (admission.admissionId() == null
 			|| !jobPostId.equals(admission.jobPostId())
+			|| admission.ownerMemberId() == null
 			|| admission.admittedAt() == null
 			|| admission.expiresAt() == null) {
 			throw new BusinessException(ApplicationErrorCode.DEPENDENCY_SERVICE_UNAVAILABLE);

@@ -80,9 +80,11 @@
 
 현재 `GET /api/members/internal/{memberId}`에서 `memberId`, `role`, `status`를 확인할 수 있다. 첫 지원 구현은 이 계약으로 `ACTIVE`와 `WORKER`를 검증한다.
 
+점주용 지원자 조회는 `POST /api/members/internal/workers/summaries`에 회원 ID를 최대 100개까지 전달해 활성 `WORKER`의 `memberId`와 `name`만 일괄 조회한다. 응답에 없는 회원은 지원·점수 데이터를 숨기지 않고 이름을 `NULL`로 표시한다. 이메일, 휴대전화, 위치는 이 계약에서 제공하지 않는다.
+
 `matching-service`는 내부 호출마다 `X-Internal-Secret` 헤더를 보낸다. 양쪽 서비스는 `INTERNAL_API_SECRET` 환경 변수로 같은 값을 주입하고 코드, 로그, 저장소에 값을 남기지 않는다. 현재 `member-service`는 헤더가 없거나 값이 다르면 HTTP 401과 `GLOBAL-401-001` 응답을 반환한다. `matching-service`는 이 응답을 회원 인증 실패로 바꾸지 않고 지원 저장을 중단한 뒤 외부에는 의존 서비스 오류로 응답한다. 설정이 고쳐지기 전까지 같은 호출을 무의미하게 재시도하지 않는다.
 
-알바생 프로필, 평점, 경력, 근무·노쇼 요약을 지원자 목록에 표시하려면 별도의 내부 조회 계약이 필요하다. 이메일, 휴대전화, 정밀 위치 등 지원자 평가에 필요하지 않은 개인정보는 반환하지 않는다.
+평점, 경력, 근무·노쇼 요약을 지원자 목록에 표시하려면 각 원본 소유 서비스의 별도 내부 조회 계약이 필요하다. 이메일, 휴대전화, 정밀 위치 등 지원자 평가에 필요하지 않은 개인정보는 반환하지 않는다.
 
 ### 공고 담당 범위에 요청할 계약
 
@@ -144,10 +146,14 @@
 
 - `UNIQUE(job_post_id, worker_member_id)`
 - `UNIQUE(job_application_admission_id)`
+- 지원 승인 응답의 `owner_member_id`를 EXT 스냅샷으로 저장하고 점주 조회 범위를 제한한다.
 - `status`는 `VARCHAR(20)`으로 저장하고 `APPLIED`, `CANCELED`, `SELECTED`, `REJECTED`만 허용
 - 알바생의 지원 내역: `(worker_member_id, applied_at, id)`
 - 공고의 지원자 목록: `(job_post_id, status, applied_at, id)`
+- 점주의 공고별 지원자 목록: `(owner_member_id, job_post_id, status)`
 - 낙관적 잠금을 위한 `version`과 이벤트 순서를 위한 `revision`
+
+`owner_member_id`는 V4 이전 지원을 안전하게 보존하기 위해 데이터베이스에서 `NULL`을 허용한다. 새 지원은 승인 응답에 소유자 ID가 없으면 저장하지 않는다. 기존 `NULL` 행은 공고 소유권 내부 계약이 준비되면 `job-service`의 원본 값으로 보정하며, 보정 전에는 점주 조회에 노출하지 않는다.
 
 ### `application_status_histories`
 
@@ -222,8 +228,13 @@
 ## 조회와 권한
 
 - 알바생은 자신의 지원만 조회하고 취소할 수 있다.
-- 점주는 자신이 소유한 공고의 지원자만 조회할 수 있다.
-- 지원자 목록은 점수 계산 시각과 정책 버전을 함께 반환한다.
+- `OWNER`는 `GET /api/jobs/{jobPostId}/applications`와 `GET /api/jobs/{jobPostId}/applications/{applicationId}`로 지원자 목록과 상세를 조회한다.
+- 점주 조회는 지원 접수 승인에서 보존한 `owner_member_id`로 제한한다. 해당 공고의 지원 원장이 있으면 점수 묶음을 읽기 전에 소유자 일치 여부부터 검증해 다른 점주에게 배치 메타데이터도 노출하지 않는다. 다른 점주의 상세 조회도 권한 오류로 처리한다.
+- 지원자 목록은 최신 `READY` 점수 묶음을 기본으로 사용하고 점수 묶음 ID, 계산 완료 시각, 정책·모델 버전을 함께 반환한다.
+- 다음 페이지에서 응답받은 `scoreBatchId`를 요청하면 같은 불변 점수 묶음으로 정렬을 고정한다. 요청한 묶음이 해당 공고의 `READY` 묶음이 아니면 조회를 거부한다.
+- 같은 묶음의 `READY` 스냅샷은 `total_score DESC, applied_at ASC, application_id ASC`로 먼저 반환한다. `FAILED` 또는 스냅샷이 없는 현재 지원은 목록에서 누락하지 않고 뒤에 배치하며 순위와 점수는 `NULL`로 반환한다.
+- 지원자 이름은 member-service 최소 정보 계약으로 가져온다. 아직 없는 평점·경력·노쇼·활동·도착 정보는 요소 점수와 입력값을 `NULL`로 유지하고 `missingInputs`로 구분한다.
+- 지원 이력이 없는 공고는 요청에 점수 묶음 ID가 있더라도 묶음을 조회하지 않고 배치 메타데이터가 없는 빈 목록으로 응답한다. 공고 존재 여부와 현재 소유권까지 구분하는 내부 계약이 생기면 이 경우도 `job-service` 원본으로 검증한다.
 - 정확한 현재 순위와 매칭 확률의 공개 범위는 별도 제품 정책으로 결정한다.
 - 지원자 목록의 변동이 잦으므로 점수 묶음을 고정하거나 커서 기반 페이지네이션을 사용한다.
 

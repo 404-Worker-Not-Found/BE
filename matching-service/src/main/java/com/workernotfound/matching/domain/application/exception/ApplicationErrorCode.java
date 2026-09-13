@@ -11,6 +11,7 @@ public enum ApplicationErrorCode implements ErrorCode {
 
 	APPLICATION_NOT_FOUND("APPLICATION-404-001", "존재하지 않는 지원입니다.", HttpStatus.NOT_FOUND),
 	JOB_NOT_FOUND("APPLICATION-404-002", "존재하지 않는 공고입니다.", HttpStatus.NOT_FOUND),
+	SCORE_BATCH_NOT_FOUND("APPLICATION-404-003", "조회할 수 있는 점수 묶음이 아닙니다.", HttpStatus.NOT_FOUND),
 	APPLICATION_FORBIDDEN("APPLICATION-403-001", "해당 지원에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
 	MEMBER_NOT_ELIGIBLE("APPLICATION-403-002", "지원할 수 있는 알바생 회원이 아닙니다.", HttpStatus.FORBIDDEN),
 	REAPPLICATION_NOT_ALLOWED("APPLICATION-409-001", "취소되거나 종료된 지원은 다시 접수할 수 없습니다.", HttpStatus.CONFLICT),

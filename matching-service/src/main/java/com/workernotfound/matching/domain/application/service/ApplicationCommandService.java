@@ -32,6 +32,7 @@ public class ApplicationCommandService {
 	public Application create(
 		Long jobPostId,
 		Long workerMemberId,
+		Long ownerMemberId,
 		Long admissionId,
 		LocalDateTime appliedAt,
 		String correlationId
@@ -39,6 +40,7 @@ public class ApplicationCommandService {
 		Application application = Application.builder()
 			.jobPostId(jobPostId)
 			.workerMemberId(workerMemberId)
+			.ownerMemberId(ownerMemberId)
 			.jobApplicationAdmissionId(admissionId)
 			.appliedAt(appliedAt)
 			.build();

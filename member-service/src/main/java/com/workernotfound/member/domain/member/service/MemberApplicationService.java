@@ -12,6 +12,7 @@ import com.workernotfound.member.domain.member.dto.response.MyMemberResponse;
 import com.workernotfound.member.domain.member.dto.response.OwnerProfileResponse;
 import com.workernotfound.member.domain.member.dto.response.WorkerAvailableTimeResponse;
 import com.workernotfound.member.domain.member.dto.response.WorkerProfileResponse;
+import com.workernotfound.member.domain.member.dto.response.WorkerSummaryResponse;
 import com.workernotfound.member.domain.member.entity.Member;
 import com.workernotfound.member.domain.member.entity.enums.MemberRole;
 import com.workernotfound.member.domain.owner.entity.OwnerProfile;
@@ -73,6 +74,13 @@ public class MemberApplicationService {
 	public MemberInternalResponse getMemberInternal(Long memberId) {
 		Member member = memberFindService.findMember(memberId);
 		return toMemberInternalResponse(member);
+	}
+
+	@Transactional(readOnly = true)
+	public List<WorkerSummaryResponse> getWorkerSummaries(List<Long> memberIds) {
+		return memberFindService.findActiveWorkers(memberIds).stream()
+			.map(member -> new WorkerSummaryResponse(member.getId(), member.getName()))
+			.toList();
 	}
 
 	@Transactional

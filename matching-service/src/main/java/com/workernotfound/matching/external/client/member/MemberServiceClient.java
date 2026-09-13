@@ -4,8 +4,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workernotfound.matching.external.client.member.dto.MemberInternalResponse;
+import com.workernotfound.matching.external.client.member.dto.WorkerSummaryRequest;
+import com.workernotfound.matching.external.client.member.dto.WorkerSummaryResponse;
 import com.workernotfound.matching.global.response.ApiResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatusCode;
@@ -17,6 +20,9 @@ import org.springframework.web.client.RestClientException;
 public class MemberServiceClient {
 
 	private static final ParameterizedTypeReference<ApiResponse<MemberInternalResponse>> RESPONSE_TYPE =
+		new ParameterizedTypeReference<>() {
+		};
+	private static final ParameterizedTypeReference<ApiResponse<List<WorkerSummaryResponse>>> SUMMARY_RESPONSE_TYPE =
 		new ParameterizedTypeReference<>() {
 		};
 
@@ -43,6 +49,26 @@ public class MemberServiceClient {
 				.body(RESPONSE_TYPE);
 			if (response == null || !response.success() || response.data() == null) {
 				throw new MemberServiceClientException("member-service 회원 조회 응답이 올바르지 않습니다.");
+			}
+			return response.data();
+		} catch (RestClientException exception) {
+			throw new MemberServiceClientException(exception);
+		}
+	}
+
+	public List<WorkerSummaryResponse> getWorkerSummaries(List<Long> memberIds) {
+		try {
+			ApiResponse<List<WorkerSummaryResponse>> response = memberServiceRestClient.post()
+				.uri("/api/members/internal/workers/summaries")
+				.body(new WorkerSummaryRequest(memberIds))
+				.retrieve()
+				.onStatus(HttpStatusCode::isError, (request, clientResponse) -> {
+					String body = new String(clientResponse.getBody().readAllBytes(), StandardCharsets.UTF_8);
+					throw toClientException(clientResponse.getStatusCode(), body);
+				})
+				.body(SUMMARY_RESPONSE_TYPE);
+			if (response == null || !response.success() || response.data() == null) {
+				throw new MemberServiceClientException("member-service 지원자 요약 응답이 올바르지 않습니다.");
 			}
 			return response.data();
 		} catch (RestClientException exception) {

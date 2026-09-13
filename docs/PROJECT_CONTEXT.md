@@ -132,7 +132,10 @@ Current matching application implementation:
 - Versioned score batch and application score snapshot persistence is implemented with `CALCULATING`/`READY`/`FAILED` lifecycle states. Missing external inputs remain nullable and are distinguished through `missing_inputs` instead of fabricated zero scores.
 - The initial `application-time-v1` policy calculates a relative score from deterministic application order and creates a new immutable batch on recalculation. Ranked MySQL reads use total score, application time, and application ID order.
 - The latest current-policy `READY` score batch is projected into a batch-specific Redis Sorted Set with `scoreBatchId` and `policyVersion` metadata. Replacing a ranking atomically removes the previous batch key, and a per-job fencing token rejects stale replacements after a distributed lock lease expires.
-- Multi-factor scoring, input adapters, and the owner-facing ranked applicant API remain later implementation units. Missing rating, experience, no-show, online-status, and ETA inputs must be connected when their owning service contracts become available.
+- JWT-authenticated `OWNER` members can query their own job's active applicants through list and detail APIs. The list pins an immutable `READY` score batch across pages, returns scored applicants first, and retains failed or unscored applicants with nullable score fields.
+- Application admissions now preserve the job owner member ID as an external snapshot for applicant-query isolation. The database column stays nullable only for pre-migration rows; those rows remain hidden from owner queries until a job-service ownership contract supports backfill.
+- `member-service` provides a batch internal contract that returns only active worker IDs and names for applicant display; missing summaries remain nullable without exposing email, phone, or location.
+- Multi-factor scoring and its input adapters remain later implementation units. Missing rating, experience, no-show, online-status, and ETA inputs must be connected when their owning service contracts become available.
 
 The current scaffold matches the decided technology baseline in `docs/agent/decisions.md`.
 

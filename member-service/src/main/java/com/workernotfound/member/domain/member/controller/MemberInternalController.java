@@ -3,11 +3,14 @@ package com.workernotfound.member.domain.member.controller;
 import com.workernotfound.member.domain.member.controller.docs.MemberInternalControllerDocs;
 import com.workernotfound.member.domain.member.dto.request.CreateOwnerMemberRequest;
 import com.workernotfound.member.domain.member.dto.request.CreateWorkerMemberRequest;
+import com.workernotfound.member.domain.member.dto.request.WorkerSummaryRequest;
 import com.workernotfound.member.domain.member.dto.response.CreateMemberResponse;
 import com.workernotfound.member.domain.member.dto.response.MemberInternalResponse;
+import com.workernotfound.member.domain.member.dto.response.WorkerSummaryResponse;
 import com.workernotfound.member.domain.member.service.MemberApplicationService;
 import com.workernotfound.member.global.response.ApiResponse;
 import jakarta.validation.Valid;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -50,6 +53,16 @@ public class MemberInternalController implements MemberInternalControllerDocs {
 		@PathVariable Long memberId
 	) {
 		return ResponseEntity.ok(ApiResponse.success(memberApplicationService.getMemberInternal(memberId)));
+	}
+
+	@Override
+	@PostMapping("/workers/summaries")
+	public ResponseEntity<ApiResponse<List<WorkerSummaryResponse>>> getWorkerSummaries(
+		@Valid @RequestBody WorkerSummaryRequest request
+	) {
+		return ResponseEntity.ok(ApiResponse.success(
+			memberApplicationService.getWorkerSummaries(request.memberIds())
+		));
 	}
 
 	@Override

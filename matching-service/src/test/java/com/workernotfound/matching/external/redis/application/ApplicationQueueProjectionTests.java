@@ -121,6 +121,7 @@ class ApplicationQueueProjectionTests extends IntegrationTestSupport {
 		return applicationCommandService.create(
 			jobPostId,
 			workerMemberId,
+			100L,
 			admissionId,
 			LocalDateTime.now(),
 			"create-correlation-id-" + admissionId
