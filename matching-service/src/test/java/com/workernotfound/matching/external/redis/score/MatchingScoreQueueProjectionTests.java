@@ -94,15 +94,15 @@ class MatchingScoreQueueProjectionTests extends IntegrationTestSupport {
 
 	@Test
 	void recalculatesRemainingApplicationsAfterCancellation() {
-		Application first = createApplication(20L, 30L, BASE_TIME);
-		Application canceled = createApplication(21L, 31L, BASE_TIME.plusMinutes(1));
+		Application canceled = createApplication(20L, 30L, BASE_TIME);
+		Application remaining = createApplication(21L, 31L, BASE_TIME.plusMinutes(1));
 
-		applicationCommandService.cancel(canceled.getId(), 21L, "cancel-correlation-id");
+		applicationCommandService.cancel(canceled.getId(), 20L, "cancel-correlation-id");
 
 		MatchingScoreQueueMetadata metadata = scoreQueueRepository.findMetadata(JOB_POST_ID)
 			.orElseThrow();
 		assertThat(scoreQueueRepository.findScores(JOB_POST_ID, metadata.scoreBatchId()))
-			.containsExactly(new RankedApplicationScore(first.getId(), new BigDecimal("100.0")));
+			.containsExactly(new RankedApplicationScore(remaining.getId(), new BigDecimal("100.0")));
 	}
 
 	@Test

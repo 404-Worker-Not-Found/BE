@@ -26,4 +26,17 @@ public interface MatchingScoreSnapshotRepository extends JpaRepository<MatchingS
 		ScoreCalculationStatus calculationStatus,
 		ApplicationStatus applicationStatus
 	);
+
+	@Query("""
+		select snapshot.application.id
+		from MatchingScoreSnapshot snapshot
+		where snapshot.scoreBatch.id = :scoreBatchId
+			and snapshot.scoreBatch.status = :batchStatus
+			and snapshot.calculationStatus = :calculationStatus
+		""")
+	List<Long> findApplicationIdsByScoreBatchId(
+		Long scoreBatchId,
+		ScoreBatchStatus batchStatus,
+		ScoreCalculationStatus calculationStatus
+	);
 }

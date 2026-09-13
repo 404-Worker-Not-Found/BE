@@ -3,13 +3,11 @@ package com.workernotfound.matching.domain.score.service;
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.score.entity.MatchingScoreBatch;
 import com.workernotfound.matching.domain.score.model.MatchingScoreQueueProjection;
-import com.workernotfound.matching.domain.score.model.RankedApplicationScore;
 import com.workernotfound.matching.domain.score.policy.ApplicationTimeScorePolicy;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -49,9 +47,9 @@ public class MatchingScoreQueuePreparationService {
 		if (!ApplicationTimeScorePolicy.VERSION.equals(batch.getPolicyVersion())) {
 			return false;
 		}
-		Set<Long> scoredApplicationIds = findService.findRankedScores(batch.getId()).stream()
-			.map(RankedApplicationScore::applicationId)
-			.collect(Collectors.toSet());
+		Set<Long> scoredApplicationIds = new HashSet<>(
+			findService.findReadyApplicationIds(batch.getId())
+		);
 		return new HashSet<>(activeApplicationIds).equals(scoredApplicationIds);
 	}
 

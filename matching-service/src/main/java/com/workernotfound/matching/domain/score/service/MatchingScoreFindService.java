@@ -46,4 +46,12 @@ public class MatchingScoreFindService {
 			))
 			.toList();
 	}
+
+	public List<Long> findReadyApplicationIds(Long scoreBatchId) {
+		return snapshotRepository.findApplicationIdsByScoreBatchId(
+			scoreBatchId,
+			ScoreBatchStatus.READY,
+			ScoreCalculationStatus.READY
+		);
+	}
 }
