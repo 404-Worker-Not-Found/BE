@@ -18,14 +18,17 @@ public class ApplicationQueueRecoveryService {
 
 	public void recover() {
 		applicationRepository.findDistinctJobPostIds()
-			.forEach(jobPostId -> lockManager.execute(jobPostId, () -> recoverJob(jobPostId)));
+			.forEach(jobPostId -> lockManager.execute(
+				jobPostId,
+				fenceToken -> recoverJob(jobPostId, fenceToken)
+			));
 	}
 
-	private void recoverJob(Long jobPostId) {
+	private void recoverJob(Long jobPostId, Long fenceToken) {
 		applicationQueueRepository.replace(
 			jobPostId,
 			applicationRepository.findAppliedIdsByJobPostId(jobPostId)
 		);
-		matchingScoreQueueService.synchronize(jobPostId);
+		matchingScoreQueueService.synchronize(jobPostId, fenceToken);
 	}
 }

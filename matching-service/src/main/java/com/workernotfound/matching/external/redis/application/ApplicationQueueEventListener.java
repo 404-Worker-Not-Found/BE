@@ -21,7 +21,7 @@ public class ApplicationQueueEventListener {
 	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 	public void updateQueue(ApplicationEvent event) {
 		try {
-			lockManager.execute(event.jobPostId(), () -> update(event));
+			lockManager.execute(event.jobPostId(), fenceToken -> update(event, fenceToken));
 		} catch (RuntimeException exception) {
 			log.warn(
 				"지원 대기열 반영에 실패했습니다. applicationId={}, eventType={}",
@@ -32,12 +32,12 @@ public class ApplicationQueueEventListener {
 		}
 	}
 
-	private void update(ApplicationEvent event) {
+	private void update(ApplicationEvent event, Long fenceToken) {
 		if (ApplicationEventType.APPLICATION_SUBMITTED.value().equals(event.eventType())) {
 			applicationQueueRepository.add(event.jobPostId(), event.applicationId());
 		} else if (ApplicationEventType.APPLICATION_CANCELED.value().equals(event.eventType())) {
 			applicationQueueRepository.remove(event.jobPostId(), event.applicationId());
 		}
-		matchingScoreQueueService.synchronize(event.jobPostId());
+		matchingScoreQueueService.synchronize(event.jobPostId(), fenceToken);
 	}
 }

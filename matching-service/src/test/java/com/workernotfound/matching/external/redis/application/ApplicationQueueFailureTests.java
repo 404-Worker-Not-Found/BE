@@ -113,7 +113,8 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 				eq(10L),
 				anyLong(),
 				eq(ApplicationTimeScorePolicy.VERSION),
-				anyList()
+				anyList(),
+				anyLong()
 			);
 
 		Application application = applicationCommandService.create(
@@ -128,5 +129,7 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 		assertThat(historyRepository.findByApplicationIdOrderByRevisionAsc(application.getId()))
 			.hasSize(1);
 		assertThat(outboxEventRepository.count()).isEqualTo(1L);
+		assertThat(scoreBatchRepository.count()).isEqualTo(1L);
+		assertThat(scoreSnapshotRepository.count()).isEqualTo(1L);
 	}
 }

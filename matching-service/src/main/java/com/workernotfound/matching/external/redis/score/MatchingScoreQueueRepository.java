@@ -24,23 +24,33 @@ public class MatchingScoreQueueRepository {
 	private static final String BATCH_ID_FIELD = "scoreBatchId";
 	private static final String POLICY_VERSION_FIELD = "policyVersion";
 	private static final DefaultRedisScript<Long> REPLACE_SCRIPT = new DefaultRedisScript<>("""
+		local currentFenceToken = redis.call('HGET', KEYS[1], 'fenceToken')
+		if currentFenceToken and tonumber(currentFenceToken) > tonumber(ARGV[1]) then
+			return -1
+		end
 		local previousBatchId = redis.call('HGET', KEYS[1], 'scoreBatchId')
 		if previousBatchId then
 			redis.call('DEL', KEYS[2] .. previousBatchId)
 		end
 		redis.call('DEL', KEYS[3])
-		for index = 3, #ARGV, 2 do
+		for index = 4, #ARGV, 2 do
 			redis.call('ZADD', KEYS[3], ARGV[index + 1], ARGV[index])
 		end
-		redis.call('HSET', KEYS[1], 'scoreBatchId', ARGV[1], 'policyVersion', ARGV[2])
-		return (#ARGV - 2) / 2
+		redis.call('HSET', KEYS[1], 'fenceToken', ARGV[1], 'scoreBatchId', ARGV[2], 'policyVersion', ARGV[3])
+		return (#ARGV - 3) / 2
 		""", Long.class);
 	private static final DefaultRedisScript<Long> CLEAR_SCRIPT = new DefaultRedisScript<>("""
+		local currentFenceToken = redis.call('HGET', KEYS[1], 'fenceToken')
+		if currentFenceToken and tonumber(currentFenceToken) > tonumber(ARGV[1]) then
+			return -1
+		end
 		local previousBatchId = redis.call('HGET', KEYS[1], 'scoreBatchId')
 		if previousBatchId then
 			redis.call('DEL', KEYS[2] .. previousBatchId)
 		end
-		return redis.call('DEL', KEYS[1])
+		redis.call('HSET', KEYS[1], 'fenceToken', ARGV[1])
+		redis.call('HDEL', KEYS[1], 'scoreBatchId', 'policyVersion')
+		return 1
 		""", Long.class);
 
 	private final StringRedisTemplate redisTemplate;
@@ -49,19 +59,21 @@ public class MatchingScoreQueueRepository {
 		Long jobPostId,
 		Long scoreBatchId,
 		String policyVersion,
-		List<RankedApplicationScore> scores
+		List<RankedApplicationScore> scores,
+		Long fenceToken
 	) {
 		redisTemplate.execute(
 			REPLACE_SCRIPT,
 			List.of(metadataKey(jobPostId), queueKeyPrefix(jobPostId), queueKey(jobPostId, scoreBatchId)),
-			arguments(scoreBatchId, policyVersion, scores)
+			arguments(fenceToken, scoreBatchId, policyVersion, scores)
 		);
 	}
 
-	public void clear(Long jobPostId) {
+	public void clear(Long jobPostId, Long fenceToken) {
 		redisTemplate.execute(
 			CLEAR_SCRIPT,
-			List.of(metadataKey(jobPostId), queueKeyPrefix(jobPostId))
+			List.of(metadataKey(jobPostId), queueKeyPrefix(jobPostId)),
+			fenceToken.toString()
 		);
 	}
 
@@ -88,11 +100,13 @@ public class MatchingScoreQueueRepository {
 	}
 
 	private Object[] arguments(
+		Long fenceToken,
 		Long scoreBatchId,
 		String policyVersion,
 		List<RankedApplicationScore> scores
 	) {
 		List<String> arguments = new ArrayList<>();
+		arguments.add(fenceToken.toString());
 		arguments.add(scoreBatchId.toString());
 		arguments.add(policyVersion);
 		scores.forEach(score -> {

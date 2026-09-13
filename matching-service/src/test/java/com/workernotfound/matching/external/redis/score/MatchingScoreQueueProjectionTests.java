@@ -13,6 +13,7 @@ import com.workernotfound.matching.domain.score.repository.MatchingScoreSnapshot
 import com.workernotfound.matching.support.IntegrationTestSupport;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -150,6 +151,48 @@ class MatchingScoreQueueProjectionTests extends IntegrationTestSupport {
 			.collect(java.util.stream.Collectors.toSet());
 		assertThat(applicationIds).containsExactlyInAnyOrder(scored.getId(), unscored.getId());
 		assertThat(scoreBatchRepository.count()).isEqualTo(batchCount + 1);
+	}
+
+	@Test
+	void rejectsRankingReplacementWithOlderFenceToken() {
+		scoreQueueRepository.replace(
+			JOB_POST_ID,
+			2L,
+			ApplicationTimeScorePolicy.VERSION,
+			List.of(new RankedApplicationScore(20L, new BigDecimal("90.0"))),
+			2L
+		);
+
+		scoreQueueRepository.replace(
+			JOB_POST_ID,
+			1L,
+			ApplicationTimeScorePolicy.VERSION,
+			List.of(new RankedApplicationScore(10L, new BigDecimal("100.0"))),
+			1L
+		);
+
+		MatchingScoreQueueMetadata metadata = scoreQueueRepository.findMetadata(JOB_POST_ID)
+			.orElseThrow();
+		assertThat(metadata.scoreBatchId()).isEqualTo(2L);
+		assertThat(scoreQueueRepository.findScores(JOB_POST_ID, 2L))
+			.containsExactly(new RankedApplicationScore(20L, new BigDecimal("90.0")));
+		assertThat(scoreQueueRepository.findScores(JOB_POST_ID, 1L)).isEmpty();
+	}
+
+	@Test
+	void rejectsQueueClearWithOlderFenceToken() {
+		scoreQueueRepository.replace(
+			JOB_POST_ID,
+			2L,
+			ApplicationTimeScorePolicy.VERSION,
+			List.of(new RankedApplicationScore(20L, new BigDecimal("90.0"))),
+			2L
+		);
+
+		scoreQueueRepository.clear(JOB_POST_ID, 1L);
+
+		assertThat(scoreQueueRepository.findMetadata(JOB_POST_ID)).isPresent();
+		assertThat(scoreQueueRepository.findScores(JOB_POST_ID, 2L)).isNotEmpty();
 	}
 
 	private Application createApplication(
