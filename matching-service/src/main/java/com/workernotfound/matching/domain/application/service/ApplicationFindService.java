@@ -59,11 +59,13 @@ public class ApplicationFindService {
 		);
 	}
 
-	public void validateOwnerAccess(Long jobPostId, Long ownerMemberId) {
-		if (applicationRepository.existsByJobPostId(jobPostId)
+	public boolean validateOwnerAccess(Long jobPostId, Long ownerMemberId) {
+		boolean hasApplications = applicationRepository.existsByJobPostId(jobPostId);
+		if (hasApplications
 			&& !applicationRepository.existsByJobPostIdAndOwnerMemberId(jobPostId, ownerMemberId)) {
 			throw new BusinessException(ApplicationErrorCode.APPLICATION_FORBIDDEN);
 		}
+		return hasApplications;
 	}
 
 	public Application findOwnerApplicant(Long jobPostId, Long applicationId, Long ownerMemberId) {

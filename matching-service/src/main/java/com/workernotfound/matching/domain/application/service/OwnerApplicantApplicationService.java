@@ -44,7 +44,9 @@ public class OwnerApplicantApplicationService {
 		int page,
 		int size
 	) {
-		applicationFindService.validateOwnerAccess(jobPostId, ownerMemberId);
+		if (!applicationFindService.validateOwnerAccess(jobPostId, ownerMemberId)) {
+			return emptyListResponse(page, size);
+		}
 		MatchingScoreBatch batch = resolveBatch(jobPostId, requestedScoreBatchId);
 		Long scoreBatchId = batch == null ? null : batch.getId();
 		Page<OwnerApplicantRow> applicantPage = applicationFindService.findOwnerApplicants(
@@ -191,6 +193,20 @@ public class OwnerApplicantApplicationService {
 			page.getTotalElements(),
 			page.getTotalPages(),
 			applicants
+		);
+	}
+
+	private OwnerApplicantListResponse emptyListResponse(int page, int size) {
+		return new OwnerApplicantListResponse(
+			null,
+			null,
+			null,
+			null,
+			page,
+			size,
+			0,
+			0,
+			List.of()
 		);
 	}
 }

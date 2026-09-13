@@ -5,6 +5,7 @@ import com.workernotfound.matching.domain.application.entity.Application;
 import com.workernotfound.matching.domain.application.exception.ApplicationErrorCode;
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.score.entity.MatchingScoreBatch;
+import com.workernotfound.matching.domain.score.repository.MatchingScoreBatchRepository;
 import com.workernotfound.matching.domain.score.service.MatchingScoreCalculationService;
 import com.workernotfound.matching.external.client.member.MemberServiceClient;
 import com.workernotfound.matching.external.client.member.dto.WorkerSummaryResponse;
@@ -35,6 +36,9 @@ class OwnerApplicantApplicationServiceTests extends IntegrationTestSupport {
 
 	@Autowired
 	private ApplicationRepository applicationRepository;
+
+	@Autowired
+	private MatchingScoreBatchRepository scoreBatchRepository;
 
 	@MockitoBean
 	private MemberServiceClient memberServiceClient;
@@ -100,6 +104,29 @@ class OwnerApplicantApplicationServiceTests extends IntegrationTestSupport {
 			20
 		)).isInstanceOfSatisfying(BusinessException.class, exception ->
 			assertThat(exception.getErrorCode()).isEqualTo(ApplicationErrorCode.APPLICATION_FORBIDDEN));
+	}
+
+	@Test
+	void hidesBatchMetadataWhenJobHasNoApplicationHistory() {
+		MatchingScoreBatch batch = scoreBatchRepository.saveAndFlush(MatchingScoreBatch.builder()
+			.jobPostId(99L)
+			.policyVersion("policy-v1")
+			.startedAt(BASE_TIME)
+			.build());
+		batch.complete(BASE_TIME.plusMinutes(1));
+		scoreBatchRepository.flush();
+
+		OwnerApplicantListResponse response = ownerApplicantApplicationService.getApplicants(
+			99L,
+			200L,
+			batch.getId(),
+			0,
+			20
+		);
+
+		assertThat(response.scoreBatchId()).isNull();
+		assertThat(response.policyVersion()).isNull();
+		assertThat(response.applicants()).isEmpty();
 	}
 
 	private Application saveApplication(
