@@ -6,8 +6,13 @@ import com.workernotfound.matching.domain.application.repository.ApplicationRepo
 import com.workernotfound.matching.domain.application.repository.ApplicationStatusHistoryRepository;
 import com.workernotfound.matching.domain.application.service.ApplicationCommandService;
 import com.workernotfound.matching.domain.outbox.repository.OutboxEventRepository;
+import com.workernotfound.matching.domain.score.repository.MatchingScoreBatchRepository;
+import com.workernotfound.matching.domain.score.repository.MatchingScoreSnapshotRepository;
+import com.workernotfound.matching.domain.score.policy.ApplicationTimeScorePolicy;
+import com.workernotfound.matching.external.redis.score.MatchingScoreQueueRepository;
 import com.workernotfound.matching.support.IntegrationTestSupport;
 import java.time.LocalDateTime;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +20,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 
@@ -32,14 +38,30 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 	@Autowired
 	private OutboxEventRepository outboxEventRepository;
 
+	@Autowired
+	private MatchingScoreSnapshotRepository scoreSnapshotRepository;
+
+	@Autowired
+	private MatchingScoreBatchRepository scoreBatchRepository;
+
 	@MockitoBean
 	private ApplicationQueueRepository applicationQueueRepository;
 
+	@MockitoBean
+	private MatchingScoreQueueRepository matchingScoreQueueRepository;
+
 	@BeforeEach
 	void cleanUpPersistence() {
+		scoreSnapshotRepository.deleteAll();
+		scoreBatchRepository.deleteAll();
 		outboxEventRepository.deleteAll();
 		historyRepository.deleteAll();
 		applicationRepository.deleteAll();
+	}
+
+	@AfterEach
+	void tearDown() {
+		cleanUpPersistence();
 	}
 
 	@Test
@@ -82,5 +104,29 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 		assertThat(historyRepository.findByApplicationIdOrderByRevisionAsc(application.getId()))
 			.hasSize(2);
 		assertThat(outboxEventRepository.count()).isEqualTo(2L);
+	}
+
+	@Test
+	void commitsApplicationWhenRankedQueueUpdateFails() {
+		doThrow(new IllegalStateException("Redis connection failed"))
+			.when(matchingScoreQueueRepository).replace(
+				eq(10L),
+				anyLong(),
+				eq(ApplicationTimeScorePolicy.VERSION),
+				anyList()
+			);
+
+		Application application = applicationCommandService.create(
+			10L,
+			20L,
+			30L,
+			LocalDateTime.now(),
+			"correlation-id"
+		);
+
+		assertThat(applicationRepository.findById(application.getId())).isPresent();
+		assertThat(historyRepository.findByApplicationIdOrderByRevisionAsc(application.getId()))
+			.hasSize(1);
+		assertThat(outboxEventRepository.count()).isEqualTo(1L);
 	}
 }

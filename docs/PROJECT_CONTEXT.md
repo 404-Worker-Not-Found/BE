@@ -125,13 +125,14 @@ Current matching application implementation:
 - Application creation validates an `ACTIVE` `WORKER` through the existing member-service internal API.
 - The matching-service client for the job-service application-admission contract is implemented. The job-service endpoint still needs to be implemented by the job domain owner before end-to-end application creation can run.
 - Application creation and cancellation persist status history and a `PENDING` Outbox event in the same local transaction.
-- After the application transaction commits, the matching-service projects `APPLIED` application IDs into a job-specific Redis Set. Cancellation removes the ID from that Set.
-- A scheduled recovery rebuilds each application Set from MySQL, which remains the source of truth. Redis failures are logged and do not roll back an application transaction.
+- After the application transaction commits, the matching-service projects `APPLIED` application IDs into a job-specific Redis Set and synchronizes the current score ranking. Cancellation removes the ID and recalculates the remaining ranking.
+- A scheduled recovery rebuilds each application Set from MySQL, which remains the source of truth. It restores the latest current-policy `READY` score batch or recalculates when the active applications and score snapshots differ. Redis failures are logged and do not roll back an application transaction.
 - The exact cancellation deadline and penalty policy remain undecided. The current API allows cancellation only while the application is `APPLIED`.
 - The current Redis projection uses an in-process after-commit listener. The durable Outbox relay and delivery retries remain a later implementation unit; Redis projection does not mark an Outbox event as `PUBLISHED`.
 - Versioned score batch and application score snapshot persistence is implemented with `CALCULATING`/`READY`/`FAILED` lifecycle states. Missing external inputs remain nullable and are distinguished through `missing_inputs` instead of fabricated zero scores.
 - The initial `application-time-v1` policy calculates a relative score from deterministic application order and creates a new immutable batch on recalculation. Ranked MySQL reads use total score, application time, and application ID order.
-- Multi-factor scoring, input adapters, ranked Redis Sorted Set, and owner-facing ranked applicant API remain later implementation units. Missing rating, experience, no-show, online-status, and ETA inputs must be connected when their owning service contracts become available.
+- The latest current-policy `READY` score batch is projected into a batch-specific Redis Sorted Set with `scoreBatchId` and `policyVersion` metadata. Replacing a ranking atomically removes the previous batch key.
+- Multi-factor scoring, input adapters, and the owner-facing ranked applicant API remain later implementation units. Missing rating, experience, no-show, online-status, and ETA inputs must be connected when their owning service contracts become available.
 
 The current scaffold matches the decided technology baseline in `docs/agent/decisions.md`.
 
