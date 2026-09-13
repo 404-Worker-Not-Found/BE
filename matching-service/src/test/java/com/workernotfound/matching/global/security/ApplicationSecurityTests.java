@@ -12,6 +12,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
@@ -70,6 +71,23 @@ class ApplicationSecurityTests extends IntegrationTestSupport {
 				.param("scoreBatchId", "0")
 				.header("Authorization", "Bearer " + token("OWNER")))
 			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void manualMatchingApiRequiresOwnerRole() throws Exception {
+		mockMvc.perform(post("/api/jobs/10/applications/20/matchings")
+				.contentType("application/json")
+				.content("{}")
+				.header("Authorization", "Bearer " + token("WORKER")))
+			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void manualMatchingApiRequiresAuthentication() throws Exception {
+		mockMvc.perform(post("/api/jobs/10/applications/20/matchings")
+				.contentType("application/json")
+				.content("{}"))
+			.andExpect(status().isUnauthorized());
 	}
 
 	private String token(String role) throws Exception {
