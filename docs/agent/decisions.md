@@ -721,3 +721,27 @@ Related files:
 - `docs/architecture/matching-application-design.md`
 - `docs/architecture/matching-application-erd.drawio`
 - `docs/architecture/mvp-domain-flow.md`
+
+## 2026-09-13 - Initial Matching Score Policy
+
+Decision:
+- Use `application-time-v1` as the initial score policy while only application time is available.
+- Sort current `APPLIED` applications by `applied_at ASC, application_id ASC` and calculate the relative application-time score as `((candidate count - zero-based position) / candidate count) * 100`, rounded to four decimal places.
+- Use the application-time score as the initial total score.
+- Keep rating, industry experience, online status, expected arrival time, and no-show risk values and component scores `NULL`, and record their names in `missing_inputs`.
+- Create a new score batch for every recalculation instead of updating a previous batch or snapshot.
+
+Reason:
+- Application time is the only scoring input currently owned by matching-service.
+- A relative score preserves deterministic first-come priority without fabricating unavailable values as zero.
+- Immutable versioned batches preserve the exact basis of an earlier ranking when future data sources and scoring policies are connected.
+
+Implication for agents:
+- Do not replace missing score inputs with zero or silently omit them from the input snapshot.
+- Add future scoring inputs through a new policy version and a new batch.
+- Keep the final ranked order deterministic with `total_score DESC, applied_at ASC, application_id ASC`.
+- Treat urgency weights and the multi-factor formula as a later decision that depends on job, member, work, presence, and routing contracts.
+
+Related files:
+- `docs/architecture/matching-application-design.md`
+- `matching-service/src/main/java/com/workernotfound/matching/domain/score`
