@@ -119,7 +119,10 @@ When opening or updating a PR, check:
 
 When merging a PR, check:
 
-- Has CodeRabbit completed review of the current PR head?
+- Does CodeRabbit's actual reviewed commit coverage include the current PR head and all changes, including documentation-only commits?
+- Is there no rate-limit, skipped-review, or in-progress notice for the latest changes? A green status or an older "no actionable comments" summary is not sufficient.
+- If rate-limited, was the PR kept open until the reset time, then reviewed again before continuing?
+- Was the mandatory CodeRabbit review preserved rather than replaced with the agent's own review?
 - Were its findings checked against code and project contracts, and were valid findings fixed and verified?
 - Were any unaccepted findings recorded with their reasons?
 - Is squash-and-merge being used?

@@ -352,7 +352,9 @@ Reason:
 
 Implication for agents:
 - Do not merge before CodeRabbit review completion and resolution of valid findings.
-- Recheck the current PR head after fixes; do not treat review of an earlier revision as review of later code changes.
+- Require completed CodeRabbit coverage of the current PR head, including documentation-only commits. An earlier reviewed commit is not sufficient.
+- A rate limit, skipped review, pending review, or successful status check without actual review coverage is not review completion.
+- When rate-limited, keep the PR open, wait until the stated reset time, and request review again. Never substitute the agent's own review or a documentation-only exception.
 - Prefer squash-and-merge when completing PRs.
 - After merge, expect the work branch to be deleted before starting new work.
 
@@ -895,7 +897,7 @@ Related files:
 Decision:
 - Use CodeRabbit review instead of requiring a teammate review.
 - Read review findings, check their validity against code and project contracts, fix valid issues, and run relevant verification.
-- Complete review of the updated code and resolve valid findings before squash-and-merge. Delete the work branch after merge.
+- Complete CodeRabbit review of every change in the latest PR head, including documentation, and resolve valid findings before squash-and-merge. Delete the work branch after merge.
 
 Reason:
 - The user explicitly clarified the repository's intended GitHub workflow.
