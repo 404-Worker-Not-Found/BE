@@ -3,6 +3,7 @@ package com.workernotfound.matching.external.redis.outbox;
 import com.workernotfound.matching.domain.outbox.config.OutboxRelayProperties;
 import com.workernotfound.matching.domain.outbox.model.OutboxMessage;
 import com.workernotfound.matching.support.IntegrationTestSupport;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,9 +36,10 @@ class RedisStreamOutboxEventPublisherTests extends IntegrationTestSupport {
 
 	@Test
 	void publishesEventEnvelopeToRedisStream() {
+		LocalDateTime occurredAt = LocalDateTime.of(2026, 9, 14, 12, 0);
 		publisher.publish(new OutboxMessage(
 			1L, "event-id", "APPLICATION", 10L, "ApplicationSubmitted",
-			"correlation-id", 1L, 1, "{\"status\":\"APPLIED\"}", 0
+			"correlation-id", 1L, 1, occurredAt, "{\"status\":\"APPLIED\"}", 0
 		));
 
 		List<MapRecord<String, Object, Object>> records = redisTemplate.opsForStream().read(
@@ -49,6 +51,8 @@ class RedisStreamOutboxEventPublisherTests extends IntegrationTestSupport {
 		assertThat(records.get(0).getValue())
 			.containsEntry("eventId", "event-id")
 			.containsEntry("aggregateType", "APPLICATION")
+			.containsEntry("version", "1")
+			.containsEntry("occurredAt", occurredAt.toString())
 			.containsEntry("payload", "{\"status\":\"APPLIED\"}");
 	}
 }

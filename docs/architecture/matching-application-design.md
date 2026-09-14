@@ -257,7 +257,7 @@
 
 지원 상태 변경과 이벤트 저장을 같은 트랜잭션에 묶는다. Outbox는 `event_id`, 집계 유형·ID, 이벤트 유형, `correlation_id`, 집계 `revision`, payload 스키마 버전, payload, 발행 상태, 발생·발행 시각, 재시도 횟수, 다음 시도 시각, lease와 마지막 오류를 저장한다. 집계 ID는 논리 참조이므로 물리적 외래 키를 만들지 않는다.
 
-relay는 아직 발행되지 않은 이벤트를 발생 시각과 ID 순으로 조회하고 조건부 갱신으로 짧은 DB lease를 획득한다. 같은 aggregate의 앞 revision이 발행되기 전에는 뒤 revision을 선택하지 않는다. 성공하면 Redis Stream `matching:domain-events`에 공통 envelope와 원본 payload를 기록하고 `PUBLISHED`로 바꾼다. 실패하면 `FAILED`와 오류를 기록하고 상한이 있는 지수 backoff 뒤 다시 시도한다. lease가 만료된 작업은 다른 인스턴스가 인계한다.
+relay는 아직 발행되지 않은 이벤트를 발생 시각과 ID 순으로 조회하고 조건부 갱신으로 짧은 DB lease를 획득한다. 같은 aggregate의 앞 revision이 발행되기 전에는 뒤 revision을 선택하지 않는다. 성공하면 Redis Stream `matching:domain-events`에 `eventId`, `eventType`, `occurredAt`, `aggregateId`, `correlationId`, `revision`, `version` 공통 envelope와 원본 payload를 기록하고 `PUBLISHED`로 바꾼다. 실패하면 `FAILED`와 오류를 기록하고 상한이 있는 지수 backoff 뒤 다시 시도한다. lease가 만료된 작업은 다른 인스턴스가 인계한다.
 
 Redis 기록 성공과 MySQL의 `PUBLISHED` 변경 사이에 장애가 나면 같은 이벤트가 재전송될 수 있으므로 전달 보장은 at-least-once다. 소비자는 안정적인 `eventId`로 중복을 제거하고 aggregate별 `revision`으로 중복·역순 상태 갱신을 막는다. Stream은 자동으로 trim하지 않으며, 운영 Redis는 AOF 등 승인된 쓰기를 보존하는 내구성 설정과 `noeviction` 정책을 사용해야 한다. 로컬 Compose는 `appendonly yes`, `appendfsync always`로 실행한다.
 

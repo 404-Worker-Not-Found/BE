@@ -38,7 +38,8 @@ public class RedisStreamOutboxEventPublisher implements OutboxEventPublisher {
 		fields.put("eventType", message.eventType());
 		fields.put("correlationId", message.correlationId());
 		fields.put("revision", message.revision().toString());
-		fields.put("schemaVersion", message.schemaVersion().toString());
+		fields.put("version", message.version().toString());
+		fields.put("occurredAt", message.occurredAt().toString());
 		fields.put("payload", message.payload());
 		return fields;
 	}

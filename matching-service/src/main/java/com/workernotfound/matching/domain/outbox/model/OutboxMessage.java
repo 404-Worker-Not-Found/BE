@@ -1,6 +1,7 @@
 package com.workernotfound.matching.domain.outbox.model;
 
 import com.workernotfound.matching.domain.outbox.entity.OutboxEvent;
+import java.time.LocalDateTime;
 
 public record OutboxMessage(
 	Long id,
@@ -10,7 +11,8 @@ public record OutboxMessage(
 	String eventType,
 	String correlationId,
 	Long revision,
-	Integer schemaVersion,
+	Integer version,
+	LocalDateTime occurredAt,
 	String payload,
 	Integer retryCount
 ) {
@@ -25,6 +27,7 @@ public record OutboxMessage(
 			event.getCorrelationId(),
 			event.getRevision(),
 			event.getSchemaVersion(),
+			event.getOccurredAt(),
 			event.getPayload(),
 			event.getRetryCount()
 		);
