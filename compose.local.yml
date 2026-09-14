@@ -91,6 +91,7 @@ services:
   matching-redis:
     image: redis:7.4
     container_name: wnf-matching-redis
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "always"]
     ports:
       - "${MATCHING_REDIS_PORT}:6379"
     volumes:
