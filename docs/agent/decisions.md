@@ -864,3 +864,27 @@ Related files:
 - `docs/architecture/matching-application-design.md`
 - `docs/architecture/mvp-domain-flow.md`
 - `matching-service/src/main/java/com/workernotfound/matching/domain/application`
+
+## 2026-09-15 - Scheduled Work Saga Commands
+
+Decision:
+- Implement scheduled work creation and compensation in `work-service` using service-owned MySQL and the existing matching Saga HTTP contract.
+- Persist each successful command key, request fingerprint, and result atomically with work state and history. Reject key reuse for a different operation or payload.
+- Serialize mutations through a per-matching database row and enforce at most one non-canceled work per matching with a database unique constraint.
+- Keep canceled attempts as history. A new Saga attempt uses a new creation key and may create a replacement only after the previous work is canceled.
+- Retrying an old creation returns its original work ID, even after cancellation. Repeating compensation for an old work cannot release the replacement's slot.
+- Limit the internal compensation endpoint to `SCHEDULED -> CANCELED`. Other lifecycle transitions and user cancellation require their own policy and APIs.
+
+Reason:
+- Matching can retry with new forward command IDs after all compensation succeeds; a permanent unique constraint on matching ID would block valid retries.
+- Stable responses allow recovery after a committed command loses its HTTP response.
+- Work is created before local matching confirmation inside the Saga, and may be canceled if a later step fails.
+
+Implication for agents:
+- Do not treat scheduled work creation alone as proof that matching is confirmed or expose check-in before confirmation is safely established.
+- Keep command records and canceled work for recovery; do not silently reactivate a canceled work on an old create retry.
+- Preserve work-date/time snapshots, including overnight schedules. Do not invent GPS, no-show, or attendance policy in the scheduled-work contract.
+
+Related files:
+- `docs/architecture/work-scheduled-design.md`
+- `work-service`

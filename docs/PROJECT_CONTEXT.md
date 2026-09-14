@@ -12,6 +12,7 @@ The current repository is in an early backend setup stage. Implemented service d
 - `member-service`
 - `job-service`
 - `matching-service`
+- `work-service`
 
 The broader domain and service boundaries are currently represented in:
 
@@ -56,7 +57,7 @@ Current state:
 - The repository has a first ERD draft for the MSA design.
 - The matching application domain has a focused ERD and implementation design that supersede the application and scoring tables in the first ERD draft.
 - A repository-wide verification script exists at `docs/scripts/verify.sh`.
-- A local Docker Compose file exists at `compose.local.yml` for auth/member/job/matching MySQL instances and auth/matching Redis instances.
+- A local Docker Compose file exists at `compose.local.yml` for auth/member/job/matching/work MySQL instances and auth/matching Redis instances.
 - `.env.example` documents the local runtime environment variables; the real `.env` file is ignored by Git.
 - `scripts/local-run.sh` loads `.env` and runs each service locally.
 - The service package structure is defined in `docs/architecture/service-package-structure.md`.
@@ -133,7 +134,7 @@ Current matching application implementation:
 - A worker can list and read only their own matching proposals and can idempotently decline a `PENDING` proposal. Declining records a `DECLINED` matching history while the application remains `APPLIED`.
 - A worker matching acceptance endpoint and a persisted confirmation Saga now coordinate recruitment-seat reservation, payment locking, scheduled-work creation, chat-room creation, and reverse-order compensation. Only a fully completed Saga changes the matching to `CONFIRMED` and the application to `SELECTED` and stores `ApplicationSelected` and `MatchConfirmed` Outbox events.
 - Confirmation commands persist separate stable idempotency keys for forward and compensation steps and retain external resource IDs before advancing. A lease prevents concurrent coordinators. Unknown outcomes resume the same forward command without premature compensation, while definitively rejected commands compensate known resources and start a new attempt only after compensation succeeds.
-- The current repository does not yet contain payment, work, or chat services, and the job-service seat-reservation contract is not implemented. Matching acceptance therefore fails closed until those service owners implement the documented internal contracts; no temporary successful confirmation is fabricated.
+- The current repository does not yet contain payment or chat services, and the job-service seat-reservation contract is not implemented. Matching acceptance therefore fails closed until those service owners implement the documented internal contracts; no temporary successful confirmation is fabricated.
 - A shared-secret internal recruitment-completion endpoint rejects remaining `APPLIED` applications and cancels their `PENDING` matching proposals in one transaction. It stores the completed job version as a durable barrier against late applications, rebuilds the Redis queues once per job, persists status histories and `ApplicationRejected` Outbox events, and refuses completion while a confirmation Saga has an unknown outcome or unfinished compensation. A higher job version permits applications after reopening. The job-service producer remains owned by the job domain.
 - A database-leased Outbox relay publishes domain-event envelopes to the `matching:domain-events` Redis Stream. It preserves aggregate revision order, retries failures with capped exponential backoff, recovers expired leases, and provides at-least-once delivery with stable `eventId` values for consumer deduplication. Local Redis uses synchronous AOF persistence; production event Redis must provide equivalent durability and a no-eviction policy.
 - Versioned score batch and application score snapshot persistence is implemented with `CALCULATING`/`READY`/`FAILED` lifecycle states. Missing external inputs remain nullable and are distinguished through `missing_inputs` instead of fabricated zero scores.
@@ -154,10 +155,10 @@ Implemented:
 - `member-service`: member profile service
 - `job-service`: job posting service
 - `matching-service`: application and matching service
+- `work-service`: scheduled work and Saga compensation service
 
 Planned or represented in the ERD:
 
-- `work-service`
 - `payment-service`
 - `notification-service`
 - `chat-service`
@@ -248,6 +249,18 @@ Current implementation state:
 - Initial Flyway schema migration has been added.
 
 Member signup design notes are recorded in `docs/architecture/auth-member-signup-design.md`.
+
+## Work Service Context
+
+- `work-service` uses Java 17, Spring Boot 4.1.0, service-owned MySQL, Flyway, Spring Security, and Springdoc.
+- Internal scheduled-work creation and compensation APIs match the matching confirmation Saga contract and require `X-Internal-Secret` plus `Idempotency-Key`.
+- Creation stores external matching/job/member/payment references, work schedule, `SCHEDULED` status, and status history in one transaction.
+- Durable command keys return the original result on retries and reject reuse with a different operation or payload.
+- A per-matching database lock and unique active-matching constraint prevent duplicate active work. Compensation cancels only `SCHEDULED` work, keeps history, and permits a new creation command after cancellation.
+- Late compensation for an older canceled work never cancels the replacement work. This internal API is Saga compensation, not the user-facing work cancellation flow.
+- GPS check-in, work execution/completion, user-facing history, and event consumers remain future work. Status names are defined, but only `SCHEDULED -> CANCELED` is exposed in this unit.
+- MySQL integration tests cover command retries, conflicts, concurrent creation/cancellation, internal authentication, and Swagger access.
+- Local execution is available through `./scripts/local-run.sh work`; the service uses port 8086 and its local MySQL uses port 3311.
 
 ## Current Persistence Dependencies
 
