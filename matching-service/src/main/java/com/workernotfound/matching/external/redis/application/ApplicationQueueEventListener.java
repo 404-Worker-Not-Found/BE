@@ -35,7 +35,7 @@ public class ApplicationQueueEventListener {
 	private void update(ApplicationEvent event, Long fenceToken) {
 		if (ApplicationEventType.APPLICATION_SUBMITTED.value().equals(event.eventType())) {
 			applicationQueueRepository.add(event.jobPostId(), event.applicationId());
-		} else if (ApplicationEventType.APPLICATION_CANCELED.value().equals(event.eventType())) {
+		} else {
 			applicationQueueRepository.remove(event.jobPostId(), event.applicationId());
 		}
 		matchingScoreQueueService.synchronize(event.jobPostId(), fenceToken);

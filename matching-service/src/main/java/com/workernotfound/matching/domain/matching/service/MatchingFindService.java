@@ -19,7 +19,7 @@ public class MatchingFindService {
 	private final MatchingRepository matchingRepository;
 
 	public Matching findOwnedMatching(Long matchingId, Long workerMemberId) {
-		Matching matching = matchingRepository.findById(matchingId)
+		Matching matching = matchingRepository.findDetailById(matchingId)
 			.orElseThrow(() -> new BusinessException(MatchingErrorCode.MATCHING_NOT_FOUND));
 		if (!matching.getWorkerMemberId().equals(workerMemberId)) {
 			throw new BusinessException(MatchingErrorCode.MATCHING_FORBIDDEN);

@@ -9,6 +9,7 @@ import com.workernotfound.matching.domain.matching.exception.MatchingErrorCode;
 import com.workernotfound.matching.domain.matching.model.MatchingLockTarget;
 import com.workernotfound.matching.domain.matching.repository.MatchingRepository;
 import com.workernotfound.matching.domain.matching.repository.MatchingStatusHistoryRepository;
+import com.workernotfound.matching.domain.matching.repository.MatchingConfirmationSagaRepository;
 import com.workernotfound.matching.global.exception.BusinessException;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class MatchingDeclineService {
 	private final ApplicationRepository applicationRepository;
 	private final MatchingRepository matchingRepository;
 	private final MatchingStatusHistoryRepository historyRepository;
+	private final MatchingConfirmationSagaRepository sagaRepository;
 
 	@Transactional
 	public Matching decline(Long matchingId, Long workerMemberId) {
@@ -35,6 +37,11 @@ public class MatchingDeclineService {
 		Matching matching = matchingRepository.findByIdForUpdate(matchingId)
 			.orElseThrow(() -> new BusinessException(MatchingErrorCode.MATCHING_NOT_FOUND));
 		validateWorker(matching.getWorkerMemberId(), workerMemberId);
+		sagaRepository.findByMatchingIdForUpdate(matchingId).ifPresent(saga -> {
+			if (saga.blocksProposalResponse()) {
+				throw new BusinessException(MatchingErrorCode.MATCHING_CONFIRMATION_IN_PROGRESS);
+			}
+		});
 		if (matching.getStatus() == MatchingStatus.DECLINED) {
 			return matching;
 		}

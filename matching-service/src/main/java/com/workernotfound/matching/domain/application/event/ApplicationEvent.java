@@ -42,6 +42,14 @@ public record ApplicationEvent(
 		return from(application, ApplicationEventType.APPLICATION_CANCELED, correlationId, changedAt);
 	}
 
+	public static ApplicationEvent selected(
+		Application application,
+		String correlationId,
+		LocalDateTime changedAt
+	) {
+		return from(application, ApplicationEventType.APPLICATION_SELECTED, correlationId, changedAt);
+	}
+
 	private static ApplicationEvent from(
 		Application application,
 		ApplicationEventType eventType,

@@ -49,4 +49,18 @@ public interface WorkerMatchingControllerDocs {
 		@Parameter(description = "매칭 ID", required = true)
 		@Positive(message = "매칭 ID는 양수여야 합니다.") Long matchingId
 	);
+
+	@Operation(summary = "매칭 제안 수락 및 확정", security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
+	@ApiResponses({
+		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "확정 성공", useReturnTypeSchema = true),
+		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "다른 알바생의 매칭", content = @Content),
+		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "매칭 없음", content = @Content),
+		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "상태 충돌 또는 모집 자리 없음", content = @Content),
+		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503", description = "확정 의존 서비스 오류", content = @Content)
+	})
+	ResponseEntity<ApiResponse<MatchingResponse>> accept(
+		@Parameter(hidden = true) AuthenticatedMember member,
+		@Parameter(description = "매칭 ID", required = true)
+		@Positive(message = "매칭 ID는 양수여야 합니다.") Long matchingId
+	);
 }

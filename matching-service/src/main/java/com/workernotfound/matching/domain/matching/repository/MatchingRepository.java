@@ -20,6 +20,10 @@ public interface MatchingRepository extends JpaRepository<Matching, Long> {
 	@EntityGraph(attributePaths = {"application", "scoreBatch", "scoreSnapshot"})
 	Page<Matching> findByWorkerMemberId(Long workerMemberId, Pageable pageable);
 
+	@EntityGraph(attributePaths = {"application", "scoreBatch", "scoreSnapshot"})
+	@Query("select matching from Matching matching where matching.id = :matchingId")
+	Optional<Matching> findDetailById(Long matchingId);
+
 	@Query("""
 		select new com.workernotfound.matching.domain.matching.model.MatchingLockTarget(
 			matching.application.id,

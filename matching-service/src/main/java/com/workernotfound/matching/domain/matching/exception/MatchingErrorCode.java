@@ -14,7 +14,10 @@ public enum MatchingErrorCode implements ErrorCode {
 	MATCHING_FORBIDDEN("MATCHING-403-001", "해당 매칭에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
 	APPLICATION_NOT_SELECTABLE("MATCHING-409-001", "현재 지원 상태에서는 매칭 후보로 선택할 수 없습니다.", HttpStatus.CONFLICT),
 	MATCHING_ALREADY_EXISTS("MATCHING-409-002", "이미 매칭 시도가 생성된 지원입니다.", HttpStatus.CONFLICT),
-	MATCHING_STATE_CONFLICT("MATCHING-409-003", "현재 매칭 상태에서는 요청을 처리할 수 없습니다.", HttpStatus.CONFLICT);
+	MATCHING_STATE_CONFLICT("MATCHING-409-003", "현재 매칭 상태에서는 요청을 처리할 수 없습니다.", HttpStatus.CONFLICT),
+	MATCHING_CONFIRMATION_IN_PROGRESS("MATCHING-409-004", "매칭 확정이 이미 처리 중입니다.", HttpStatus.CONFLICT),
+	MATCHING_CAPACITY_UNAVAILABLE("MATCHING-409-005", "공고의 남은 모집 자리가 없습니다.", HttpStatus.CONFLICT),
+	MATCHING_CONFIRMATION_FAILED("MATCHING-503-001", "외부 서비스 오류로 매칭을 확정하지 못했습니다.", HttpStatus.SERVICE_UNAVAILABLE);
 
 	private final String code;
 	private final String message;
