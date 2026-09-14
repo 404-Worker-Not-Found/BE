@@ -34,6 +34,9 @@
         <mxCell id="matching_status_histories" value="matching_status_histories&#xa;────────────────────────&#xa;PK  id BIGINT&#xa;FK  matching_id BIGINT NOT NULL&#xa;    from_status VARCHAR(20) NULL&#xa;    to_status VARCHAR(20) NOT NULL&#xa;    actor_type VARCHAR(20) NOT NULL&#xa;EXT actor_member_id BIGINT NULL&#xa;    reason_code VARCHAR(50) NULL&#xa;    reason_detail VARCHAR(500) NULL&#xa;    revision BIGINT NOT NULL&#xa;    changed_at DATETIME(6) NOT NULL&#xa;────────────────────────&#xa;UQ (matching_id, revision)&#xa;IX (matching_id, changed_at)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=top;spacing=10;fontFamily=Courier New;fontSize=13;" vertex="1" parent="1">
           <mxGeometry x="600" y="1090" width="480" height="350" as="geometry" />
         </mxCell>
+        <mxCell id="matching_confirmation_sagas" value="matching_confirmation_sagas&#xa;────────────────────────&#xa;PK  id BIGINT&#xa;FK  matching_id BIGINT NOT NULL&#xa;    status VARCHAR(20) NOT NULL&#xa;    attempt INT NOT NULL&#xa;    *_command_id VARCHAR(36) NOT NULL&#xa;EXT seat_reservation_id VARCHAR(100) NULL&#xa;EXT payment_id VARCHAR(100) NULL&#xa;EXT work_id VARCHAR(100) NULL&#xa;EXT chat_room_id VARCHAR(100) NULL&#xa;    work_date DATE NULL&#xa;    start_time TIME(6) NULL&#xa;    end_time TIME(6) NULL&#xa;    locked_amount DECIMAL(15,2) NULL&#xa;    currency VARCHAR(3) NULL&#xa;    seat_consumed BOOLEAN NOT NULL&#xa;    failure_step VARCHAR(30) NULL&#xa;    last_error VARCHAR(500) NULL&#xa;    lease_token VARCHAR(36) NULL&#xa;    lease_expires_at DATETIME(6) NULL&#xa;    started_at DATETIME(6) NOT NULL&#xa;    completed_at DATETIME(6) NULL&#xa;    version BIGINT NOT NULL&#xa;    created_at DATETIME(6) NOT NULL&#xa;    updated_at DATETIME(6) NOT NULL&#xa;────────────────────────&#xa;status: PROCESSING / COMPENSATING /&#xa;COMPLETED / FAILED&#xa;UQ (matching_id)&#xa;IX (status, lease_expires_at, id)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=top;spacing=10;fontFamily=Courier New;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1110" y="1090" width="480" height="650" as="geometry" />
+        </mxCell>
         <mxCell id="edge_application_history" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;startArrow=ERone;" edge="1" parent="1" source="applications" target="application_status_histories">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
@@ -59,6 +62,14 @@
         </mxCell>
         <mxCell id="edge_snapshot_matching" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;startArrow=ERone;dashed=1;" edge="1" parent="1" source="matching_score_snapshots" target="matchings">
           <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_matching_confirmation_saga" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;startArrow=ERone;" edge="1" parent="1" source="matchings" target="matching_confirmation_sagas">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="560" y="1480" />
+              <mxPoint x="1090" y="1480" />
+            </Array>
+          </mxGeometry>
         </mxCell>
       </root>
     </mxGraphModel>

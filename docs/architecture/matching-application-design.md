@@ -75,7 +75,11 @@
 
 거절과 지원 취소는 모두 지원 행을 먼저 잠그고 매칭 행을 나중에 잠근다. 거절이 먼저 처리되면 지원 취소는 지원만 `CANCELED`로 바꾸고 매칭은 `DECLINED`로 보존한다. 지원 취소가 먼저 처리되면 매칭과 지원이 `CANCELED`가 되어 이후 거절은 상태 충돌이 된다. 어느 순서에서도 취소된 지원에 `PENDING` 매칭이 남지 않는다.
 
-수락 API는 이번 범위에 포함하지 않는다. 수락은 공고의 모집 자리 예약과 확정 Saga를 성공시켜야만 `CONFIRMED`가 될 수 있으므로, 아래 외부 계약이 준비된 후 구현한다.
+알바생은 `PATCH /api/matchings/{matchingId}/accept`로 본인의 `PENDING` 제안을 수락한다. 수락 요청은 아래 모집 자리 예약과 결제·예정 근무·채팅방 생성 단계를 순서대로 실행하며, 모든 단계와 자리 소비가 성공한 뒤에만 매칭을 `CONFIRMED`, 지원을 `SELECTED`로 변경한다. 같은 알바생의 반복 수락은 이미 확정된 결과를 반환한다.
+
+확정 진행 상태와 각 단계의 명령 ID·외부 리소스 ID는 `matching_confirmation_sagas`에 저장한다. 외부 호출 전에 안정적인 명령 ID를 먼저 저장하므로 호출 성공 직후 프로세스가 중단되어도 같은 멱등 키로 재개할 수 있다. Saga 실행권은 만료 시간이 있는 lease로 보호해 동시에 들어온 수락 요청이 같은 단계를 중복 조정하지 않게 한다.
+
+자리 예약 후 실패하면 채팅방, 예정 근무, 결제 잠금, 자리 예약 순서로 보상한다. 보상에 실패한 외부 리소스 ID는 삭제하지 않고 Saga를 `FAILED`로 남긴다. 다음 수락 요청은 남아 있는 보상부터 재개하고 모든 리소스가 해제된 뒤 새 시도와 새 단계 명령 ID를 만든다. 이미 자리를 소비한 뒤 로컬 확정이 중단된 경우에는 보상하지 않고 같은 Saga를 재개해 로컬 상태와 이벤트를 완성한다.
 
 ### 공고 담당 범위에 요청할 매칭 확정 계약
 
@@ -90,7 +94,17 @@
 
 `job-service`는 공고 행 잠금 또는 같은 효과의 조건부 갱신으로 공고가 매칭 가능한 상태인지와 `confirmed + reserved < recruitCount`인지 확인한다. 성공 응답에는 `reservationId`, `jobPostId`, `ownerMemberId`, `jobVersion`, `reservedAt`, `expiresAt`을 포함한다. 예약은 `RESERVED`, `CONSUMED`, `RELEASED`, `EXPIRED` 상태를 보관하고 같은 멱등 키에는 같은 결과를 반환한다. 확정 Saga 완료 시 예약을 소비하고, 실패 또는 취소 시 같은 멱등 키로 해제한다.
 
-이 계약과 payment/work/chat 서비스가 준비되면 `matching-service`가 확정 Saga를 조정하고, 모든 단계 성공 뒤에만 매칭을 `CONFIRMED`, 지원을 `SELECTED`로 변경한다. 그전의 `PENDING` 매칭은 최종 채용 완료로 표시하지 않는다.
+`matching-service`에는 이 계약과 payment/work/chat 계약을 호출하는 클라이언트 및 확정 Saga가 구현되어 있다. 현재 저장소에는 계약을 제공할 서비스가 아직 없고 `job-service`의 자리 예약 API도 구현되지 않았으므로 실제 수락 호출은 의존 서비스가 준비되기 전까지 실패 닫힘 방식으로 종료된다. 외부 계약이 준비되지 않았는데도 `PENDING`을 확정 상태로 바꾸거나 임시 성공 응답을 사용하지 않는다.
+
+자리 예약 응답은 후속 명령에 필요한 `workDate`, `startTime`, `endTime`, `lockedAmount`, `currency` 공고 스냅샷도 포함한다. payment/work/chat 내부 명령은 각각 아래 경계를 사용한다.
+
+| 서비스 | 실행 계약 | 보상 계약 |
+| --- | --- | --- |
+| `payment-service` | `POST /api/payments/internal/locks` | `POST /api/payments/internal/locks/{paymentId}/release` |
+| `work-service` | `POST /api/works/internal/scheduled` | `POST /api/works/internal/{workId}/cancel` |
+| `chat-service` | `POST /api/chat-rooms/internal` | `POST /api/chat-rooms/internal/{chatRoomId}/close` |
+
+모든 명령과 보상 요청은 `X-Internal-Secret`과 단계별 `Idempotency-Key`를 사용한다. 외부 식별자는 문자열로 저장하며 서비스 간 물리 FK를 만들지 않는다.
 
 초기 구현에서는 한 알바생이 같은 공고에 한 번만 지원할 수 있다. 취소한 지원도 기록으로 보존하며 재지원할 수 없다. 따라서 `applications(job_post_id, worker_member_id)`에 유일 제약을 둔다. 재지원을 허용하는 정책으로 바뀌면 기존 레코드를 재사용하지 않고 지원 회차와 활성 지원 유일성 설계를 별도로 추가한다.
 
@@ -255,6 +269,12 @@
 `matchings`는 지원별 매칭 시도와 현재 상태를 저장한다. 한 지원에는 매칭 레코드를 하나만 만들며 자동·폴백 재시도 세부 이력은 후속 시도 모델로 분리한다. 공고·점주·알바생 ID는 선택 시점 스냅샷인 외부 ID이고 물리 FK를 만들지 않는다. 선택 근거가 있는 경우 점수 묶음과 점수 스냅샷을 서비스 내부 FK로 참조하며, 점수가 없으면 두 값 모두 또는 스냅샷만 `NULL`일 수 있다.
 
 `matching_status_histories`는 최초 `PENDING`과 이후 모든 상태 변경을 지원 상태 이력과 같은 actor, reason, revision 방식으로 기록한다. 매칭의 `version`은 동시성 제어, `revision`은 상태 이력과 후속 이벤트 순서에 사용한다.
+
+### `matching_confirmation_sagas`
+
+`matching_confirmation_sagas`는 매칭별 확정 조정 상태를 한 건 저장한다. `PROCESSING`, `COMPENSATING`, `COMPLETED`, `FAILED` 상태와 시도 번호를 보관하고 자리 예약·결제·근무·채팅 명령 ID 및 성공한 외부 리소스 ID를 기록한다. 모집 자리 응답에서 받은 근무 일시와 잠금 금액 스냅샷은 최종 `MatchConfirmed` 이벤트를 구성하는 기준으로 사용한다.
+
+`lease_token`과 `lease_expires_at`은 확정 실행의 동시 조정자를 하나로 제한한다. lease가 만료된 `PROCESSING` Saga는 저장된 명령 ID와 단계 결과를 사용해 재개한다. `version`은 Saga 행의 낙관적 동시성 제어에 사용한다.
 
 ## Redis와 복구
 

@@ -790,3 +790,29 @@ Implication for agents:
 Related files:
 - `docs/architecture/matching-application-design.md`
 - `matching-service/src/main/java/com/workernotfound/matching/domain/matching`
+
+## 2026-09-14 - Matching Confirmation Saga Boundary
+
+Decision:
+- Let `matching-service` coordinate worker acceptance as a persisted Saga.
+- Reserve recruitment capacity before creating payment, scheduled-work, and chat resources, then consume the reservation before committing local `CONFIRMED` and `SELECTED` states.
+- Persist one Saga per matching with stable command IDs, external resource IDs, attempt count, and a renewable execution lease.
+- Compensate chat, work, payment, and the recruitment-seat reservation in reverse creation order when confirmation fails before seat consumption.
+- Fail closed while the job, payment, work, or chat contract is unavailable instead of exposing a temporary successful confirmation.
+
+Reason:
+- Recruitment capacity and downstream resources belong to different services and cannot share a local database transaction.
+- Stable idempotency keys and persisted step results allow an interrupted coordinator to resume without duplicating resources.
+- A lease prevents concurrent acceptance requests from coordinating the same matching while allowing recovery after a crashed process.
+
+Implication for agents:
+- Do not mark a matching `CONFIRMED` or an application `SELECTED` until every Saga step and seat consumption has succeeded.
+- Keep external resource IDs as logical references without physical cross-service foreign keys.
+- When a source service is added, implement the documented internal contract and idempotency behavior instead of bypassing the Saga.
+- A failed compensation must retain the unresolved resource ID and be retried before beginning a new confirmation attempt.
+
+Related files:
+- `docs/architecture/mvp-domain-flow.md`
+- `docs/architecture/matching-application-design.md`
+- `docs/architecture/matching-application-erd.drawio`
+- `matching-service/src/main/java/com/workernotfound/matching/domain/matching`
