@@ -32,6 +32,37 @@ class ApplicationSecurityTests extends IntegrationTestSupport {
 	}
 
 	@Test
+	void recruitmentCompletionApiRequiresInternalSecret() throws Exception {
+		mockMvc.perform(post("/api/applications/internal/jobs/10/recruitment-completion")
+				.header("Idempotency-Key", "completion-command"))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void recruitmentCompletionApiRejectsWrongInternalSecret() throws Exception {
+		mockMvc.perform(post("/api/applications/internal/jobs/10/recruitment-completion")
+				.header("Idempotency-Key", "completion-command")
+				.header("X-Internal-Secret", "wrong-secret"))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void recruitmentCompletionApiAllowsValidInternalRequest() throws Exception {
+		mockMvc.perform(post("/api/applications/internal/jobs/10/recruitment-completion")
+				.header("Idempotency-Key", "completion-command")
+				.header("X-Internal-Secret", "matching-test-internal-secret"))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void recruitmentCompletionApiRejectsNonPositiveJobPostId() throws Exception {
+		mockMvc.perform(post("/api/applications/internal/jobs/0/recruitment-completion")
+				.header("Idempotency-Key", "completion-command")
+				.header("X-Internal-Secret", "matching-test-internal-secret"))
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
 	void applicationApiRejectsOwnerRole() throws Exception {
 		mockMvc.perform(get("/api/applications")
 				.header("Authorization", "Bearer " + token("OWNER")))
