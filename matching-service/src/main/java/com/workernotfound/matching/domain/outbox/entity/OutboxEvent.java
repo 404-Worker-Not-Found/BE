@@ -30,10 +30,16 @@ import org.hibernate.type.SqlTypes;
 			columnNames = {"aggregate_type", "aggregate_id", "revision"}
 		)
 	},
-	indexes = @Index(
-		name = "idx_outbox_events_status_occurred",
-		columnList = "status, occurred_at, id"
-	)
+	indexes = {
+		@Index(
+			name = "idx_outbox_events_status_occurred",
+			columnList = "status, occurred_at, id"
+		),
+		@Index(
+			name = "idx_outbox_events_relay",
+			columnList = "status, next_attempt_at, lease_expires_at, id"
+		)
+	}
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OutboxEvent {
@@ -80,6 +86,15 @@ public class OutboxEvent {
 	@Column(name = "retry_count", nullable = false)
 	private Integer retryCount;
 
+	@Column(name = "next_attempt_at", nullable = false)
+	private LocalDateTime nextAttemptAt;
+
+	@Column(name = "lease_token", length = 36)
+	private String leaseToken;
+
+	@Column(name = "lease_expires_at")
+	private LocalDateTime leaseExpiresAt;
+
 	@Column(name = "last_error", length = 1000)
 	private String lastError;
 
@@ -106,5 +121,29 @@ public class OutboxEvent {
 		this.status = OutboxEventStatus.PENDING;
 		this.occurredAt = occurredAt;
 		this.retryCount = 0;
+		this.nextAttemptAt = occurredAt;
+	}
+
+	public void published(String leaseToken, LocalDateTime publishedAt) {
+		if (!leaseToken.equals(this.leaseToken)) {
+			return;
+		}
+		this.status = OutboxEventStatus.PUBLISHED;
+		this.publishedAt = publishedAt;
+		this.leaseToken = null;
+		this.leaseExpiresAt = null;
+		this.lastError = null;
+	}
+
+	public void failed(String leaseToken, String error, LocalDateTime nextAttemptAt) {
+		if (!leaseToken.equals(this.leaseToken)) {
+			return;
+		}
+		this.status = OutboxEventStatus.FAILED;
+		this.retryCount++;
+		this.lastError = error;
+		this.nextAttemptAt = nextAttemptAt;
+		this.leaseToken = null;
+		this.leaseExpiresAt = null;
 	}
 }

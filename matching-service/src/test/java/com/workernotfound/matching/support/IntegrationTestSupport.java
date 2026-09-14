@@ -46,5 +46,7 @@ public abstract class IntegrationTestSupport {
 		registry.add("matching.work-service.internal-secret", () -> "matching-test-internal-secret");
 		registry.add("matching.chat-service.internal-secret", () -> "matching-test-internal-secret");
 		registry.add("matching.confirmation.lease-duration", () -> "2m");
+		registry.add("matching.outbox-relay.interval", () -> "1h");
+		registry.add("matching.outbox-relay.initial-delay", () -> "1h");
 	}
 }

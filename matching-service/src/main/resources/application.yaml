@@ -52,6 +52,14 @@ matching:
   application-queue:
     recovery-interval: ${MATCHING_APPLICATION_QUEUE_RECOVERY_INTERVAL:5m}
     recovery-initial-delay: ${MATCHING_APPLICATION_QUEUE_RECOVERY_INITIAL_DELAY:30s}
+  outbox-relay:
+    batch-size: ${MATCHING_OUTBOX_RELAY_BATCH_SIZE:50}
+    lease-duration: ${MATCHING_OUTBOX_RELAY_LEASE_DURATION:30s}
+    retry-base-delay: ${MATCHING_OUTBOX_RETRY_BASE_DELAY:1s}
+    retry-max-delay: ${MATCHING_OUTBOX_RETRY_MAX_DELAY:1m}
+    interval: ${MATCHING_OUTBOX_RELAY_INTERVAL:1s}
+    initial-delay: ${MATCHING_OUTBOX_RELAY_INITIAL_DELAY:10s}
+    stream-key: ${MATCHING_OUTBOX_STREAM_KEY:matching:domain-events}
 
 server:
   port: ${MATCHING_SERVICE_PORT:8084}
