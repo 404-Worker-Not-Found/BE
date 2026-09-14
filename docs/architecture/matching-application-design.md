@@ -17,10 +17,10 @@
 - 사업주의 공고별 지원자 목록 조회와 권한 검증
 - MySQL을 기준으로 한 Redis 대기열 복구
 - 점수 계산 상태와 점수 스냅샷 확장 구조
+- 내구성 있는 Outbox relay와 전달 재시도
 
 ### 다음 구현
 
-- 내구성 있는 Outbox relay와 전달 재시도
 - 점수 공식과 긴급도별 가중치
 - 평점, 업종 경력, 근무 이력, 노쇼 위험도 입력 연동
 - 온라인 상태와 예상 도착 시간 입력 연동
@@ -255,7 +255,11 @@
 
 ### `outbox_events`
 
-지원 상태 변경과 이벤트 저장을 같은 트랜잭션에 묶는다. Outbox는 `event_id`, 집계 유형·ID, 이벤트 유형, `correlation_id`, 집계 `revision`, payload 스키마 버전, payload, 발행 상태, 발생·발행 시각, 재시도 횟수와 마지막 오류를 저장한다. 집계 ID는 논리 참조이므로 물리적 외래 키를 만들지 않는다.
+지원 상태 변경과 이벤트 저장을 같은 트랜잭션에 묶는다. Outbox는 `event_id`, 집계 유형·ID, 이벤트 유형, `correlation_id`, 집계 `revision`, payload 스키마 버전, payload, 발행 상태, 발생·발행 시각, 재시도 횟수, 다음 시도 시각, lease와 마지막 오류를 저장한다. 집계 ID는 논리 참조이므로 물리적 외래 키를 만들지 않는다.
+
+relay는 아직 발행되지 않은 이벤트를 발생 시각과 ID 순으로 조회하고 조건부 갱신으로 짧은 DB lease를 획득한다. 같은 aggregate의 앞 revision이 발행되기 전에는 뒤 revision을 선택하지 않는다. 성공하면 Redis Stream `matching:domain-events`에 공통 envelope와 원본 payload를 기록하고 `PUBLISHED`로 바꾼다. 실패하면 `FAILED`와 오류를 기록하고 상한이 있는 지수 backoff 뒤 다시 시도한다. lease가 만료된 작업은 다른 인스턴스가 인계한다.
+
+Redis 기록 성공과 MySQL의 `PUBLISHED` 변경 사이에 장애가 나면 같은 이벤트가 재전송될 수 있으므로 전달 보장은 at-least-once다. 소비자는 안정적인 `eventId`로 중복을 제거하고 aggregate별 `revision`으로 중복·역순 상태 갱신을 막는다. Stream은 자동으로 trim하지 않으며, 운영 Redis는 AOF 등 승인된 쓰기를 보존하는 내구성 설정과 `noeviction` 정책을 사용해야 한다. 로컬 Compose는 `appendonly yes`, `appendfsync always`로 실행한다.
 
 `ApplicationSubmitted`와 `ApplicationCanceled`에는 `revision`을 포함한 공통 이벤트 필드와 함께 `applicationId`, `admissionId`, `jobPostId`, `workerMemberId`, 지원 상태, 상태 변경 시각을 넣는다. 공통 `revision`은 지원 집계의 상태 버전이며 별도의 `applicationRevision`을 추가하지 않는다. 최초 지원 이벤트는 `revision=1`이고 상태가 바뀔 때마다 1 증가한다.
 
@@ -295,7 +299,7 @@
 
 - MySQL의 `applications`가 최종 기준이다.
 - 지원 저장과 Redis 쓰기를 하나의 성공 조건으로 묶지 않는다.
-- 지원 트랜잭션에서 Outbox를 저장하고, 현재 구현에서는 커밋 후 인프로세스 이벤트 리스너가 Redis 대기열을 갱신한다. 내구성 있는 Outbox relay와 전달 재시도는 후속 범위로 둔다.
+- 지원 트랜잭션에서 Outbox를 저장하고, 커밋 후 인프로세스 이벤트 리스너는 로컬 Redis 대기열을 갱신한다. 서비스 간 도메인 이벤트는 별도의 Outbox relay가 Redis Stream으로 전달한다.
 - 공고별 지원 Set에는 현재 `APPLIED`인 `applicationId`를 저장한다. 이 Set은 점수 계산 전 지원과 점수 계산에 실패한 지원도 포함한다.
 - 점수 대기열은 공고 ID와 점수 묶음 ID를 키에 포함한 Sorted Set으로 구성한다. member는 `applicationId`, score는 `totalScore`를 사용하고 별도 metadata에 `scoreBatchId`와 `policyVersion`을 저장한다.
 - Redis 장애 시 MySQL의 `APPLIED` 지원으로 지원 Set을 복구한다. 최신 `READY` 점수 묶음과 그 묶음의 `READY` 스냅샷을 조회하고, 현재 상태가 `APPLIED`인 지원만 Sorted Set에 복구한다.
@@ -304,7 +308,7 @@
 - 취소, 거절, 선정, 공고 마감 시 대기열에서 제거한다.
 - Redis 점수는 후보 추출을 위한 복제 값이다. 동점자의 최종 순서는 MySQL에서 `applied_at`, `application_id`로 결정하고, 매칭 직전에 지원 상태와 점수 묶음·스냅샷 상태를 다시 확인한다.
 
-현재 구현 단계에서는 지원 트랜잭션 커밋 후 애플리케이션 이벤트 리스너가 지원 Set을 갱신하고, 활성 지원 구성이 최신 `READY` 점수 배치와 다를 때 `application-time-v1` 점수를 재계산한다. 점수 배치 트랜잭션을 먼저 커밋한 뒤 최신 배치의 `READY` 스냅샷을 배치별 Sorted Set으로 교체하고 `scoreBatchId`와 `policyVersion` metadata를 함께 저장한다. 주기적인 복구 작업은 MySQL 상태로 지원 Set을 다시 구성한 뒤, 현재 정책과 활성 지원 구성이 일치하는 최신 배치를 복구하거나 불일치할 때 새 배치를 계산한다. 복구·이벤트 갱신은 공고별 Redis 잠금으로 직렬화하고 Set과 Sorted Set 교체는 각각 원자적으로 실행한다. 잠금마다 증가하는 공고별 fencing token을 metadata에 보존해 잠금 TTL이 지난 작업의 늦은 교체·삭제를 거부한다. Redis 반영 실패는 기록하되 이미 커밋된 지원과 점수 배치를 실패로 바꾸지 않는다. 서비스 간 이벤트를 내구성 있게 전달하는 Outbox relay와 재시도는 후속 범위이며, 로컬 Redis projection 성공만으로 Outbox 이벤트를 `PUBLISHED`로 변경하지 않는다.
+현재 구현 단계에서는 지원 트랜잭션 커밋 후 애플리케이션 이벤트 리스너가 지원 Set을 갱신하고, 활성 지원 구성이 최신 `READY` 점수 배치와 다를 때 `application-time-v1` 점수를 재계산한다. 점수 배치 트랜잭션을 먼저 커밋한 뒤 최신 배치의 `READY` 스냅샷을 배치별 Sorted Set으로 교체하고 `scoreBatchId`와 `policyVersion` metadata를 함께 저장한다. 주기적인 복구 작업은 MySQL 상태로 지원 Set을 다시 구성한 뒤, 현재 정책과 활성 지원 구성이 일치하는 최신 배치를 복구하거나 불일치할 때 새 배치를 계산한다. 복구·이벤트 갱신은 공고별 Redis 잠금으로 직렬화하고 Set과 Sorted Set 교체는 각각 원자적으로 실행한다. 잠금마다 증가하는 공고별 fencing token을 metadata에 보존해 잠금 TTL이 지난 작업의 늦은 교체·삭제를 거부한다. Redis 반영 실패는 기록하되 이미 커밋된 지원과 점수 배치를 실패로 바꾸지 않는다. 로컬 projection과 별개로 Outbox relay가 서비스 간 이벤트를 Redis Stream에 발행하며, Stream 성공 후에만 Outbox 이벤트를 `PUBLISHED`로 변경한다.
 
 ## 조회와 권한
 

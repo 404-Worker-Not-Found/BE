@@ -841,6 +841,25 @@ Implication for agents:
 - Include the source `jobVersion` in the completion contract so reopen cycles are distinguishable.
 - Do not implement the producer inside `job-service` unless work in the job domain is explicitly in scope.
 
+## 2026-09-14 - Matching Domain Event Transport
+
+Decision:
+- Publish matching-service Outbox events to the untrimmed Redis Stream `matching:domain-events` through a database-leased relay.
+- Preserve order per aggregate revision, retry indefinitely with capped exponential backoff, and recover expired leases across service instances.
+- Provide at-least-once delivery. Downstream consumers deduplicate by stable `eventId` and reject stale aggregate revisions.
+- Require durable, no-eviction Redis for the event Stream. Local Compose uses AOF with `appendfsync always`.
+
+Reason:
+- Redis is already an operational dependency of matching-service and Streams provide a durable consumer-group transport without adding another broker for the current scale.
+- A short database lease prevents concurrent relays from normally publishing the same row while still allowing recovery after a process crash.
+- The publish/mark gap cannot be atomic across MySQL and Redis, so duplicate-safe at-least-once delivery is the honest contract.
+
+Implication for agents:
+- Never mark an Outbox row `PUBLISHED` before Redis acknowledges the Stream append.
+- Do not trim the Stream until every consumer retention and recovery requirement is defined.
+- Keep `eventId` stable across retries and preserve aggregate revision ordering.
+- If the transport changes later, retain the publisher port and delivery semantics.
+
 Related files:
 - `docs/architecture/matching-application-design.md`
 - `docs/architecture/mvp-domain-flow.md`
