@@ -356,6 +356,8 @@ Implication for agents:
 - A rate limit, skipped review, pending review, or successful status check without actual review coverage is not review completion.
 - When rate-limited, keep the PR open, wait until the stated reset time, and request review again. Never substitute the agent's own review or a documentation-only exception.
 - Keep `.coderabbit.yaml` path filters inclusive so changed paths are not excluded by repository configuration.
+- Keep the initial PR review automatic, but disable automatic incremental reviews. Batch fixes and verification locally, push once when ready, then request `@coderabbitai review` manually after checking review availability.
+- Do not request another review while one is in progress or push partial follow-up changes that would supersede it.
 - Treat automatic review pause separately from a rate limit. When `auto_pause_after_reviewed_commits` pauses reviews, request `@coderabbitai review` and confirm actual coverage of the latest head; if the request is rate-limited, wait for its reset time before retrying.
 - Prefer squash-and-merge when completing PRs.
 - After merge, expect the work branch to be deleted before starting new work.
