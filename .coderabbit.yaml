@@ -22,19 +22,14 @@ reviews:
 
   auto_review:
     enabled: true
-    auto_incremental_review: true
+    auto_incremental_review: false
     auto_pause_after_reviewed_commits: 5
     drafts: false
     ignore_title_keywords:
       - "WIP"
 
   path_filters:
-    - "!**/build/**"
-    - "!**/.gradle/**"
-    - "!**/gradlew"
-    - "!**/gradlew.bat"
-    - "!**/*.drawio"
-    - "!**/.DS_Store"
+    - "**"
 
   path_instructions:
     - path: "**/src/main/java/**"
