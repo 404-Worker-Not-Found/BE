@@ -22,9 +22,10 @@ public class RecruitmentCompletionController implements RecruitmentCompletionCon
 	@PostMapping("/{jobPostId}/recruitment-completion")
 	public ResponseEntity<ApiResponse<Void>> complete(
 		@PathVariable Long jobPostId,
+		@RequestHeader("X-Job-Version") Long jobVersion,
 		@RequestHeader("Idempotency-Key") String correlationId
 	) {
-		recruitmentCompletionService.complete(jobPostId, correlationId);
+		recruitmentCompletionService.complete(jobPostId, jobVersion, correlationId);
 		return ResponseEntity.ok(ApiResponse.success(null));
 	}
 }

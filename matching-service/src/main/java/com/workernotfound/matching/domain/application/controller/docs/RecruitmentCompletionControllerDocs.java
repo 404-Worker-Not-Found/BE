@@ -24,6 +24,8 @@ public interface RecruitmentCompletionControllerDocs {
 	ResponseEntity<ApiResponse<Void>> complete(
 		@Parameter(description = "공고 ID", required = true)
 		@Positive(message = "공고 ID는 양수여야 합니다.") Long jobPostId,
+		@Parameter(description = "모집 완료 시점의 공고 버전", required = true)
+		@Positive(message = "공고 버전은 양수여야 합니다.") Long jobVersion,
 		@Parameter(description = "모집 완료 명령 ID", required = true)
 		@NotBlank(message = "Idempotency-Key는 필수입니다.")
 		@Size(max = 36, message = "Idempotency-Key는 36자 이하여야 합니다.") String correlationId

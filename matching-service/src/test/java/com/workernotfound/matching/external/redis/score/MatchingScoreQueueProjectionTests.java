@@ -205,6 +205,7 @@ class MatchingScoreQueueProjectionTests extends IntegrationTestSupport {
 			workerMemberId,
 			100L,
 			admissionId,
+			1L,
 			appliedAt,
 			"create-correlation-id-" + admissionId
 		);

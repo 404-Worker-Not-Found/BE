@@ -42,6 +42,7 @@ class ApplicationOutboxTransactionTests extends IntegrationTestSupport {
 			9920L,
 			9900L,
 			9930L,
+			1L,
 			LocalDateTime.now(),
 			"00000000-0000-0000-0000-000000000001"
 		))

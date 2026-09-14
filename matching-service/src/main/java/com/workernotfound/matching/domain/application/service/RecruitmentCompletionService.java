@@ -5,8 +5,10 @@ import com.workernotfound.matching.domain.application.entity.ApplicationStatusHi
 import com.workernotfound.matching.domain.application.entity.enums.ApplicationActorType;
 import com.workernotfound.matching.domain.application.entity.enums.ApplicationStatus;
 import com.workernotfound.matching.domain.application.event.ApplicationEvent;
+import com.workernotfound.matching.domain.application.event.RecruitmentCompletionEvent;
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.application.repository.ApplicationStatusHistoryRepository;
+import com.workernotfound.matching.domain.application.repository.RecruitmentStateRepository;
 import com.workernotfound.matching.domain.matching.service.MatchingCancellationService;
 import com.workernotfound.matching.domain.outbox.service.OutboxEventCommandService;
 import java.time.LocalDateTime;
@@ -24,20 +26,27 @@ public class RecruitmentCompletionService {
 
 	private final ApplicationRepository applicationRepository;
 	private final ApplicationStatusHistoryRepository historyRepository;
+	private final RecruitmentStateRepository recruitmentStateRepository;
 	private final MatchingCancellationService matchingCancellationService;
 	private final OutboxEventCommandService outboxEventCommandService;
 	private final ApplicationEventPublisher eventPublisher;
 
 	@Transactional
-	public void complete(Long jobPostId, String correlationId) {
+	public void complete(Long jobPostId, Long jobVersion, String correlationId) {
+		recruitmentStateRepository.ensureExists(jobPostId);
+		var recruitmentState = recruitmentStateRepository.findForUpdate(jobPostId).orElseThrow();
+		LocalDateTime changedAt = LocalDateTime.now();
+		if (!recruitmentState.complete(jobVersion, correlationId, changedAt)) {
+			return;
+		}
 		List<Application> applications = applicationRepository.findAllForUpdate(
 			jobPostId,
 			ApplicationStatus.APPLIED
 		);
-		LocalDateTime changedAt = LocalDateTime.now();
 		for (Application application : applications) {
 			reject(application, correlationId, changedAt);
 		}
+		eventPublisher.publishEvent(new RecruitmentCompletionEvent(jobPostId));
 	}
 
 	private void reject(Application application, String correlationId, LocalDateTime changedAt) {
@@ -47,7 +56,6 @@ public class RecruitmentCompletionService {
 		historyRepository.saveAndFlush(rejectedHistory(application, changedAt));
 		ApplicationEvent event = ApplicationEvent.rejected(application, correlationId, changedAt);
 		outboxEventCommandService.saveApplicationEvent(event);
-		eventPublisher.publishEvent(event);
 	}
 
 	private ApplicationStatusHistory rejectedHistory(Application application, LocalDateTime changedAt) {

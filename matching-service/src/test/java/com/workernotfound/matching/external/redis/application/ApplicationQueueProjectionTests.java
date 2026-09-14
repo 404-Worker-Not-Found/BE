@@ -123,6 +123,7 @@ class ApplicationQueueProjectionTests extends IntegrationTestSupport {
 			workerMemberId,
 			100L,
 			admissionId,
+			1L,
 			LocalDateTime.now(),
 			"create-correlation-id-" + admissionId
 		);

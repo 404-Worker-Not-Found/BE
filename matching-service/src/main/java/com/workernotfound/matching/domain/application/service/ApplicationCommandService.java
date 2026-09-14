@@ -8,6 +8,7 @@ import com.workernotfound.matching.domain.application.event.ApplicationEvent;
 import com.workernotfound.matching.domain.application.exception.ApplicationErrorCode;
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.application.repository.ApplicationStatusHistoryRepository;
+import com.workernotfound.matching.domain.application.repository.RecruitmentStateRepository;
 import com.workernotfound.matching.domain.matching.service.MatchingCancellationService;
 import com.workernotfound.matching.domain.outbox.service.OutboxEventCommandService;
 import com.workernotfound.matching.global.exception.BusinessException;
@@ -26,6 +27,7 @@ public class ApplicationCommandService {
 
 	private final ApplicationRepository applicationRepository;
 	private final ApplicationStatusHistoryRepository historyRepository;
+	private final RecruitmentStateRepository recruitmentStateRepository;
 	private final MatchingCancellationService matchingCancellationService;
 	private final OutboxEventCommandService outboxEventCommandService;
 	private final ApplicationEventPublisher eventPublisher;
@@ -36,9 +38,14 @@ public class ApplicationCommandService {
 		Long workerMemberId,
 		Long ownerMemberId,
 		Long admissionId,
+		Long jobVersion,
 		LocalDateTime appliedAt,
 		String correlationId
 	) {
+		recruitmentStateRepository.ensureExists(jobPostId);
+		if (recruitmentStateRepository.findForUpdate(jobPostId).orElseThrow().blocks(jobVersion)) {
+			throw new BusinessException(ApplicationErrorCode.RECRUITMENT_ALREADY_COMPLETED);
+		}
 		Application application = Application.builder()
 			.jobPostId(jobPostId)
 			.workerMemberId(workerMemberId)

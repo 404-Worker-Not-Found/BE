@@ -224,7 +224,7 @@
 
 이 표는 의미 계약을 정의한다. 메시지 브로커, Outbox, REST 후속 호출 등 전달 방식은 구현 단계에서 정한다.
 
-현재 `matching-service`는 `POST /api/applications/internal/jobs/{jobPostId}/recruitment-completion` REST 계약으로 `RecruitmentCompleted` 의미를 수신한다. `job-service`가 모집 완료를 판단해 안정적인 명령 ID와 내부 secret으로 호출하며, 처리 중인 확정 Saga 때문에 409를 받으면 같은 명령 ID로 재시도한다. 이벤트 전달 방식이 정해지면 동일한 멱등·상태 전이 규칙을 유지한 채 어댑터를 교체할 수 있다.
+현재 `matching-service`는 `POST /api/applications/internal/jobs/{jobPostId}/recruitment-completion` REST 계약으로 `RecruitmentCompleted` 의미를 수신한다. `job-service`가 모집 완료를 판단해 공고 버전, 안정적인 명령 ID와 내부 secret으로 호출하며, 처리 중인 확정 Saga 때문에 409를 받으면 같은 명령 ID로 재시도한다. `matching-service`는 완료 버전을 영구 저장해 같은 버전에서 늦게 저장되는 지원을 차단하고, 더 높은 버전으로 재오픈된 공고의 지원은 허용한다. 이벤트 전달 방식이 정해지면 동일한 멱등·상태 전이 규칙을 유지한 채 어댑터를 교체할 수 있다.
 
 리뷰 작성과 신뢰 점수 갱신은 `member-service`의 한 로컬 트랜잭션에서 처리한다. `member-service`는 변경된 신뢰 점수를 저장한 뒤 `TrustScoreUpdated`를 발행하고, `matching-service`는 이 이벤트만 소비한다.
 

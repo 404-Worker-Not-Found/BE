@@ -74,6 +74,7 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 			20L,
 			100L,
 			30L,
+			1L,
 			LocalDateTime.now(),
 			"correlation-id"
 		);
@@ -91,6 +92,7 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 			20L,
 			100L,
 			30L,
+			1L,
 			LocalDateTime.now(),
 			"create-correlation-id"
 		);
@@ -124,6 +126,7 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 			20L,
 			100L,
 			30L,
+			1L,
 			LocalDateTime.now(),
 			"correlation-id"
 		);

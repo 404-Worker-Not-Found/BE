@@ -24,6 +24,11 @@ public enum ApplicationErrorCode implements ErrorCode {
 		"매칭 확정 처리 중인 지원이 있어 모집 완료를 반영할 수 없습니다.",
 		HttpStatus.CONFLICT
 	),
+	RECRUITMENT_ALREADY_COMPLETED(
+		"APPLICATION-409-007",
+		"해당 공고 버전의 모집이 이미 완료되었습니다.",
+		HttpStatus.CONFLICT
+	),
 	DEPENDENCY_SERVICE_UNAVAILABLE("APPLICATION-503-001", "지원 자격을 확인할 수 없습니다. 잠시 후 다시 시도해주세요.", HttpStatus.SERVICE_UNAVAILABLE);
 
 	private final String code;

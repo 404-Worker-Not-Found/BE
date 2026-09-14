@@ -34,6 +34,7 @@ class ApplicationSecurityTests extends IntegrationTestSupport {
 	@Test
 	void recruitmentCompletionApiRequiresInternalSecret() throws Exception {
 		mockMvc.perform(post("/api/applications/internal/jobs/10/recruitment-completion")
+				.header("X-Job-Version", "1")
 				.header("Idempotency-Key", "completion-command"))
 			.andExpect(status().isUnauthorized());
 	}
@@ -41,6 +42,7 @@ class ApplicationSecurityTests extends IntegrationTestSupport {
 	@Test
 	void recruitmentCompletionApiRejectsWrongInternalSecret() throws Exception {
 		mockMvc.perform(post("/api/applications/internal/jobs/10/recruitment-completion")
+				.header("X-Job-Version", "1")
 				.header("Idempotency-Key", "completion-command")
 				.header("X-Internal-Secret", "wrong-secret"))
 			.andExpect(status().isUnauthorized());
@@ -49,6 +51,7 @@ class ApplicationSecurityTests extends IntegrationTestSupport {
 	@Test
 	void recruitmentCompletionApiAllowsValidInternalRequest() throws Exception {
 		mockMvc.perform(post("/api/applications/internal/jobs/10/recruitment-completion")
+				.header("X-Job-Version", "1")
 				.header("Idempotency-Key", "completion-command")
 				.header("X-Internal-Secret", "matching-test-internal-secret"))
 			.andExpect(status().isOk());
@@ -57,6 +60,7 @@ class ApplicationSecurityTests extends IntegrationTestSupport {
 	@Test
 	void recruitmentCompletionApiRejectsNonPositiveJobPostId() throws Exception {
 		mockMvc.perform(post("/api/applications/internal/jobs/0/recruitment-completion")
+				.header("X-Job-Version", "1")
 				.header("Idempotency-Key", "completion-command")
 				.header("X-Internal-Secret", "matching-test-internal-secret"))
 			.andExpect(status().isBadRequest());

@@ -2,9 +2,11 @@ package com.workernotfound.matching.domain.application.service;
 
 import com.workernotfound.matching.domain.application.entity.Application;
 import com.workernotfound.matching.domain.application.entity.enums.ApplicationStatus;
+import com.workernotfound.matching.domain.application.event.RecruitmentCompletionEvent;
 import com.workernotfound.matching.domain.application.exception.ApplicationErrorCode;
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.application.repository.ApplicationStatusHistoryRepository;
+import com.workernotfound.matching.domain.application.repository.RecruitmentStateRepository;
 import com.workernotfound.matching.domain.matching.entity.Matching;
 import com.workernotfound.matching.domain.matching.entity.MatchingConfirmationSaga;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingConfirmationRecoveryAction;
@@ -28,14 +30,26 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@RecordApplicationEvents
 class RecruitmentCompletionServiceTests extends IntegrationTestSupport {
 
 	@Autowired
 	private RecruitmentCompletionService recruitmentCompletionService;
+
+	@Autowired
+	private ApplicationCommandService applicationCommandService;
+
+	@Autowired
+	private RecruitmentStateRepository recruitmentStateRepository;
+
+	@Autowired
+	private ApplicationEvents applicationEvents;
 
 	@Autowired
 	private ApplicationRepository applicationRepository;
@@ -84,7 +98,7 @@ class RecruitmentCompletionServiceTests extends IntegrationTestSupport {
 		declined.decline();
 		matchingRepository.saveAndFlush(declined);
 
-		recruitmentCompletionService.complete(10L, "completion-command");
+		recruitmentCompletionService.complete(10L, 1L, "completion-command");
 
 		assertThat(statusOf(selected)).isEqualTo(ApplicationStatus.SELECTED);
 		assertThat(statusOf(withoutMatching)).isEqualTo(ApplicationStatus.REJECTED);
@@ -105,18 +119,60 @@ class RecruitmentCompletionServiceTests extends IntegrationTestSupport {
 		assertThat(outboxEventRepository.findAll())
 			.extracting(event -> event.getEventType())
 			.containsOnly("ApplicationRejected");
+		assertThat(applicationEvents.stream(RecruitmentCompletionEvent.class)).hasSize(1);
 	}
 
 	@Test
 	void repeatedRecruitmentCompletionDoesNotCreateDuplicateHistoryOrEvents() {
 		Application application = saveApplication(11L, 20L, 5L);
-		recruitmentCompletionService.complete(11L, "completion-command");
+		recruitmentCompletionService.complete(11L, 1L, "completion-command");
 
-		recruitmentCompletionService.complete(11L, "completion-command");
+		recruitmentCompletionService.complete(11L, 1L, "completion-command");
 
 		assertThat(statusOf(application)).isEqualTo(ApplicationStatus.REJECTED);
 		assertThat(applicationHistoryRepository.count()).isOne();
 		assertThat(outboxEventRepository.count()).isOne();
+		assertThat(applicationEvents.stream(RecruitmentCompletionEvent.class)).hasSize(1);
+	}
+
+	@Test
+	void blocksLateApplicationFromCompletedVersionAndAllowsReopenedVersion() {
+		recruitmentCompletionService.complete(14L, 3L, "completion-command");
+
+		assertThatThrownBy(() -> applicationCommandService.create(
+			14L, 20L, 100L, 9L, 3L, LocalDateTime.now(), "late-application"
+		))
+			.isInstanceOfSatisfying(BusinessException.class, exception ->
+				assertThat(exception.getErrorCode())
+					.isEqualTo(ApplicationErrorCode.RECRUITMENT_ALREADY_COMPLETED));
+
+		Application reopened = applicationCommandService.create(
+			14L, 20L, 100L, 10L, 4L, LocalDateTime.now(), "reopened-application"
+		);
+
+		assertThat(reopened.getStatus()).isEqualTo(ApplicationStatus.APPLIED);
+	}
+
+	@Test
+	void completionAndApplicationCreationNeverLeaveSameVersionApplied() throws Exception {
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		CountDownLatch ready = new CountDownLatch(2);
+		CountDownLatch start = new CountDownLatch(1);
+		try {
+			Future<?> completion = executor.submit(() -> completeTogether(15L, ready, start));
+			Future<?> creation = executor.submit(() -> createTogether(15L, ready, start));
+			assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+			start.countDown();
+			completion.get(10, TimeUnit.SECONDS);
+			creation.get(10, TimeUnit.SECONDS);
+		} finally {
+			executor.shutdownNow();
+		}
+
+		assertThat(applicationRepository.findByJobPostIdAndStatusOrderByAppliedAtAscIdAsc(
+			15L,
+			ApplicationStatus.APPLIED
+		)).isEmpty();
 	}
 
 	@Test
@@ -132,7 +188,7 @@ class RecruitmentCompletionServiceTests extends IntegrationTestSupport {
 		);
 		sagaRepository.flush();
 
-		assertThatThrownBy(() -> recruitmentCompletionService.complete(12L, "completion-command"))
+		assertThatThrownBy(() -> recruitmentCompletionService.complete(12L, 1L, "completion-command"))
 			.isInstanceOfSatisfying(BusinessException.class, exception ->
 				assertThat(exception.getErrorCode())
 					.isEqualTo(ApplicationErrorCode.RECRUITMENT_COMPLETION_IN_PROGRESS));
@@ -208,10 +264,29 @@ class RecruitmentCompletionServiceTests extends IntegrationTestSupport {
 			if (!start.await(5, TimeUnit.SECONDS)) {
 				throw new IllegalStateException("모집 완료 동시성 테스트 대기 시간이 초과되었습니다.");
 			}
-			recruitmentCompletionService.complete(jobPostId, "completion-command");
+			recruitmentCompletionService.complete(jobPostId, 1L, "completion-command");
 		} catch (InterruptedException exception) {
 			Thread.currentThread().interrupt();
 			throw new IllegalStateException("모집 완료 동시성 테스트가 중단되었습니다.", exception);
+		}
+	}
+
+	private void createTogether(Long jobPostId, CountDownLatch ready, CountDownLatch start) {
+		ready.countDown();
+		try {
+			if (!start.await(5, TimeUnit.SECONDS)) {
+				throw new IllegalStateException("지원 생성 동시성 테스트 대기 시간이 초과되었습니다.");
+			}
+			applicationCommandService.create(
+				jobPostId, 20L, 100L, 11L, 1L, LocalDateTime.now(), "concurrent-application"
+			);
+		} catch (BusinessException exception) {
+			if (exception.getErrorCode() != ApplicationErrorCode.RECRUITMENT_ALREADY_COMPLETED) {
+				throw exception;
+			}
+		} catch (InterruptedException exception) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException("지원 생성 동시성 테스트가 중단되었습니다.", exception);
 		}
 	}
 
@@ -232,5 +307,6 @@ class RecruitmentCompletionServiceTests extends IntegrationTestSupport {
 		outboxEventRepository.deleteAll();
 		applicationHistoryRepository.deleteAll();
 		applicationRepository.deleteAll();
+		recruitmentStateRepository.deleteAll();
 	}
 }

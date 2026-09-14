@@ -827,6 +827,8 @@ Decision:
 - Change every remaining `APPLIED` application for the job to `REJECTED` and cancel its `PENDING` matching proposal in one local transaction.
 - Store application and matching status histories and an `ApplicationRejected` Outbox event with those transitions.
 - Reject the whole completion command while any affected matching has an unknown Saga outcome or unfinished compensation; the producer retries the same command later.
+- Persist the completed job version behind a per-job database lock. Application creation uses the same lock, rejects a late admission from that version, and accepts an admission from a higher reopened version.
+- Rebuild the Redis application and score queues once per completed job instead of once per rejected application.
 
 Reason:
 - Recruitment capacity and posting status belong to `job-service`, while application and matching states belong to `matching-service`.
@@ -836,6 +838,7 @@ Reason:
 Implication for agents:
 - Do not infer recruitment completion from local application counts or reject other applicants after every single confirmation.
 - Keep the current REST endpoint as an adapter for the semantic `RecruitmentCompleted` contract; a later broker integration must preserve its idempotency and retry behavior.
+- Include the source `jobVersion` in the completion contract so reopen cycles are distinguishable.
 - Do not implement the producer inside `job-service` unless work in the job domain is explicitly in scope.
 
 Related files:

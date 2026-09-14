@@ -59,9 +59,12 @@
 | --- | --- |
 | Method/Path | `POST /api/applications/internal/jobs/{jobPostId}/recruitment-completion` |
 | Header | `X-Internal-Secret: {configured secret}` |
+| Header | `X-Job-Version: {completion job version}` |
 | Header | `Idempotency-Key: {recruitment completion command id}` |
 
-`matching-service`는 해당 공고의 남은 `APPLIED` 지원을 ID 순서로 잠근 뒤 `REJECTED`로 변경하고, 연결된 `PENDING` 매칭 제안은 `CANCELED`로 종료한다. 지원·매칭 상태 이력과 `ApplicationRejected` Outbox 이벤트를 같은 트랜잭션에 저장한다. 같은 완료 명령이 다시 들어오면 이미 종료된 상태를 유지하고 이력이나 이벤트를 추가하지 않는다.
+`matching-service`는 공고별 모집 상태 행을 먼저 잠그고 완료된 공고 버전과 명령 ID를 영구 저장한다. 그 뒤 해당 공고의 남은 `APPLIED` 지원을 ID 순서로 잠가 `REJECTED`로 변경하고, 연결된 `PENDING` 매칭 제안은 `CANCELED`로 종료한다. 지원·매칭 상태 이력과 `ApplicationRejected` Outbox 이벤트를 같은 트랜잭션에 저장한다. 같은 버전의 완료 명령이 다시 들어오면 이미 종료된 상태를 유지하고 이력이나 이벤트를 추가하지 않는다.
+
+지원 저장도 같은 공고별 모집 상태 행을 잠근다. 완료와 같은 버전에서 늦게 도착한 지원 승인은 저장하지 않으므로 완료 응답 뒤에 `APPLIED` 지원이 다시 생기지 않는다. 공고가 재오픈되어 더 높은 `jobVersion`으로 발급된 승인은 정상 접수한다. 여러 지원을 종료한 뒤 Redis 지원·점수 대기열은 공고당 한 번만 최종 DB 상태로 재구성한다.
 
 결과가 확정되지 않은 외부 명령이나 미완료 보상이 남은 확정 Saga가 하나라도 있으면 전체 모집 완료 반영을 거부한다. 이 경우 `job-service`는 같은 명령 ID로 재시도하며, 모든 Saga가 안전하게 재개 또는 보상된 뒤에만 미선정 처리를 완료한다. 현재 저장소는 수신 계약만 제공하며 모집 완료 판단과 호출 구현은 공고 담당 범위에 둔다.
 
