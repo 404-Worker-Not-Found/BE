@@ -4,6 +4,7 @@ import com.workernotfound.matching.domain.application.entity.Application;
 import com.workernotfound.matching.domain.application.entity.enums.ApplicationStatus;
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.application.repository.ApplicationStatusHistoryRepository;
+import com.workernotfound.matching.domain.application.service.ApplicationCommandService;
 import com.workernotfound.matching.domain.matching.entity.Matching;
 import com.workernotfound.matching.domain.matching.entity.MatchingConfirmationSaga;
 import com.workernotfound.matching.domain.matching.entity.MatchingStatusHistory;
@@ -56,6 +57,12 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 
 	@Autowired
 	private MatchingConfirmationCommandService confirmationCommandService;
+
+	@Autowired
+	private ApplicationCommandService applicationCommandService;
+
+	@Autowired
+	private MatchingDeclineService matchingDeclineService;
 
 	@Autowired
 	private ApplicationRepository applicationRepository;
@@ -144,6 +151,29 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 		assertThat(sagaRepository.findByMatchingId(matching.getId()).orElseThrow().getAttempt()).isEqualTo(1);
 		verify(client, never()).releasePayment(anyString(), anyString());
 		verify(client, never()).releaseSeat(anyLong(), anyString(), anyString());
+	}
+
+	@Test
+	void blocksCancellationAndDeclineWhileAnUnknownOutcomeMustBeRecovered() {
+		Matching matching = saveMatching(20L, 40L);
+		when(client.reserveSeat(anyLong(), any(), anyString())).thenThrow(
+			new MatchingConfirmationClientException(
+				ConfirmationStep.SEAT_RESERVATION,
+				new RuntimeException("response lost")
+			)
+		);
+		assertThatThrownBy(() -> confirmationService.accept(matching.getId(), 20L))
+			.isInstanceOf(BusinessException.class);
+
+		assertThatThrownBy(() -> applicationCommandService.cancel(
+			matching.getApplication().getId(),
+			20L,
+			"cancel-command"
+		)).isInstanceOf(BusinessException.class);
+		assertThatThrownBy(() -> matchingDeclineService.decline(matching.getId(), 20L))
+			.isInstanceOfSatisfying(BusinessException.class, exception ->
+				assertThat(exception.getErrorCode())
+					.isEqualTo(MatchingErrorCode.MATCHING_CONFIRMATION_IN_PROGRESS));
 	}
 
 	@Test

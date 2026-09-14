@@ -18,12 +18,13 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
-@EnableConfigurationProperties(JwtProperties.class)
+@EnableConfigurationProperties({InternalApiProperties.class, JwtProperties.class})
 public class SecurityConfig {
 
 	@Bean
 	public SecurityFilterChain securityFilterChain(
 		HttpSecurity http,
+		InternalSecretAuthenticationFilter internalSecretAuthenticationFilter,
 		JwtAuthenticationFilter jwtAuthenticationFilter,
 		ObjectMapper objectMapper
 	) throws Exception {
@@ -41,6 +42,7 @@ public class SecurityConfig {
 			)
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers(
+					"/api/applications/internal/**",
 					"/v3/api-docs/**",
 					"/swagger-ui/**",
 					"/swagger-ui.html",
@@ -51,9 +53,19 @@ public class SecurityConfig {
 				.requestMatchers("/api/jobs/*/applications/**").hasRole("OWNER")
 				.anyRequest().authenticated()
 			)
+			// TODO: API Gateway나 mTLS 기반 서비스 간 인증으로 대체한다.
+			.addFilterBefore(internalSecretAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 			// TODO: API Gateway가 JWT를 검증하고 인증 헤더를 전달하는 방식으로 대체할 수 있다.
 			.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 			.build();
+	}
+
+	@Bean
+	public InternalSecretAuthenticationFilter internalSecretAuthenticationFilter(
+		InternalApiProperties internalApiProperties,
+		ObjectMapper objectMapper
+	) {
+		return new InternalSecretAuthenticationFilter(internalApiProperties, objectMapper);
 	}
 
 	private void writeSecurityError(

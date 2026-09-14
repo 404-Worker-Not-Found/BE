@@ -1,12 +1,14 @@
 package com.workernotfound.matching.global.security;
 
 import com.workernotfound.matching.support.IntegrationTestSupport;
+import com.workernotfound.matching.domain.application.repository.RecruitmentStateRepository;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
@@ -25,10 +27,63 @@ class ApplicationSecurityTests extends IntegrationTestSupport {
 	@Autowired
 	private MockMvc mockMvc;
 
+	@Autowired
+	private RecruitmentStateRepository recruitmentStateRepository;
+
+	@AfterEach
+	void cleanUpRecruitmentStates() {
+		recruitmentStateRepository.deleteAll();
+	}
+
 	@Test
 	void applicationApiRequiresAuthentication() throws Exception {
 		mockMvc.perform(get("/api/applications"))
 			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void recruitmentCompletionApiRequiresInternalSecret() throws Exception {
+		mockMvc.perform(post("/api/applications/internal/jobs/10/recruitment-completion")
+				.header("X-Job-Version", "1")
+				.header("Idempotency-Key", "completion-command"))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void recruitmentCompletionApiRequiresInternalSecretWithContextPath() throws Exception {
+		mockMvc.perform(post("/matching/api/applications/internal/jobs/10/recruitment-completion")
+				.contextPath("/matching")
+				.servletPath("/api/applications/internal/jobs/10/recruitment-completion")
+				.header("X-Job-Version", "1")
+				.header("Idempotency-Key", "completion-command"))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void recruitmentCompletionApiRejectsWrongInternalSecret() throws Exception {
+		mockMvc.perform(post("/api/applications/internal/jobs/10/recruitment-completion")
+				.header("X-Job-Version", "1")
+				.header("Idempotency-Key", "completion-command")
+				.header("X-Internal-Secret", "wrong-secret"))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void recruitmentCompletionApiAllowsValidInternalRequest() throws Exception {
+		mockMvc.perform(post("/api/applications/internal/jobs/10/recruitment-completion")
+				.header("X-Job-Version", "1")
+				.header("Idempotency-Key", "completion-command")
+				.header("X-Internal-Secret", "matching-test-internal-secret"))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void recruitmentCompletionApiRejectsNonPositiveJobPostId() throws Exception {
+		mockMvc.perform(post("/api/applications/internal/jobs/0/recruitment-completion")
+				.header("X-Job-Version", "1")
+				.header("Idempotency-Key", "completion-command")
+				.header("X-Internal-Secret", "matching-test-internal-secret"))
+			.andExpect(status().isBadRequest());
 	}
 
 	@Test

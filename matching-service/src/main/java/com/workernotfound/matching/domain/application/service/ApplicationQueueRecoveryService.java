@@ -27,7 +27,8 @@ public class ApplicationQueueRecoveryService {
 	private void recoverJob(Long jobPostId, Long fenceToken) {
 		applicationQueueRepository.replace(
 			jobPostId,
-			applicationRepository.findAppliedIdsByJobPostId(jobPostId)
+			applicationRepository.findAppliedIdsByJobPostId(jobPostId),
+			fenceToken
 		);
 		matchingScoreQueueService.synchronize(jobPostId, fenceToken);
 	}

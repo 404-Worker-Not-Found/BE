@@ -2,6 +2,8 @@ package com.workernotfound.matching.external.redis.application;
 
 import com.workernotfound.matching.domain.application.event.ApplicationEvent;
 import com.workernotfound.matching.domain.application.event.ApplicationEventType;
+import com.workernotfound.matching.domain.application.event.RecruitmentCompletionEvent;
+import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.score.service.MatchingScoreQueueService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +17,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class ApplicationQueueEventListener {
 
 	private final ApplicationQueueRepository applicationQueueRepository;
+	private final ApplicationRepository applicationRepository;
 	private final ApplicationQueueLockManager lockManager;
 	private final MatchingScoreQueueService matchingScoreQueueService;
 
@@ -32,11 +35,29 @@ public class ApplicationQueueEventListener {
 		}
 	}
 
+	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+	public void rebuildQueue(RecruitmentCompletionEvent event) {
+		try {
+			lockManager.execute(event.jobPostId(), fenceToken -> rebuild(event.jobPostId(), fenceToken));
+		} catch (RuntimeException exception) {
+			log.warn("모집 완료 후 지원 대기열 재구성에 실패했습니다. jobPostId={}", event.jobPostId(), exception);
+		}
+	}
+
+	private void rebuild(Long jobPostId, Long fenceToken) {
+		applicationQueueRepository.replace(
+			jobPostId,
+			applicationRepository.findAppliedIdsByJobPostId(jobPostId),
+			fenceToken
+		);
+		matchingScoreQueueService.synchronize(jobPostId, fenceToken);
+	}
+
 	private void update(ApplicationEvent event, Long fenceToken) {
 		if (ApplicationEventType.APPLICATION_SUBMITTED.value().equals(event.eventType())) {
-			applicationQueueRepository.add(event.jobPostId(), event.applicationId());
+			applicationQueueRepository.add(event.jobPostId(), event.applicationId(), fenceToken);
 		} else {
-			applicationQueueRepository.remove(event.jobPostId(), event.applicationId());
+			applicationQueueRepository.remove(event.jobPostId(), event.applicationId(), fenceToken);
 		}
 		matchingScoreQueueService.synchronize(event.jobPostId(), fenceToken);
 	}

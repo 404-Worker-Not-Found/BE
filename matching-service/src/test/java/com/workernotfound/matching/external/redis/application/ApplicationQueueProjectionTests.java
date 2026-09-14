@@ -4,6 +4,7 @@ import com.workernotfound.matching.domain.application.entity.Application;
 import com.workernotfound.matching.domain.application.event.ApplicationEvent;
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.application.repository.ApplicationStatusHistoryRepository;
+import com.workernotfound.matching.domain.application.repository.RecruitmentStateRepository;
 import com.workernotfound.matching.domain.application.service.ApplicationCommandService;
 import com.workernotfound.matching.domain.application.service.ApplicationQueueRecoveryService;
 import com.workernotfound.matching.domain.outbox.repository.OutboxEventRepository;
@@ -42,6 +43,9 @@ class ApplicationQueueProjectionTests extends IntegrationTestSupport {
 	private ApplicationStatusHistoryRepository historyRepository;
 
 	@Autowired
+	private RecruitmentStateRepository recruitmentStateRepository;
+
+	@Autowired
 	private OutboxEventRepository outboxEventRepository;
 
 	@Autowired
@@ -60,6 +64,7 @@ class ApplicationQueueProjectionTests extends IntegrationTestSupport {
 		outboxEventRepository.deleteAll();
 		historyRepository.deleteAll();
 		applicationRepository.deleteAll();
+		recruitmentStateRepository.deleteAll();
 		try (RedisConnection connection = redisTemplate.getConnectionFactory().getConnection()) {
 			connection.serverCommands().flushDb();
 		}
@@ -92,8 +97,8 @@ class ApplicationQueueProjectionTests extends IntegrationTestSupport {
 		Application applied = createApplication(10L, 20L, 30L);
 		Application canceled = createApplication(11L, 21L, 31L);
 		applicationCommandService.cancel(canceled.getId(), 21L, "cancel-correlation-id");
-		applicationQueueRepository.add(10L, 999L);
-		applicationQueueRepository.add(11L, canceled.getId());
+		applicationQueueRepository.add(10L, 999L, 1L);
+		applicationQueueRepository.add(11L, canceled.getId(), 1L);
 
 		recoveryService.recover();
 
@@ -107,7 +112,7 @@ class ApplicationQueueProjectionTests extends IntegrationTestSupport {
 		Application application = createApplication(10L, 20L, 30L);
 		ApplicationEvent event = ApplicationEvent.submitted(application, "duplicate-correlation-id");
 		long scoreBatchCount = scoreBatchRepository.count();
-		applicationQueueRepository.replace(10L, List.of());
+		applicationQueueRepository.replace(10L, List.of(), 2L);
 
 		applicationQueueEventListener.updateQueue(event);
 		applicationQueueEventListener.updateQueue(event);
@@ -117,12 +122,24 @@ class ApplicationQueueProjectionTests extends IntegrationTestSupport {
 		assertThat(scoreBatchRepository.count()).isEqualTo(scoreBatchCount);
 	}
 
+	@Test
+	void rejectsApplicationQueueWritesWithOlderFenceToken() {
+		applicationQueueRepository.replace(10L, List.of(1L), 2L);
+
+		applicationQueueRepository.add(10L, 2L, 1L);
+		applicationQueueRepository.remove(10L, 1L, 1L);
+		applicationQueueRepository.replace(10L, List.of(3L), 1L);
+
+		assertThat(applicationQueueRepository.findApplicationIds(10L)).containsExactly(1L);
+	}
+
 	private Application createApplication(Long jobPostId, Long workerMemberId, Long admissionId) {
 		return applicationCommandService.create(
 			jobPostId,
 			workerMemberId,
 			100L,
 			admissionId,
+			1L,
 			LocalDateTime.now(),
 			"create-correlation-id-" + admissionId
 		);

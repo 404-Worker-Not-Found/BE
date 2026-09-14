@@ -797,6 +797,8 @@ Decision:
 - Let `matching-service` coordinate worker acceptance as a persisted Saga.
 - Reserve recruitment capacity before creating payment, scheduled-work, and chat resources, then consume the reservation before committing local `CONFIRMED` and `SELECTED` states.
 - Persist one Saga per matching with stable command IDs, external resource IDs, attempt count, and a renewable execution lease.
+- Treat network failures, malformed success responses, and 5xx responses as unknown outcomes. Resume the same forward command ID instead of compensating immediately.
+- Use separate stable command IDs for forward, confirmation, and compensation steps. Start a new set only after a definitively rejected command has been fully compensated.
 - Compensate chat, work, payment, and the recruitment-seat reservation in reverse creation order when confirmation fails before seat consumption.
 - Fail closed while the job, payment, work, or chat contract is unavailable instead of exposing a temporary successful confirmation.
 
@@ -810,9 +812,36 @@ Implication for agents:
 - Keep external resource IDs as logical references without physical cross-service foreign keys.
 - When a source service is added, implement the documented internal contract and idempotency behavior instead of bypassing the Saga.
 - A failed compensation must retain the unresolved resource ID and be retried before beginning a new confirmation attempt.
+- Do not allow proposal cancellation or decline while an unknown external outcome still needs to be recovered, even when no external resource ID was recorded locally.
 
 Related files:
 - `docs/architecture/mvp-domain-flow.md`
 - `docs/architecture/matching-application-design.md`
 - `docs/architecture/matching-application-erd.drawio`
 - `matching-service/src/main/java/com/workernotfound/matching/domain/matching`
+
+## 2026-09-14 - Recruitment Completion Boundary
+
+Decision:
+- Let `job-service` decide when recruitment is complete and notify `matching-service` through an authenticated, idempotent internal contract.
+- Change every remaining `APPLIED` application for the job to `REJECTED` and cancel its `PENDING` matching proposal in one local transaction.
+- Store application and matching status histories and an `ApplicationRejected` Outbox event with those transitions.
+- Reject the whole completion command while any affected matching has an unknown Saga outcome or unfinished compensation; the producer retries the same command later.
+- Persist the completed job version behind a per-job database lock. Application creation uses the same lock, rejects a late admission from that version, and accepts an admission from a higher reopened version.
+- Rebuild the Redis application and score queues once per completed job instead of once per rejected application.
+
+Reason:
+- Recruitment capacity and posting status belong to `job-service`, while application and matching states belong to `matching-service`.
+- All-or-nothing local processing prevents a job from exposing a mixture of open and rejected candidates.
+- Waiting for uncertain Saga work avoids losing a remotely created resource or leaving a consumed seat attached to a locally canceled proposal.
+
+Implication for agents:
+- Do not infer recruitment completion from local application counts or reject other applicants after every single confirmation.
+- Keep the current REST endpoint as an adapter for the semantic `RecruitmentCompleted` contract; a later broker integration must preserve its idempotency and retry behavior.
+- Include the source `jobVersion` in the completion contract so reopen cycles are distinguishable.
+- Do not implement the producer inside `job-service` unless work in the job domain is explicitly in scope.
+
+Related files:
+- `docs/architecture/matching-application-design.md`
+- `docs/architecture/mvp-domain-flow.md`
+- `matching-service/src/main/java/com/workernotfound/matching/domain/application`

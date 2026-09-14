@@ -50,6 +50,14 @@ public record ApplicationEvent(
 		return from(application, ApplicationEventType.APPLICATION_SELECTED, correlationId, changedAt);
 	}
 
+	public static ApplicationEvent rejected(
+		Application application,
+		String correlationId,
+		LocalDateTime changedAt
+	) {
+		return from(application, ApplicationEventType.APPLICATION_REJECTED, correlationId, changedAt);
+	}
+
 	private static ApplicationEvent from(
 		Application application,
 		ApplicationEventType eventType,

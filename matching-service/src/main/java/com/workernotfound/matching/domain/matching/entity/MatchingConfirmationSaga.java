@@ -183,7 +183,9 @@ public class MatchingConfirmationSaga extends BaseEntity {
 	public boolean blocksProposalResponse() {
 		return status == MatchingConfirmationSagaStatus.PROCESSING
 			|| status == MatchingConfirmationSagaStatus.COMPENSATING
-			|| hasResourcesToCompensate();
+			|| hasResourcesToCompensate()
+			|| (status == MatchingConfirmationSagaStatus.FAILED
+				&& recoveryAction != MatchingConfirmationRecoveryAction.START_NEW_ATTEMPT);
 	}
 
 	public void resume(String newLeaseToken, LocalDateTime newLeaseExpiresAt) {

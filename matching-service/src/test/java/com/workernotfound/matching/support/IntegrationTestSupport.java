@@ -39,6 +39,7 @@ public abstract class IntegrationTestSupport {
 		registry.add("matching.application-queue.recovery-interval", () -> "1h");
 		registry.add("matching.application-queue.recovery-initial-delay", () -> "1h");
 		registry.add("matching.jwt.secret", () -> "matching-test-jwt-secret-at-least-32-characters");
+		registry.add("matching.internal.secret", () -> "matching-test-internal-secret");
 		registry.add("matching.member-service.internal-secret", () -> "matching-test-internal-secret");
 		registry.add("matching.job-service.internal-secret", () -> "matching-test-internal-secret");
 		registry.add("matching.payment-service.internal-secret", () -> "matching-test-internal-secret");

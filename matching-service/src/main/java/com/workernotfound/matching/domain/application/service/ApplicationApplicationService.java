@@ -56,6 +56,7 @@ public class ApplicationApplicationService {
 				workerMemberId,
 				admission.ownerMemberId(),
 				admission.admissionId(),
+				admission.jobVersion(),
 				admission.admittedAt(),
 				correlationId
 			));
@@ -137,6 +138,8 @@ public class ApplicationApplicationService {
 	) {
 		if (admission.admissionId() == null
 			|| !jobPostId.equals(admission.jobPostId())
+			|| admission.jobVersion() == null
+			|| admission.jobVersion() <= 0
 			|| admission.ownerMemberId() == null
 			|| admission.admittedAt() == null
 			|| admission.expiresAt() == null) {

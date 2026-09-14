@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class MatchingCancellationService {
 
 	private static final String APPLICATION_CANCELED_REASON = "APPLICATION_CANCELED_BY_WORKER";
+	private static final String RECRUITMENT_COMPLETED_REASON = "RECRUITMENT_COMPLETED";
 
 	private final MatchingRepository matchingRepository;
 	private final MatchingStatusHistoryRepository historyRepository;
@@ -35,15 +36,39 @@ public class MatchingCancellationService {
 				throw new BusinessException(ApplicationErrorCode.APPLICATION_STATE_CONFLICT);
 			}
 		});
+		cancel(matching, MatchingActorType.WORKER, workerMemberId, APPLICATION_CANCELED_REASON, changedAt);
+	}
+
+	@Transactional
+	public void cancelPendingForRecruitmentCompletion(Long applicationId, LocalDateTime changedAt) {
+		Matching matching = matchingRepository.findByApplicationId(applicationId).orElse(null);
+		if (matching == null || matching.getStatus() != MatchingStatus.PENDING) {
+			return;
+		}
+		sagaRepository.findByMatchingIdForUpdate(matching.getId()).ifPresent(saga -> {
+			if (saga.blocksProposalResponse()) {
+				throw new BusinessException(ApplicationErrorCode.RECRUITMENT_COMPLETION_IN_PROGRESS);
+			}
+		});
+		cancel(matching, MatchingActorType.SYSTEM, null, RECRUITMENT_COMPLETED_REASON, changedAt);
+	}
+
+	private void cancel(
+		Matching matching,
+		MatchingActorType actorType,
+		Long actorMemberId,
+		String reasonCode,
+		LocalDateTime changedAt
+	) {
 		matching.cancel();
 		matchingRepository.flush();
 		historyRepository.saveAndFlush(MatchingStatusHistory.builder()
 			.matching(matching)
 			.fromStatus(MatchingStatus.PENDING)
 			.toStatus(MatchingStatus.CANCELED)
-			.actorType(MatchingActorType.WORKER)
-			.actorMemberId(workerMemberId)
-			.reasonCode(APPLICATION_CANCELED_REASON)
+			.actorType(actorType)
+			.actorMemberId(actorMemberId)
+			.reasonCode(reasonCode)
 			.revision(matching.getRevision())
 			.changedAt(changedAt)
 			.build());

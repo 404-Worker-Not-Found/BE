@@ -4,6 +4,7 @@ import com.workernotfound.matching.domain.application.entity.Application;
 import com.workernotfound.matching.domain.application.entity.enums.ApplicationStatus;
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.application.repository.ApplicationStatusHistoryRepository;
+import com.workernotfound.matching.domain.application.repository.RecruitmentStateRepository;
 import com.workernotfound.matching.domain.application.service.ApplicationCommandService;
 import com.workernotfound.matching.domain.outbox.repository.OutboxEventRepository;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreBatchRepository;
@@ -36,6 +37,9 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 	private ApplicationStatusHistoryRepository historyRepository;
 
 	@Autowired
+	private RecruitmentStateRepository recruitmentStateRepository;
+
+	@Autowired
 	private OutboxEventRepository outboxEventRepository;
 
 	@Autowired
@@ -57,6 +61,7 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 		outboxEventRepository.deleteAll();
 		historyRepository.deleteAll();
 		applicationRepository.deleteAll();
+		recruitmentStateRepository.deleteAll();
 	}
 
 	@AfterEach
@@ -67,13 +72,14 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 	@Test
 	void commitsApplicationWhenRedisUpdateFails() {
 		doThrow(new IllegalStateException("Redis connection failed"))
-			.when(applicationQueueRepository).add(eq(10L), anyLong());
+			.when(applicationQueueRepository).add(eq(10L), anyLong(), anyLong());
 
 		Application application = applicationCommandService.create(
 			10L,
 			20L,
 			100L,
 			30L,
+			1L,
 			LocalDateTime.now(),
 			"correlation-id"
 		);
@@ -91,11 +97,12 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 			20L,
 			100L,
 			30L,
+			1L,
 			LocalDateTime.now(),
 			"create-correlation-id"
 		);
 		doThrow(new IllegalStateException("Redis connection failed"))
-			.when(applicationQueueRepository).remove(10L, application.getId());
+			.when(applicationQueueRepository).remove(eq(10L), eq(application.getId()), anyLong());
 
 		applicationCommandService.cancel(application.getId(), 20L, "cancel-correlation-id");
 
@@ -124,6 +131,7 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 			20L,
 			100L,
 			30L,
+			1L,
 			LocalDateTime.now(),
 			"correlation-id"
 		);

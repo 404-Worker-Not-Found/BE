@@ -29,8 +29,8 @@ class ApplicationQueueRepositoryTests extends IntegrationTestSupport {
 
 	@Test
 	void addsApplicationOnlyOnce() {
-		applicationQueueRepository.add(JOB_POST_ID, 1L);
-		applicationQueueRepository.add(JOB_POST_ID, 1L);
+		applicationQueueRepository.add(JOB_POST_ID, 1L, 1L);
+		applicationQueueRepository.add(JOB_POST_ID, 1L, 2L);
 
 		assertThat(applicationQueueRepository.findApplicationIds(JOB_POST_ID))
 			.containsExactly(1L);
@@ -38,18 +38,18 @@ class ApplicationQueueRepositoryTests extends IntegrationTestSupport {
 
 	@Test
 	void removesApplication() {
-		applicationQueueRepository.add(JOB_POST_ID, 1L);
+		applicationQueueRepository.add(JOB_POST_ID, 1L, 1L);
 
-		applicationQueueRepository.remove(JOB_POST_ID, 1L);
+		applicationQueueRepository.remove(JOB_POST_ID, 1L, 2L);
 
 		assertThat(applicationQueueRepository.findApplicationIds(JOB_POST_ID)).isEmpty();
 	}
 
 	@Test
 	void replacesApplications() {
-		applicationQueueRepository.add(JOB_POST_ID, 1L);
+		applicationQueueRepository.add(JOB_POST_ID, 1L, 1L);
 
-		applicationQueueRepository.replace(JOB_POST_ID, List.of(2L, 3L));
+		applicationQueueRepository.replace(JOB_POST_ID, List.of(2L, 3L), 2L);
 
 		assertThat(applicationQueueRepository.findApplicationIds(JOB_POST_ID))
 			.containsExactlyInAnyOrder(2L, 3L);

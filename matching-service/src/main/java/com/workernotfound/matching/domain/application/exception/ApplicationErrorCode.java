@@ -19,6 +19,16 @@ public enum ApplicationErrorCode implements ErrorCode {
 	JOB_NOT_OPEN("APPLICATION-409-003", "현재 지원을 받는 공고가 아닙니다.", HttpStatus.CONFLICT),
 	APPLICATION_DEADLINE_PASSED("APPLICATION-409-004", "지원 마감 시간이 지났습니다.", HttpStatus.CONFLICT),
 	ADMISSION_EXPIRED("APPLICATION-409-005", "지원 접수 승인이 만료되었습니다. 다시 시도해주세요.", HttpStatus.CONFLICT),
+	RECRUITMENT_COMPLETION_IN_PROGRESS(
+		"APPLICATION-409-006",
+		"매칭 확정 처리 중인 지원이 있어 모집 완료를 반영할 수 없습니다.",
+		HttpStatus.CONFLICT
+	),
+	RECRUITMENT_ALREADY_COMPLETED(
+		"APPLICATION-409-007",
+		"해당 공고 버전의 모집이 이미 완료되었습니다.",
+		HttpStatus.CONFLICT
+	),
 	DEPENDENCY_SERVICE_UNAVAILABLE("APPLICATION-503-001", "지원 자격을 확인할 수 없습니다. 잠시 후 다시 시도해주세요.", HttpStatus.SERVICE_UNAVAILABLE);
 
 	private final String code;

@@ -103,4 +103,12 @@ public class Application extends BaseEntity {
 		this.status = ApplicationStatus.SELECTED;
 		this.revision++;
 	}
+
+	public void reject() {
+		if (status != ApplicationStatus.APPLIED) {
+			throw new IllegalStateException("접수된 지원만 비선정 처리할 수 있습니다.");
+		}
+		this.status = ApplicationStatus.REJECTED;
+		this.revision++;
+	}
 }
