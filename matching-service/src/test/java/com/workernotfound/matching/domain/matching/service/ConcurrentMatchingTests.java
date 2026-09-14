@@ -8,12 +8,21 @@ import com.workernotfound.matching.domain.application.service.ApplicationCommand
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingStatus;
 import com.workernotfound.matching.domain.matching.repository.MatchingRepository;
 import com.workernotfound.matching.domain.matching.repository.MatchingStatusHistoryRepository;
+import com.workernotfound.matching.domain.matching.repository.MatchingConfirmationSagaRepository;
 import com.workernotfound.matching.domain.outbox.repository.OutboxEventRepository;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreBatchRepository;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreSnapshotRepository;
 import com.workernotfound.matching.global.exception.BusinessException;
+import com.workernotfound.matching.external.client.confirmation.MatchingConfirmationClient;
+import com.workernotfound.matching.external.client.confirmation.dto.ChatRoomResponse;
+import com.workernotfound.matching.external.client.confirmation.dto.PaymentLockResponse;
+import com.workernotfound.matching.external.client.confirmation.dto.ScheduledWorkResponse;
+import com.workernotfound.matching.external.client.confirmation.dto.SeatReservationResponse;
 import com.workernotfound.matching.support.IntegrationTestSupport;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.math.BigDecimal;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -23,8 +32,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 class ConcurrentMatchingTests extends IntegrationTestSupport {
 
@@ -33,6 +47,9 @@ class ConcurrentMatchingTests extends IntegrationTestSupport {
 
 	@Autowired
 	private MatchingDeclineService matchingDeclineService;
+
+	@Autowired
+	private MatchingConfirmationService matchingConfirmationService;
 
 	@Autowired
 	private ApplicationCommandService applicationCommandService;
@@ -57,6 +74,12 @@ class ConcurrentMatchingTests extends IntegrationTestSupport {
 
 	@Autowired
 	private ApplicationRepository applicationRepository;
+
+	@Autowired
+	private MatchingConfirmationSagaRepository sagaRepository;
+
+	@MockitoBean
+	private MatchingConfirmationClient confirmationClient;
 
 	private ExecutorService executorService;
 
@@ -127,6 +150,47 @@ class ConcurrentMatchingTests extends IntegrationTestSupport {
 			.isIn(MatchingStatus.DECLINED, MatchingStatus.CANCELED);
 	}
 
+	@Test
+	void cancellationCannotOvertakeMatchingConfirmation() throws Exception {
+		Application application = applicationRepository.saveAndFlush(Application.builder()
+			.jobPostId(10L)
+			.workerMemberId(20L)
+			.ownerMemberId(100L)
+			.jobApplicationAdmissionId(30L)
+			.appliedAt(LocalDateTime.now())
+			.build());
+		Long matchingId = matchingCommandService.createManual(10L, application.getId(), 100L, null).getId();
+		CountDownLatch seatRequested = new CountDownLatch(1);
+		CountDownLatch continueConfirmation = new CountDownLatch(1);
+		stubConfirmation(seatRequested, continueConfirmation);
+
+		Future<Boolean> confirmation = executorService.submit(() -> {
+			try {
+				matchingConfirmationService.accept(matchingId, 20L);
+				return true;
+			} catch (RuntimeException exception) {
+				return false;
+			}
+		});
+		assertThat(seatRequested.await(5, TimeUnit.SECONDS)).isTrue();
+		Future<Boolean> cancellation = executorService.submit(() -> {
+			try {
+				applicationCommandService.cancel(application.getId(), 20L, "cancel-command");
+				return true;
+			} catch (BusinessException exception) {
+				return false;
+			}
+		});
+
+		assertThat(cancellation.get(5, TimeUnit.SECONDS)).isFalse();
+		continueConfirmation.countDown();
+		assertThat(confirmation.get(10, TimeUnit.SECONDS)).isTrue();
+		assertThat(applicationRepository.findById(application.getId()).orElseThrow().getStatus())
+			.isEqualTo(ApplicationStatus.SELECTED);
+		assertThat(matchingRepository.findById(matchingId).orElseThrow().getStatus())
+			.isEqualTo(MatchingStatus.CONFIRMED);
+	}
+
 	private boolean runTogether(CountDownLatch ready, CountDownLatch start, Runnable command) {
 		ready.countDown();
 		try {
@@ -144,6 +208,7 @@ class ConcurrentMatchingTests extends IntegrationTestSupport {
 	}
 
 	private void deletePersistence() {
+		sagaRepository.deleteAll();
 		matchingHistoryRepository.deleteAll();
 		matchingRepository.deleteAll();
 		scoreSnapshotRepository.deleteAll();
@@ -151,5 +216,25 @@ class ConcurrentMatchingTests extends IntegrationTestSupport {
 		outboxEventRepository.deleteAll();
 		applicationHistoryRepository.deleteAll();
 		applicationRepository.deleteAll();
+	}
+
+	private void stubConfirmation(CountDownLatch requested, CountDownLatch proceed) {
+		when(confirmationClient.reserveSeat(anyLong(), any(), anyString())).thenAnswer(invocation -> {
+			requested.countDown();
+			if (!proceed.await(5, TimeUnit.SECONDS)) {
+				throw new IllegalStateException("자리 예약 테스트 대기 시간이 초과되었습니다.");
+			}
+			return new SeatReservationResponse(
+				"seat-1", 10L, 100L, LocalDate.now().plusDays(1),
+				LocalTime.of(9, 0), LocalTime.of(18, 0), new BigDecimal("120000"), "KRW",
+				LocalDateTime.now(), LocalDateTime.now().plusMinutes(5)
+			);
+		});
+		when(confirmationClient.lockPayment(any(), anyString()))
+			.thenReturn(new PaymentLockResponse("payment-1"));
+		when(confirmationClient.createScheduledWork(any(), anyString()))
+			.thenReturn(new ScheduledWorkResponse("work-1"));
+		when(confirmationClient.createChatRoom(any(), anyString()))
+			.thenReturn(new ChatRoomResponse("chat-1"));
 	}
 }

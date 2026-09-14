@@ -12,6 +12,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -164,6 +165,21 @@ class ApplicationSecurityTests extends IntegrationTestSupport {
 	void workerMatchingApiRejectsPageSizeOverMaximum() throws Exception {
 		mockMvc.perform(get("/api/matchings")
 				.param("size", "101")
+				.header("Authorization", "Bearer " + token("WORKER")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("GLOBAL-400-002"));
+	}
+
+	@Test
+	void matchingAcceptApiRejectsOwnerRole() throws Exception {
+		mockMvc.perform(patch("/api/matchings/10/accept")
+				.header("Authorization", "Bearer " + token("OWNER")))
+			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void matchingAcceptApiRejectsNonPositiveMatchingId() throws Exception {
+		mockMvc.perform(patch("/api/matchings/0/accept")
 				.header("Authorization", "Bearer " + token("WORKER")))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("GLOBAL-400-002"));
