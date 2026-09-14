@@ -137,4 +137,13 @@ public class Matching extends BaseEntity {
 		this.status = MatchingStatus.DECLINED;
 		this.revision++;
 	}
+
+	public void confirm(LocalDateTime confirmedAt) {
+		if (status != MatchingStatus.PENDING) {
+			throw new IllegalStateException("대기 중인 매칭만 확정할 수 있습니다.");
+		}
+		this.status = MatchingStatus.CONFIRMED;
+		this.confirmedAt = confirmedAt;
+		this.revision++;
+	}
 }

@@ -58,4 +58,15 @@ public class WorkerMatchingController implements WorkerMatchingControllerDocs {
 			matchingApplicationService.decline(matchingId, member.memberId())
 		));
 	}
+
+	@Override
+	@PatchMapping("/{matchingId}/accept")
+	public ResponseEntity<ApiResponse<MatchingResponse>> accept(
+		@AuthenticationPrincipal AuthenticatedMember member,
+		@PathVariable Long matchingId
+	) {
+		return ResponseEntity.ok(ApiResponse.success(
+			matchingApplicationService.accept(matchingId, member.memberId())
+		));
+	}
 }

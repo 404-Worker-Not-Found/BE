@@ -1,5 +1,9 @@
 package com.workernotfound.matching.global.config;
 
+import com.workernotfound.matching.domain.matching.config.MatchingConfirmationProperties;
+import com.workernotfound.matching.external.client.confirmation.ChatServiceProperties;
+import com.workernotfound.matching.external.client.confirmation.PaymentServiceProperties;
+import com.workernotfound.matching.external.client.confirmation.WorkServiceProperties;
 import com.workernotfound.matching.external.client.job.JobServiceProperties;
 import com.workernotfound.matching.external.client.member.MemberServiceProperties;
 import java.net.URI;
@@ -11,7 +15,14 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 @Configuration
-@EnableConfigurationProperties({MemberServiceProperties.class, JobServiceProperties.class})
+@EnableConfigurationProperties({
+	MemberServiceProperties.class,
+	JobServiceProperties.class,
+	PaymentServiceProperties.class,
+	WorkServiceProperties.class,
+	ChatServiceProperties.class,
+	MatchingConfirmationProperties.class
+})
 public class RestClientConfig {
 
 	@Bean
@@ -26,6 +37,36 @@ public class RestClientConfig {
 
 	@Bean
 	public RestClient jobServiceRestClient(JobServiceProperties properties) {
+		return createInternalRestClient(
+			properties.baseUrl(),
+			properties.connectTimeout(),
+			properties.readTimeout(),
+			properties.internalSecret()
+		);
+	}
+
+	@Bean
+	public RestClient paymentServiceRestClient(PaymentServiceProperties properties) {
+		return createInternalRestClient(
+			properties.baseUrl(),
+			properties.connectTimeout(),
+			properties.readTimeout(),
+			properties.internalSecret()
+		);
+	}
+
+	@Bean
+	public RestClient workServiceRestClient(WorkServiceProperties properties) {
+		return createInternalRestClient(
+			properties.baseUrl(),
+			properties.connectTimeout(),
+			properties.readTimeout(),
+			properties.internalSecret()
+		);
+	}
+
+	@Bean
+	public RestClient chatServiceRestClient(ChatServiceProperties properties) {
 		return createInternalRestClient(
 			properties.baseUrl(),
 			properties.connectTimeout(),

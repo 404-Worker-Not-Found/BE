@@ -5,6 +5,9 @@ import com.workernotfound.matching.domain.matching.entity.MatchingStatusHistory;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingActorType;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingStatus;
 import com.workernotfound.matching.domain.matching.repository.MatchingRepository;
+import com.workernotfound.matching.domain.matching.repository.MatchingConfirmationSagaRepository;
+import com.workernotfound.matching.domain.application.exception.ApplicationErrorCode;
+import com.workernotfound.matching.global.exception.BusinessException;
 import com.workernotfound.matching.domain.matching.repository.MatchingStatusHistoryRepository;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +22,7 @@ public class MatchingCancellationService {
 
 	private final MatchingRepository matchingRepository;
 	private final MatchingStatusHistoryRepository historyRepository;
+	private final MatchingConfirmationSagaRepository sagaRepository;
 
 	@Transactional
 	public void cancelPendingByApplication(Long applicationId, Long workerMemberId, LocalDateTime changedAt) {
@@ -26,6 +30,11 @@ public class MatchingCancellationService {
 		if (matching == null || matching.getStatus() != MatchingStatus.PENDING) {
 			return;
 		}
+		sagaRepository.findByMatchingIdForUpdate(matching.getId()).ifPresent(saga -> {
+			if (saga.blocksProposalResponse()) {
+				throw new BusinessException(ApplicationErrorCode.APPLICATION_STATE_CONFLICT);
+			}
+		});
 		matching.cancel();
 		matchingRepository.flush();
 		historyRepository.saveAndFlush(MatchingStatusHistory.builder()

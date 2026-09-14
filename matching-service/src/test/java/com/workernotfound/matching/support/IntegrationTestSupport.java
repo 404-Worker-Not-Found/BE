@@ -41,5 +41,9 @@ public abstract class IntegrationTestSupport {
 		registry.add("matching.jwt.secret", () -> "matching-test-jwt-secret-at-least-32-characters");
 		registry.add("matching.member-service.internal-secret", () -> "matching-test-internal-secret");
 		registry.add("matching.job-service.internal-secret", () -> "matching-test-internal-secret");
+		registry.add("matching.payment-service.internal-secret", () -> "matching-test-internal-secret");
+		registry.add("matching.work-service.internal-secret", () -> "matching-test-internal-secret");
+		registry.add("matching.chat-service.internal-secret", () -> "matching-test-internal-secret");
+		registry.add("matching.confirmation.lease-duration", () -> "2m");
 	}
 }

@@ -1,0 +1,13 @@
+package com.workernotfound.matching.external.client.confirmation;
+
+public enum ConfirmationStep {
+	SEAT_RESERVATION,
+	PAYMENT_LOCK,
+	WORK_CREATION,
+	CHAT_CREATION,
+	SEAT_CONFIRMATION,
+	CHAT_COMPENSATION,
+	WORK_COMPENSATION,
+	PAYMENT_COMPENSATION,
+	SEAT_COMPENSATION
+}

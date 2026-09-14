@@ -14,6 +14,7 @@ public class MatchingApplicationService {
 	private final MatchingCommandService matchingCommandService;
 	private final MatchingFindService matchingFindService;
 	private final MatchingDeclineService matchingDeclineService;
+	private final MatchingConfirmationService matchingConfirmationService;
 
 	@Transactional
 	public MatchingResponse createManual(
@@ -43,5 +44,9 @@ public class MatchingApplicationService {
 	@Transactional
 	public MatchingResponse decline(Long matchingId, Long workerMemberId) {
 		return MatchingResponse.from(matchingDeclineService.decline(matchingId, workerMemberId));
+	}
+
+	public MatchingResponse accept(Long matchingId, Long workerMemberId) {
+		return MatchingResponse.from(matchingConfirmationService.accept(matchingId, workerMemberId));
 	}
 }

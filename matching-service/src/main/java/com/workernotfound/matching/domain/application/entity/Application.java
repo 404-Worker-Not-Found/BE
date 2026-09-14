@@ -95,4 +95,12 @@ public class Application extends BaseEntity {
 		this.status = ApplicationStatus.CANCELED;
 		this.revision++;
 	}
+
+	public void select() {
+		if (status != ApplicationStatus.APPLIED) {
+			throw new IllegalStateException("접수된 지원만 선정할 수 있습니다.");
+		}
+		this.status = ApplicationStatus.SELECTED;
+		this.revision++;
+	}
 }

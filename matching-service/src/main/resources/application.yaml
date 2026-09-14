@@ -30,6 +30,23 @@ matching:
     connect-timeout: 3s
     read-timeout: 5s
     internal-secret: ${INTERNAL_API_SECRET}
+  payment-service:
+    base-url: ${PAYMENT_SERVICE_BASE_URL:http://localhost:8085}
+    connect-timeout: 3s
+    read-timeout: 5s
+    internal-secret: ${INTERNAL_API_SECRET}
+  work-service:
+    base-url: ${WORK_SERVICE_BASE_URL:http://localhost:8086}
+    connect-timeout: 3s
+    read-timeout: 5s
+    internal-secret: ${INTERNAL_API_SECRET}
+  chat-service:
+    base-url: ${CHAT_SERVICE_BASE_URL:http://localhost:8087}
+    connect-timeout: 3s
+    read-timeout: 5s
+    internal-secret: ${INTERNAL_API_SECRET}
+  confirmation:
+    lease-duration: ${MATCHING_CONFIRMATION_LEASE_DURATION:2m}
   application-queue:
     recovery-interval: ${MATCHING_APPLICATION_QUEUE_RECOVERY_INTERVAL:5m}
     recovery-initial-delay: ${MATCHING_APPLICATION_QUEUE_RECOVERY_INITIAL_DELAY:30s}

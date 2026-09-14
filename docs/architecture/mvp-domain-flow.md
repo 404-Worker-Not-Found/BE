@@ -250,21 +250,24 @@
 
 정상 실행 순서:
 
-1. `payment-service`에 `LockPayment` 명령을 보내 예치 금액을 잠근다.
-2. `work-service`에 `CreateScheduledWork` 명령을 보내 예정 근무를 만든다.
-3. `chat-service`에 `CreateChatRoom` 명령을 보내 1:1 채팅방을 만든다.
-4. 모든 단계가 성공하면 매칭을 `CONFIRMED`, Saga를 `COMPLETED`로 바꾸고 `MatchConfirmed`를 발행한다.
+1. `job-service`에 모집 자리 예약 명령을 보내 남은 인원 한 자리를 확보한다.
+2. `payment-service`에 `LockPayment` 명령을 보내 예치 금액을 잠근다.
+3. `work-service`에 `CreateScheduledWork` 명령을 보내 예정 근무를 만든다.
+4. `chat-service`에 `CreateChatRoom` 명령을 보내 1:1 채팅방을 만든다.
+5. `job-service`에 자리 소비 명령을 보내 예약을 확정 인원으로 반영한다.
+6. 모든 단계가 성공하면 매칭을 `CONFIRMED`, 지원을 `SELECTED`, Saga를 `COMPLETED`로 바꾸고 `ApplicationSelected`와 `MatchConfirmed`를 발행한다.
 
-각 명령은 `correlationId`, 명령 ID, 대상 ID를 포함하고 수신 서비스는 명령 ID를 멱등 키로 사용한다. 수신 서비스는 성공 이벤트나 실패 이벤트에 같은 `correlationId`와 명령 ID를 담아 반환한다.
+각 명령은 `correlationId`, 명령 ID, 대상 ID를 포함하고 수신 서비스는 명령 ID를 멱등 키로 사용한다. 실행과 보상은 서로 다른 명령 ID를 사용하고 각각의 재시도에서만 같은 ID를 재사용한다. 수신 서비스는 4xx 응답을 부수 효과 없는 명령 거절로 보장한다. 네트워크 오류나 5xx처럼 결과를 알 수 없는 경우 조정자는 보상하지 않고 같은 명령 ID로 해당 단계를 재개한다.
 
 보상 실행 순서:
 
 1. 채팅방 생성 후 후속 단계가 실패했다면 `CloseChatRoom`으로 채팅방을 닫는다.
 2. 예정 근무 생성 후 후속 단계가 실패했다면 `CancelScheduledWork`로 예정 근무를 취소한다.
 3. 결제 잠금 후 후속 단계가 실패했다면 `ReleasePaymentLock`으로 금액 잠금을 해제한다.
-4. 모든 보상이 성공하면 매칭을 이전 상태로 돌리고 다음 후보 선택 또는 공고 재오픈을 진행한다.
+4. 모집 자리 예약 후 후속 단계가 실패했다면 자리 예약을 해제한다.
+5. 모든 보상이 성공하면 매칭을 이전 상태로 돌리고 다음 후보 선택 또는 공고 재오픈을 진행한다.
 
-명령과 보상 명령은 설정된 횟수까지 재시도한다. 재시도가 끝난 뒤에도 실패하면 Saga를 `FAILED`로 유지하고 실패 단계와 마지막 오류를 기록한다. 실패한 Saga는 같은 `correlationId`로 재개할 수 있어야 하며, 새 후보 매칭을 시작하기 전에 기존 Saga가 종료되었는지 확인한다.
+명령이나 보상 명령이 실패하면 Saga를 `FAILED`로 유지하고 실패 단계, 마지막 오류, 필요한 복구 동작을 기록한다. 다음 수락 요청은 저장된 복구 동작에 따라 같은 명령으로 실행 또는 보상을 재개한다. 확정적으로 거절된 실행 명령은 알려진 리소스의 보상이 모두 끝난 뒤에만 새 단계 명령 ID로 다시 시도한다. 새 후보 매칭을 시작하기 전에 기존 Saga가 종료되었는지 확인한다.
 
 ## 주요 시나리오
 
