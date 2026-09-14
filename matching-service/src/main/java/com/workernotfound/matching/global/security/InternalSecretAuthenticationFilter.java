@@ -42,7 +42,9 @@ public class InternalSecretAuthenticationFilter extends OncePerRequestFilter {
 	}
 
 	private boolean isInternalRequest(HttpServletRequest request) {
-		String path = request.getRequestURI();
+		String requestUri = request.getRequestURI();
+		String contextPath = request.getContextPath();
+		String path = requestUri.substring(contextPath.length());
 		return path.equals(INTERNAL_PATH) || path.startsWith(INTERNAL_PATH + "/");
 	}
 

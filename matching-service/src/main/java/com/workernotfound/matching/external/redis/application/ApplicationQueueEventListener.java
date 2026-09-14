@@ -45,15 +45,19 @@ public class ApplicationQueueEventListener {
 	}
 
 	private void rebuild(Long jobPostId, Long fenceToken) {
-		applicationQueueRepository.replace(jobPostId, applicationRepository.findAppliedIdsByJobPostId(jobPostId));
+		applicationQueueRepository.replace(
+			jobPostId,
+			applicationRepository.findAppliedIdsByJobPostId(jobPostId),
+			fenceToken
+		);
 		matchingScoreQueueService.synchronize(jobPostId, fenceToken);
 	}
 
 	private void update(ApplicationEvent event, Long fenceToken) {
 		if (ApplicationEventType.APPLICATION_SUBMITTED.value().equals(event.eventType())) {
-			applicationQueueRepository.add(event.jobPostId(), event.applicationId());
+			applicationQueueRepository.add(event.jobPostId(), event.applicationId(), fenceToken);
 		} else {
-			applicationQueueRepository.remove(event.jobPostId(), event.applicationId());
+			applicationQueueRepository.remove(event.jobPostId(), event.applicationId(), fenceToken);
 		}
 		matchingScoreQueueService.synchronize(event.jobPostId(), fenceToken);
 	}
