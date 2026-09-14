@@ -20,7 +20,6 @@
 
 ### 다음 구현
 
-- 모집 완료 시 미선정 지원 일괄 종료
 - 내구성 있는 Outbox relay와 전달 재시도
 - 점수 공식과 긴급도별 가중치
 - 평점, 업종 경력, 근무 이력, 노쇼 위험도 입력 연동
@@ -53,6 +52,18 @@
 | `APPLIED` | 모집 완료 | `REJECTED` | 모집 인원이 모두 확정되었고 해당 지원이 선택되지 않음 |
 
 후보에게 매칭을 제안해 `matchings.status=PENDING`인 동안 지원 상태는 `APPLIED`로 유지한다. 후보가 거절하거나 응답 기한이 만료되면 해당 매칭 시도만 종료한다. 지원은 매칭이 최종 확정될 때 `SELECTED`가 된다.
+
+`job-service`가 모집 인원 충족 또는 공고 마감으로 모집 완료를 확정하면 다음 내부 계약으로 `matching-service`에 알린다.
+
+| 항목 | 값 |
+| --- | --- |
+| Method/Path | `POST /api/applications/internal/jobs/{jobPostId}/recruitment-completion` |
+| Header | `X-Internal-Secret: {configured secret}` |
+| Header | `Idempotency-Key: {recruitment completion command id}` |
+
+`matching-service`는 해당 공고의 남은 `APPLIED` 지원을 ID 순서로 잠근 뒤 `REJECTED`로 변경하고, 연결된 `PENDING` 매칭 제안은 `CANCELED`로 종료한다. 지원·매칭 상태 이력과 `ApplicationRejected` Outbox 이벤트를 같은 트랜잭션에 저장한다. 같은 완료 명령이 다시 들어오면 이미 종료된 상태를 유지하고 이력이나 이벤트를 추가하지 않는다.
+
+결과가 확정되지 않은 외부 명령이나 미완료 보상이 남은 확정 Saga가 하나라도 있으면 전체 모집 완료 반영을 거부한다. 이 경우 `job-service`는 같은 명령 ID로 재시도하며, 모든 Saga가 안전하게 재개 또는 보상된 뒤에만 미선정 처리를 완료한다. 현재 저장소는 수신 계약만 제공하며 모집 완료 판단과 호출 구현은 공고 담당 범위에 둔다.
 
 ## 수동 매칭 후보 선택
 
@@ -333,5 +344,6 @@
 6. 수동 매칭 후보 선택과 상태 이력
 7. 알바생 매칭 제안 조회와 거절
 8. 모집 자리 예약과 매칭 확정 Saga
-9. 자동 매칭과 폴백 매칭
-10. 실시간 상태 갱신
+9. 모집 완료와 미선정 지원 종료
+10. 자동 매칭과 폴백 매칭
+11. 실시간 상태 갱신
