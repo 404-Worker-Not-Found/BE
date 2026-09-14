@@ -12,6 +12,7 @@ import com.workernotfound.matching.domain.matching.entity.Matching;
 import com.workernotfound.matching.domain.matching.entity.MatchingConfirmationSaga;
 import com.workernotfound.matching.domain.matching.entity.MatchingStatusHistory;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingActorType;
+import com.workernotfound.matching.domain.matching.entity.enums.MatchingConfirmationRecoveryAction;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingConfirmationSagaStatus;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingStatus;
 import com.workernotfound.matching.domain.matching.event.MatchingEvent;
@@ -174,9 +175,15 @@ public class MatchingConfirmationCommandService {
 	}
 
 	@Transactional
-	public void markFailed(Long sagaId, String leaseToken, String step, String error) {
+	public void markFailed(
+		Long sagaId,
+		String leaseToken,
+		String step,
+		String error,
+		MatchingConfirmationRecoveryAction recoveryAction
+	) {
 		MatchingConfirmationSaga saga = lockSaga(sagaId, leaseToken);
-		saga.fail(step, truncate(error));
+		saga.fail(step, truncate(error), recoveryAction);
 	}
 
 	@Transactional
@@ -187,6 +194,11 @@ public class MatchingConfirmationCommandService {
 		}
 		LocalDateTime now = LocalDateTime.now();
 		saga.restart(
+			newCommandId(),
+			newCommandId(),
+			newCommandId(),
+			newCommandId(),
+			newCommandId(),
 			newCommandId(),
 			newCommandId(),
 			newCommandId(),
@@ -208,13 +220,33 @@ public class MatchingConfirmationCommandService {
 		if (saga.hasActiveLease(now)) {
 			throw new BusinessException(MatchingErrorCode.MATCHING_CONFIRMATION_IN_PROGRESS);
 		}
-		if (saga.hasResourcesToCompensate()) {
+		if (saga.getStatus() == MatchingConfirmationSagaStatus.FAILED) {
+			return prepareFailedSaga(saga, leaseToken, now);
+		}
+		if (saga.getStatus() == MatchingConfirmationSagaStatus.COMPENSATING) {
+			saga.beginCompensation(leaseToken, now.plus(properties.leaseDuration()));
+			return execution(saga, leaseToken, MatchingConfirmationExecution.Mode.COMPENSATE);
+		} else {
+			saga.resume(leaseToken, now.plus(properties.leaseDuration()));
+		}
+		return execution(saga, leaseToken, MatchingConfirmationExecution.Mode.PROCESS);
+	}
+
+	private MatchingConfirmationExecution prepareFailedSaga(
+		MatchingConfirmationSaga saga,
+		String leaseToken,
+		LocalDateTime now
+	) {
+		MatchingConfirmationRecoveryAction recoveryAction = saga.getRecoveryAction();
+		if (recoveryAction == MatchingConfirmationRecoveryAction.RESUME_COMPENSATION) {
 			saga.beginCompensation(leaseToken, now.plus(properties.leaseDuration()));
 			return execution(saga, leaseToken, MatchingConfirmationExecution.Mode.COMPENSATE);
 		}
-		if (saga.getStatus() == MatchingConfirmationSagaStatus.FAILED) {
+		if (recoveryAction == MatchingConfirmationRecoveryAction.START_NEW_ATTEMPT) {
 			saga.restart(
-				newCommandId(), newCommandId(), newCommandId(), newCommandId(),
+				newCommandId(), newCommandId(), newCommandId(),
+				newCommandId(), newCommandId(), newCommandId(),
+				newCommandId(), newCommandId(), newCommandId(),
 				leaseToken, now.plus(properties.leaseDuration()), now
 			);
 		} else {
@@ -227,9 +259,14 @@ public class MatchingConfirmationCommandService {
 		return sagaRepository.saveAndFlush(MatchingConfirmationSaga.builder()
 			.matching(matching)
 			.seatReservationCommandId(newCommandId())
+			.seatConfirmationCommandId(newCommandId())
+			.seatCompensationCommandId(newCommandId())
 			.paymentLockCommandId(newCommandId())
+			.paymentCompensationCommandId(newCommandId())
 			.workCreationCommandId(newCommandId())
+			.workCompensationCommandId(newCommandId())
 			.chatCreationCommandId(newCommandId())
+			.chatCompensationCommandId(newCommandId())
 			.leaseToken(leaseToken)
 			.leaseExpiresAt(now.plus(properties.leaseDuration()))
 			.startedAt(now)
@@ -309,8 +346,11 @@ public class MatchingConfirmationCommandService {
 		return new MatchingConfirmationState(
 			saga.getId(), matching.getId(), matching.getApplication().getId(),
 			matching.getJobPostId(), matching.getOwnerMemberId(), matching.getWorkerMemberId(),
-			saga.getSeatReservationCommandId(), saga.getPaymentLockCommandId(),
-			saga.getWorkCreationCommandId(), saga.getChatCreationCommandId(),
+			saga.getSeatReservationCommandId(), saga.getSeatConfirmationCommandId(),
+			saga.getSeatCompensationCommandId(), saga.getPaymentLockCommandId(),
+			saga.getPaymentCompensationCommandId(), saga.getWorkCreationCommandId(),
+			saga.getWorkCompensationCommandId(), saga.getChatCreationCommandId(),
+			saga.getChatCompensationCommandId(),
 			saga.getSeatReservationId(), saga.getPaymentId(), saga.getWorkId(), saga.getChatRoomId(),
 			saga.getWorkDate(), saga.getStartTime(), saga.getEndTime(), saga.getLockedAmount(),
 			saga.getCurrency(), saga.isSeatConsumed()

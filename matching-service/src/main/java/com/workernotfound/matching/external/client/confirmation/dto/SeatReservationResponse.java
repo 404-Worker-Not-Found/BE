@@ -8,6 +8,7 @@ import java.time.LocalTime;
 public record SeatReservationResponse(
 	String reservationId,
 	Long jobPostId,
+	Long jobVersion,
 	Long ownerMemberId,
 	LocalDate workDate,
 	LocalTime startTime,

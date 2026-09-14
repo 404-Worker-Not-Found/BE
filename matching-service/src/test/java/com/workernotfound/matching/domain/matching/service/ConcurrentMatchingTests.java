@@ -225,7 +225,7 @@ class ConcurrentMatchingTests extends IntegrationTestSupport {
 				throw new IllegalStateException("자리 예약 테스트 대기 시간이 초과되었습니다.");
 			}
 			return new SeatReservationResponse(
-				"seat-1", 10L, 100L, LocalDate.now().plusDays(1),
+				"seat-1", 10L, 1L, 100L, LocalDate.now().plusDays(1),
 				LocalTime.of(9, 0), LocalTime.of(18, 0), new BigDecimal("120000"), "KRW",
 				LocalDateTime.now(), LocalDateTime.now().plusMinutes(5)
 			);

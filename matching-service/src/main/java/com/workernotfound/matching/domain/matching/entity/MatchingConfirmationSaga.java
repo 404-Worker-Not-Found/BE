@@ -1,5 +1,6 @@
 package com.workernotfound.matching.domain.matching.entity;
 
+import com.workernotfound.matching.domain.matching.entity.enums.MatchingConfirmationRecoveryAction;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingConfirmationSagaStatus;
 import com.workernotfound.matching.global.entity.BaseEntity;
 import jakarta.persistence.Column;
@@ -58,14 +59,29 @@ public class MatchingConfirmationSaga extends BaseEntity {
 	@Column(name = "seat_reservation_command_id", nullable = false, length = 36)
 	private String seatReservationCommandId;
 
+	@Column(name = "seat_confirmation_command_id", nullable = false, length = 36)
+	private String seatConfirmationCommandId;
+
+	@Column(name = "seat_compensation_command_id", nullable = false, length = 36)
+	private String seatCompensationCommandId;
+
 	@Column(name = "payment_lock_command_id", nullable = false, length = 36)
 	private String paymentLockCommandId;
+
+	@Column(name = "payment_compensation_command_id", nullable = false, length = 36)
+	private String paymentCompensationCommandId;
 
 	@Column(name = "work_creation_command_id", nullable = false, length = 36)
 	private String workCreationCommandId;
 
+	@Column(name = "work_compensation_command_id", nullable = false, length = 36)
+	private String workCompensationCommandId;
+
 	@Column(name = "chat_creation_command_id", nullable = false, length = 36)
 	private String chatCreationCommandId;
+
+	@Column(name = "chat_compensation_command_id", nullable = false, length = 36)
+	private String chatCompensationCommandId;
 
 	@Column(name = "seat_reservation_id", length = 100)
 	private String seatReservationId;
@@ -100,6 +116,10 @@ public class MatchingConfirmationSaga extends BaseEntity {
 	@Column(name = "failure_step", length = 30)
 	private String failureStep;
 
+	@Enumerated(EnumType.STRING)
+	@Column(name = "recovery_action", length = 30)
+	private MatchingConfirmationRecoveryAction recoveryAction;
+
 	@Column(name = "last_error", length = 500)
 	private String lastError;
 
@@ -123,9 +143,14 @@ public class MatchingConfirmationSaga extends BaseEntity {
 	private MatchingConfirmationSaga(
 		Matching matching,
 		String seatReservationCommandId,
+		String seatConfirmationCommandId,
+		String seatCompensationCommandId,
 		String paymentLockCommandId,
+		String paymentCompensationCommandId,
 		String workCreationCommandId,
+		String workCompensationCommandId,
 		String chatCreationCommandId,
+		String chatCompensationCommandId,
 		String leaseToken,
 		LocalDateTime leaseExpiresAt,
 		LocalDateTime startedAt
@@ -134,9 +159,14 @@ public class MatchingConfirmationSaga extends BaseEntity {
 		this.status = MatchingConfirmationSagaStatus.PROCESSING;
 		this.attempt = 1;
 		this.seatReservationCommandId = seatReservationCommandId;
+		this.seatConfirmationCommandId = seatConfirmationCommandId;
+		this.seatCompensationCommandId = seatCompensationCommandId;
 		this.paymentLockCommandId = paymentLockCommandId;
+		this.paymentCompensationCommandId = paymentCompensationCommandId;
 		this.workCreationCommandId = workCreationCommandId;
+		this.workCompensationCommandId = workCompensationCommandId;
 		this.chatCreationCommandId = chatCreationCommandId;
+		this.chatCompensationCommandId = chatCompensationCommandId;
 		this.leaseToken = leaseToken;
 		this.leaseExpiresAt = leaseExpiresAt;
 		this.startedAt = startedAt;
@@ -161,6 +191,7 @@ public class MatchingConfirmationSaga extends BaseEntity {
 		this.leaseToken = newLeaseToken;
 		this.leaseExpiresAt = newLeaseExpiresAt;
 		this.failureStep = null;
+		this.recoveryAction = null;
 		this.lastError = null;
 	}
 
@@ -170,9 +201,14 @@ public class MatchingConfirmationSaga extends BaseEntity {
 
 	public void restart(
 		String newSeatCommandId,
+		String newSeatConfirmationCommandId,
+		String newSeatCompensationCommandId,
 		String newPaymentCommandId,
+		String newPaymentCompensationCommandId,
 		String newWorkCommandId,
+		String newWorkCompensationCommandId,
 		String newChatCommandId,
+		String newChatCompensationCommandId,
 		String newLeaseToken,
 		LocalDateTime newLeaseExpiresAt,
 		LocalDateTime restartedAt
@@ -180,13 +216,19 @@ public class MatchingConfirmationSaga extends BaseEntity {
 		this.status = MatchingConfirmationSagaStatus.PROCESSING;
 		this.attempt++;
 		this.seatReservationCommandId = newSeatCommandId;
+		this.seatConfirmationCommandId = newSeatConfirmationCommandId;
+		this.seatCompensationCommandId = newSeatCompensationCommandId;
 		this.paymentLockCommandId = newPaymentCommandId;
+		this.paymentCompensationCommandId = newPaymentCompensationCommandId;
 		this.workCreationCommandId = newWorkCommandId;
+		this.workCompensationCommandId = newWorkCompensationCommandId;
 		this.chatCreationCommandId = newChatCommandId;
+		this.chatCompensationCommandId = newChatCompensationCommandId;
 		this.leaseToken = newLeaseToken;
 		this.leaseExpiresAt = newLeaseExpiresAt;
 		this.startedAt = restartedAt;
 		this.failureStep = null;
+		this.recoveryAction = null;
 		this.lastError = null;
 	}
 
@@ -249,10 +291,15 @@ public class MatchingConfirmationSaga extends BaseEntity {
 		this.currency = null;
 	}
 
-	public void fail(String failedStep, String error) {
+	public void fail(
+		String failedStep,
+		String error,
+		MatchingConfirmationRecoveryAction recoveryAction
+	) {
 		this.status = MatchingConfirmationSagaStatus.FAILED;
 		this.failureStep = failedStep;
 		this.lastError = error;
+		this.recoveryAction = recoveryAction;
 		this.leaseToken = null;
 		this.leaseExpiresAt = null;
 	}
@@ -261,6 +308,7 @@ public class MatchingConfirmationSaga extends BaseEntity {
 		this.status = MatchingConfirmationSagaStatus.COMPLETED;
 		this.completedAt = completedAt;
 		this.failureStep = null;
+		this.recoveryAction = null;
 		this.lastError = null;
 		this.leaseToken = null;
 		this.leaseExpiresAt = null;

@@ -4,9 +4,14 @@ CREATE TABLE matching_confirmation_sagas (
     status                      VARCHAR(20)    NOT NULL,
     attempt                     INT            NOT NULL,
     seat_reservation_command_id VARCHAR(36)    NOT NULL,
+    seat_confirmation_command_id VARCHAR(36)   NOT NULL,
+    seat_compensation_command_id VARCHAR(36)   NOT NULL,
     payment_lock_command_id     VARCHAR(36)    NOT NULL,
+    payment_compensation_command_id VARCHAR(36) NOT NULL,
     work_creation_command_id    VARCHAR(36)    NOT NULL,
+    work_compensation_command_id VARCHAR(36)   NOT NULL,
     chat_creation_command_id    VARCHAR(36)    NOT NULL,
+    chat_compensation_command_id VARCHAR(36)   NOT NULL,
     seat_reservation_id         VARCHAR(100)   NULL,
     payment_id                  VARCHAR(100)   NULL,
     work_id                     VARCHAR(100)   NULL,
@@ -18,6 +23,7 @@ CREATE TABLE matching_confirmation_sagas (
     currency                    VARCHAR(3)     NULL,
     seat_consumed               BOOLEAN        NOT NULL DEFAULT FALSE,
     failure_step                VARCHAR(30)    NULL,
+    recovery_action             VARCHAR(30)    NULL,
     last_error                  VARCHAR(500)   NULL,
     lease_token                 VARCHAR(36)    NULL,
     lease_expires_at            DATETIME(6)    NULL,
@@ -34,6 +40,8 @@ CREATE TABLE matching_confirmation_sagas (
     CONSTRAINT ck_matching_confirmation_sagas_status
         CHECK (status IN ('PROCESSING', 'COMPENSATING', 'COMPLETED', 'FAILED')),
     CONSTRAINT ck_matching_confirmation_sagas_attempt CHECK (attempt >= 1),
+    CONSTRAINT ck_matching_confirmation_sagas_recovery_action
+        CHECK (recovery_action IS NULL OR recovery_action IN ('RESUME_PROCESSING', 'RESUME_COMPENSATION', 'START_NEW_ATTEMPT')),
     CONSTRAINT ck_matching_confirmation_sagas_version CHECK (version >= 0),
     INDEX idx_matching_confirmation_sagas_status_lease (status, lease_expires_at, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -18,9 +18,10 @@
 - MySQL을 기준으로 한 Redis 대기열 복구
 - 점수 계산 상태와 점수 스냅샷 확장 구조
 
-### 후속 구현
+### 다음 구현
 
-- 모집 자리 예약과 매칭 확정 Saga
+- 모집 완료 시 미선정 지원 일괄 종료
+- 내구성 있는 Outbox relay와 전달 재시도
 - 점수 공식과 긴급도별 가중치
 - 평점, 업종 경력, 근무 이력, 노쇼 위험도 입력 연동
 - 온라인 상태와 예상 도착 시간 입력 연동
@@ -79,20 +80,20 @@
 
 확정 진행 상태와 각 단계의 명령 ID·외부 리소스 ID는 `matching_confirmation_sagas`에 저장한다. 외부 호출 전에 안정적인 명령 ID를 먼저 저장하므로 호출 성공 직후 프로세스가 중단되어도 같은 멱등 키로 재개할 수 있다. Saga 실행권은 만료 시간이 있는 lease로 보호해 동시에 들어온 수락 요청이 같은 단계를 중복 조정하지 않게 한다.
 
-자리 예약 후 실패하면 채팅방, 예정 근무, 결제 잠금, 자리 예약 순서로 보상한다. 보상에 실패한 외부 리소스 ID는 삭제하지 않고 Saga를 `FAILED`로 남긴다. 다음 수락 요청은 남아 있는 보상부터 재개하고 모든 리소스가 해제된 뒤 새 시도와 새 단계 명령 ID를 만든다. 이미 자리를 소비한 뒤 로컬 확정이 중단된 경우에는 보상하지 않고 같은 Saga를 재개해 로컬 상태와 이벤트를 완성한다.
+자리 예약 후 외부 서비스가 명령을 명확히 거절한 경우 채팅방, 예정 근무, 결제 잠금, 자리 예약 순서로 보상한다. 네트워크 오류나 5xx처럼 명령 결과를 알 수 없는 경우에는 보상하지 않고 같은 단계 명령 ID로 실행을 재개한다. 보상에 실패한 외부 리소스 ID는 삭제하지 않고 Saga를 `FAILED`로 남기며, 다음 수락 요청이 같은 보상 명령 ID로 남은 보상부터 재개한다. 모든 리소스가 해제된 뒤에만 새 시도와 새 단계 명령 ID를 만든다. 이미 자리를 소비한 뒤 로컬 확정이 중단된 경우에도 보상하지 않고 같은 Saga를 재개해 로컬 상태와 이벤트를 완성한다.
 
 ### 공고 담당 범위에 요청할 매칭 확정 계약
 
-최종 확정 전에 `job-service`가 공고별 남은 모집 자리를 원자적으로 예약해야 한다. 공개 공고 조회나 `matching-service` 내부 집계로 모집 인원을 판단하지 않는다. 후속 구현에서는 다음 계약을 사용한다.
+최종 확정 전에 `job-service`가 공고별 남은 모집 자리를 원자적으로 예약해야 한다. 공개 공고 조회나 `matching-service` 내부 집계로 모집 인원을 판단하지 않는다. 다음 계약을 사용한다.
 
 | 항목 | 값 |
 | --- | --- |
 | Method/Path | `POST /api/jobs/internal/{jobPostId}/matching-seat-reservations` |
 | Header | `X-Internal-Secret: {configured secret}` |
-| Header | `Idempotency-Key: {matchingId}` |
+| Header | `Idempotency-Key: {seat reservation command id}` |
 | Body | `matchingId`, `applicationId`, `workerMemberId` |
 
-`job-service`는 공고 행 잠금 또는 같은 효과의 조건부 갱신으로 공고가 매칭 가능한 상태인지와 `confirmed + reserved < recruitCount`인지 확인한다. 성공 응답에는 `reservationId`, `jobPostId`, `ownerMemberId`, `jobVersion`, `reservedAt`, `expiresAt`을 포함한다. 예약은 `RESERVED`, `CONSUMED`, `RELEASED`, `EXPIRED` 상태를 보관하고 같은 멱등 키에는 같은 결과를 반환한다. 확정 Saga 완료 시 예약을 소비하고, 실패 또는 취소 시 같은 멱등 키로 해제한다.
+`job-service`는 공고 행 잠금 또는 같은 효과의 조건부 갱신으로 공고가 매칭 가능한 상태인지와 `confirmed + reserved < recruitCount`인지 확인한다. 성공 응답에는 `reservationId`, `jobPostId`, `ownerMemberId`, `jobVersion`, `reservedAt`, `expiresAt`을 포함한다. 예약은 `RESERVED`, `CONSUMED`, `RELEASED`, `EXPIRED` 상태를 보관하고 같은 멱등 키에는 같은 결과를 반환한다. 확정과 해제는 예약 명령과 구분되는 각각의 안정적인 멱등 키를 사용한다.
 
 `matching-service`에는 이 계약과 payment/work/chat 계약을 호출하는 클라이언트 및 확정 Saga가 구현되어 있다. 현재 저장소에는 계약을 제공할 서비스가 아직 없고 `job-service`의 자리 예약 API도 구현되지 않았으므로 실제 수락 호출은 의존 서비스가 준비되기 전까지 실패 닫힘 방식으로 종료된다. 외부 계약이 준비되지 않았는데도 `PENDING`을 확정 상태로 바꾸거나 임시 성공 응답을 사용하지 않는다.
 
@@ -104,7 +105,7 @@
 | `work-service` | `POST /api/works/internal/scheduled` | `POST /api/works/internal/{workId}/cancel` |
 | `chat-service` | `POST /api/chat-rooms/internal` | `POST /api/chat-rooms/internal/{chatRoomId}/close` |
 
-모든 명령과 보상 요청은 `X-Internal-Secret`과 단계별 `Idempotency-Key`를 사용한다. 외부 식별자는 문자열로 저장하며 서비스 간 물리 FK를 만들지 않는다.
+모든 명령과 보상 요청은 `X-Internal-Secret`과 단계별 `Idempotency-Key`를 사용한다. 실행 명령과 보상 명령도 서로 다른 키를 가지며 재시도할 때만 같은 키를 재사용한다. 외부 서비스의 4xx는 부수 효과 없이 명령을 거절했다는 계약이고, 네트워크 오류와 5xx는 결과 미확정으로 취급한다. 외부 식별자는 문자열로 저장하며 서비스 간 물리 FK를 만들지 않는다.
 
 초기 구현에서는 한 알바생이 같은 공고에 한 번만 지원할 수 있다. 취소한 지원도 기록으로 보존하며 재지원할 수 없다. 따라서 `applications(job_post_id, worker_member_id)`에 유일 제약을 둔다. 재지원을 허용하는 정책으로 바뀌면 기존 레코드를 재사용하지 않고 지원 회차와 활성 지원 유일성 설계를 별도로 추가한다.
 

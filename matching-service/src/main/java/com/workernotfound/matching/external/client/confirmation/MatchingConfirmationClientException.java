@@ -34,4 +34,8 @@ public class MatchingConfirmationClientException extends RuntimeException {
 	public boolean isConflict() {
 		return statusCode != null && statusCode.value() == 409;
 	}
+
+	public boolean isOutcomeUnknown() {
+		return statusCode == null || statusCode.is5xxServerError();
+	}
 }

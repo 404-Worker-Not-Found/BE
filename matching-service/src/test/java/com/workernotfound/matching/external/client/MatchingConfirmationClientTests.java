@@ -30,7 +30,7 @@ class MatchingConfirmationClientTests {
 			.andExpect(header("Idempotency-Key", "seat-command"))
 			.andRespond(withSuccess(
 				"{\"success\":true,\"status\":200,\"code\":\"SUCCESS\",\"message\":\"ok\","
-					+ "\"data\":{\"reservationId\":\"seat-1\",\"jobPostId\":10,\"ownerMemberId\":100,"
+					+ "\"data\":{\"reservationId\":\"seat-1\",\"jobPostId\":10,\"jobVersion\":1,\"ownerMemberId\":100,"
 					+ "\"workDate\":\"2026-09-20\",\"startTime\":\"09:00:00\",\"endTime\":\"18:00:00\","
 					+ "\"lockedAmount\":120000.00,\"currency\":\"KRW\","
 					+ "\"reservedAt\":\"2026-09-14T10:00:00\",\"expiresAt\":\"2026-09-14T10:05:00\"}}",
@@ -44,11 +44,12 @@ class MatchingConfirmationClientTests {
 		);
 
 		assertThat(response.reservationId()).isEqualTo("seat-1");
+		assertThat(response.jobVersion()).isEqualTo(1L);
 		jobServer.verify();
 	}
 
 	@Test
-	void locksAndReleasesPaymentWithSameStableCommandId() {
+	void locksAndReleasesPaymentWithSeparateStableCommandIds() {
 		RestClient.Builder paymentBuilder = internalBuilder("http://payment-service");
 		MockRestServiceServer paymentServer = MockRestServiceServer.bindTo(paymentBuilder).build();
 		MatchingConfirmationClient client = client(
@@ -64,13 +65,13 @@ class MatchingConfirmationClientTests {
 			));
 		paymentServer.expect(requestTo("http://payment-service/api/payments/internal/locks/payment-1/release"))
 			.andExpect(method(HttpMethod.POST))
-			.andExpect(header("Idempotency-Key", "payment-command"))
+			.andExpect(header("Idempotency-Key", "payment-compensation-command"))
 			.andRespond(withSuccess());
 
 		String paymentId = client.lockPayment(new PaymentLockRequest(
 			1L, 10L, 100L, 20L, new BigDecimal("120000.00"), "KRW"
 		), "payment-command").paymentId();
-		client.releasePayment(paymentId, "payment-command");
+		client.releasePayment(paymentId, "payment-compensation-command");
 
 		paymentServer.verify();
 	}

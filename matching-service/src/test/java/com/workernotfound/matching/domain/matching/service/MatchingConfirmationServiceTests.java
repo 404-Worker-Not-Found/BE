@@ -8,6 +8,7 @@ import com.workernotfound.matching.domain.matching.entity.Matching;
 import com.workernotfound.matching.domain.matching.entity.MatchingConfirmationSaga;
 import com.workernotfound.matching.domain.matching.entity.MatchingStatusHistory;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingActorType;
+import com.workernotfound.matching.domain.matching.entity.enums.MatchingConfirmationRecoveryAction;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingConfirmationSagaStatus;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingSelectionType;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingStatus;
@@ -40,7 +41,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -112,13 +116,17 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 	}
 
 	@Test
-	void compensatesPaymentAndSeatWhenWorkCreationFails() {
+	void resumesSameAttemptWithoutCompensationWhenWorkCreationOutcomeIsUnknown() {
 		Matching matching = saveMatching(20L, 32L);
 		when(client.reserveSeat(anyLong(), any(), anyString())).thenReturn(seatResponse(32L));
 		when(client.lockPayment(any(), anyString())).thenReturn(new PaymentLockResponse("payment-1"));
-		when(client.createScheduledWork(any(), anyString())).thenThrow(
-			new MatchingConfirmationClientException(ConfirmationStep.WORK_CREATION, new RuntimeException("fail"))
-		);
+		when(client.createScheduledWork(any(), anyString()))
+			.thenThrow(new MatchingConfirmationClientException(
+				ConfirmationStep.WORK_CREATION,
+				new RuntimeException("response lost")
+			))
+			.thenReturn(new ScheduledWorkResponse("work-1"));
+		when(client.createChatRoom(any(), anyString())).thenReturn(new ChatRoomResponse("chat-1"));
 
 		assertThatThrownBy(() -> confirmationService.accept(matching.getId(), 20L))
 			.isInstanceOfSatisfying(BusinessException.class, exception ->
@@ -126,13 +134,40 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 
 		MatchingConfirmationSaga saga = sagaRepository.findByMatchingId(matching.getId()).orElseThrow();
 		assertThat(saga.getStatus()).isEqualTo(MatchingConfirmationSagaStatus.FAILED);
+		assertThat(saga.getRecoveryAction()).isEqualTo(MatchingConfirmationRecoveryAction.RESUME_PROCESSING);
+		assertThat(saga.getSeatReservationId()).isEqualTo("seat-1");
+		assertThat(saga.getPaymentId()).isEqualTo("payment-1");
+
+		Matching confirmed = confirmationService.accept(matching.getId(), 20L);
+
+		assertThat(confirmed.getStatus()).isEqualTo(MatchingStatus.CONFIRMED);
+		assertThat(sagaRepository.findByMatchingId(matching.getId()).orElseThrow().getAttempt()).isEqualTo(1);
+		verify(client, never()).releasePayment(anyString(), anyString());
+		verify(client, never()).releaseSeat(anyLong(), anyString(), anyString());
+	}
+
+	@Test
+	void compensatesPaymentAndSeatWhenWorkCreationIsDefinitelyRejected() {
+		Matching matching = saveMatching(20L, 37L);
+		when(client.reserveSeat(anyLong(), any(), anyString())).thenReturn(seatResponse(37L));
+		when(client.lockPayment(any(), anyString())).thenReturn(new PaymentLockResponse("payment-1"));
+		when(client.createScheduledWork(any(), anyString())).thenThrow(
+			new MatchingConfirmationClientException(
+				ConfirmationStep.WORK_CREATION,
+				HttpStatus.BAD_REQUEST,
+				new RuntimeException("rejected")
+			)
+		);
+
+		assertThatThrownBy(() -> confirmationService.accept(matching.getId(), 20L))
+			.isInstanceOf(BusinessException.class);
+
+		MatchingConfirmationSaga saga = sagaRepository.findByMatchingId(matching.getId()).orElseThrow();
+		assertThat(saga.getRecoveryAction()).isEqualTo(MatchingConfirmationRecoveryAction.START_NEW_ATTEMPT);
 		assertThat(saga.getSeatReservationId()).isNull();
 		assertThat(saga.getPaymentId()).isNull();
-		assertThat(matching.getStatus()).isEqualTo(MatchingStatus.PENDING);
-		assertThat(matching.getApplication().getStatus()).isEqualTo(ApplicationStatus.APPLIED);
-		verify(client).releasePayment(anyString(), anyString());
-		verify(client).releaseSeat(anyLong(), anyString(), anyString());
-		verify(client, never()).cancelScheduledWork(anyString(), anyString());
+		verify(client).releasePayment("payment-1", saga.getPaymentCompensationCommandId());
+		verify(client).releaseSeat(37L, "seat-1", saga.getSeatCompensationCommandId());
 	}
 
 	@Test
@@ -182,6 +217,7 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 		when(client.createScheduledWork(any(), anyString()))
 			.thenThrow(new MatchingConfirmationClientException(
 				ConfirmationStep.WORK_CREATION,
+				HttpStatus.BAD_REQUEST,
 				new RuntimeException("first attempt")
 			))
 			.thenReturn(new ScheduledWorkResponse("work-1"));
@@ -197,6 +233,63 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 		assertThat(saga.getStatus()).isEqualTo(MatchingConfirmationSagaStatus.COMPLETED);
 	}
 
+	@Test
+	void retriesSeatConfirmationWithSameCommandWithoutReleasingResourcesAfterResponseLoss() {
+		Matching matching = saveMatching(20L, 38L);
+		stubSuccessfulConfirmation();
+		doThrow(new MatchingConfirmationClientException(
+			ConfirmationStep.SEAT_CONFIRMATION,
+			new RuntimeException("response lost")
+		)).doNothing().when(client).confirmSeat(anyLong(), anyString(), anyString());
+
+		assertThatThrownBy(() -> confirmationService.accept(matching.getId(), 20L))
+			.isInstanceOf(BusinessException.class);
+		MatchingConfirmationSaga failedSaga = sagaRepository.findByMatchingId(matching.getId()).orElseThrow();
+		String confirmationCommandId = failedSaga.getSeatConfirmationCommandId();
+		assertThat(failedSaga.getRecoveryAction())
+			.isEqualTo(MatchingConfirmationRecoveryAction.RESUME_PROCESSING);
+
+		Matching confirmed = confirmationService.accept(matching.getId(), 20L);
+
+		assertThat(confirmed.getStatus()).isEqualTo(MatchingStatus.CONFIRMED);
+		verify(client, times(2)).confirmSeat(38L, "seat-1", confirmationCommandId);
+		verify(client, never()).releaseSeat(anyLong(), anyString(), anyString());
+		verify(client, never()).releasePayment(anyString(), anyString());
+	}
+
+	@Test
+	void resumesCompensationWithSameCommandBeforeStartingNewAttempt() {
+		Matching matching = saveMatching(20L, 39L);
+		when(client.reserveSeat(anyLong(), any(), anyString())).thenAnswer(invocation ->
+			seatResponse(invocation.getArgument(0)));
+		when(client.lockPayment(any(), anyString())).thenReturn(new PaymentLockResponse("payment-1"));
+		when(client.createScheduledWork(any(), anyString()))
+			.thenThrow(new MatchingConfirmationClientException(
+				ConfirmationStep.WORK_CREATION,
+				HttpStatus.BAD_REQUEST,
+				new RuntimeException("rejected")
+			))
+			.thenReturn(new ScheduledWorkResponse("work-1"));
+		when(client.createChatRoom(any(), anyString())).thenReturn(new ChatRoomResponse("chat-1"));
+		doThrow(new MatchingConfirmationClientException(
+			ConfirmationStep.PAYMENT_COMPENSATION,
+			new RuntimeException("response lost")
+		)).doNothing().when(client).releasePayment(anyString(), anyString());
+
+		assertThatThrownBy(() -> confirmationService.accept(matching.getId(), 20L))
+			.isInstanceOf(BusinessException.class);
+		MatchingConfirmationSaga failedSaga = sagaRepository.findByMatchingId(matching.getId()).orElseThrow();
+		String compensationCommandId = failedSaga.getPaymentCompensationCommandId();
+		assertThat(failedSaga.getRecoveryAction())
+			.isEqualTo(MatchingConfirmationRecoveryAction.RESUME_COMPENSATION);
+
+		Matching confirmed = confirmationService.accept(matching.getId(), 20L);
+
+		assertThat(confirmed.getStatus()).isEqualTo(MatchingStatus.CONFIRMED);
+		assertThat(sagaRepository.findByMatchingId(matching.getId()).orElseThrow().getAttempt()).isEqualTo(2);
+		verify(client, times(2)).releasePayment("payment-1", compensationCommandId);
+	}
+
 	private void stubSuccessfulConfirmation() {
 		when(client.reserveSeat(anyLong(), any(), anyString())).thenAnswer(invocation ->
 			seatResponse(invocation.getArgument(0)));
@@ -209,6 +302,7 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 		return new SeatReservationResponse(
 			"seat-1",
 			jobPostId,
+			1L,
 			100L,
 			LocalDate.of(2026, 9, 20),
 			LocalTime.of(9, 0),

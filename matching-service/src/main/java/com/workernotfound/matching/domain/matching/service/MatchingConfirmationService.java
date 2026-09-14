@@ -1,6 +1,7 @@
 package com.workernotfound.matching.domain.matching.service;
 
 import com.workernotfound.matching.domain.matching.entity.Matching;
+import com.workernotfound.matching.domain.matching.entity.enums.MatchingConfirmationRecoveryAction;
 import com.workernotfound.matching.domain.matching.exception.MatchingErrorCode;
 import com.workernotfound.matching.domain.matching.model.MatchingConfirmationExecution;
 import com.workernotfound.matching.domain.matching.model.MatchingConfirmationState;
@@ -54,7 +55,7 @@ public class MatchingConfirmationService {
 				workerMemberId
 			);
 		} catch (MatchingConfirmationClientException exception) {
-			compensateAfterFailure(execution, exception);
+			handleFailure(execution, exception);
 			throw mapFailure(exception);
 		}
 	}
@@ -122,23 +123,32 @@ public class MatchingConfirmationService {
 		if (state.seatConsumed()) {
 			return;
 		}
-		client.confirmSeat(state.jobPostId(), state.seatReservationId(), state.seatReservationCommandId());
+		client.confirmSeat(state.jobPostId(), state.seatReservationId(), state.seatConfirmationCommandId());
 		commandService.recordSeatConsumed(execution.sagaId(), execution.leaseToken());
 	}
 
-	private void compensateAfterFailure(
+	private void handleFailure(
 		MatchingConfirmationExecution execution,
 		MatchingConfirmationClientException original
 	) {
+		if (original.isOutcomeUnknown()) {
+			commandService.markFailed(
+				execution.sagaId(), execution.leaseToken(), original.getStep().name(), original.getMessage(),
+				MatchingConfirmationRecoveryAction.RESUME_PROCESSING
+			);
+			return;
+		}
 		try {
 			compensate(execution);
 			commandService.markFailed(
-				execution.sagaId(), execution.leaseToken(), original.getStep().name(), original.getMessage()
+				execution.sagaId(), execution.leaseToken(), original.getStep().name(), original.getMessage(),
+				MatchingConfirmationRecoveryAction.START_NEW_ATTEMPT
 			);
 		} catch (MatchingConfirmationClientException compensationFailure) {
 			commandService.markFailed(
 				execution.sagaId(), execution.leaseToken(),
-				compensationFailure.getStep().name(), compensationFailure.getMessage()
+				compensationFailure.getStep().name(), compensationFailure.getMessage(),
+				MatchingConfirmationRecoveryAction.RESUME_COMPENSATION
 			);
 		}
 	}
@@ -148,7 +158,8 @@ public class MatchingConfirmationService {
 			compensate(execution);
 		} catch (MatchingConfirmationClientException exception) {
 			commandService.markFailed(
-				execution.sagaId(), execution.leaseToken(), exception.getStep().name(), exception.getMessage()
+				execution.sagaId(), execution.leaseToken(), exception.getStep().name(), exception.getMessage(),
+				MatchingConfirmationRecoveryAction.RESUME_COMPENSATION
 			);
 			throw new BusinessException(MatchingErrorCode.MATCHING_CONFIRMATION_FAILED);
 		}
@@ -170,7 +181,7 @@ public class MatchingConfirmationService {
 		if (state.chatRoomId() == null) {
 			return;
 		}
-		client.closeChatRoom(state.chatRoomId(), state.chatCreationCommandId());
+		client.closeChatRoom(state.chatRoomId(), state.chatCompensationCommandId());
 		commandService.clearChatRoom(execution.sagaId(), execution.leaseToken());
 	}
 
@@ -178,7 +189,7 @@ public class MatchingConfirmationService {
 		if (state.workId() == null) {
 			return;
 		}
-		client.cancelScheduledWork(state.workId(), state.workCreationCommandId());
+		client.cancelScheduledWork(state.workId(), state.workCompensationCommandId());
 		commandService.clearWork(execution.sagaId(), execution.leaseToken());
 	}
 
@@ -186,7 +197,7 @@ public class MatchingConfirmationService {
 		if (state.paymentId() == null) {
 			return;
 		}
-		client.releasePayment(state.paymentId(), state.paymentLockCommandId());
+		client.releasePayment(state.paymentId(), state.paymentCompensationCommandId());
 		commandService.clearPayment(execution.sagaId(), execution.leaseToken());
 	}
 
@@ -195,7 +206,7 @@ public class MatchingConfirmationService {
 			return;
 		}
 		client.releaseSeat(
-			state.jobPostId(), state.seatReservationId(), state.seatReservationCommandId()
+			state.jobPostId(), state.seatReservationId(), state.seatCompensationCommandId()
 		);
 		commandService.clearSeat(execution.sagaId(), execution.leaseToken());
 	}
