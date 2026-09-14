@@ -120,8 +120,10 @@ When opening or updating a PR, check:
 When merging a PR, check:
 
 - Does CodeRabbit's actual reviewed commit coverage include the current PR head and all changes, including documentation-only commits?
+- Do the configured review path filters include all changed paths?
 - Is there no rate-limit, skipped-review, or in-progress notice for the latest changes? A green status or an older "no actionable comments" summary is not sufficient.
 - If rate-limited, was the PR kept open until the reset time, then reviewed again before continuing?
+- If automatic reviews paused after `auto_pause_after_reviewed_commits`, was `@coderabbitai review` requested and the latest head coverage confirmed? Treat this pause separately from rate-limit reset waiting; if the manual request hits a rate limit, follow the reset-and-retry step.
 - Was the mandatory CodeRabbit review preserved rather than replaced with the agent's own review?
 - Were its findings checked against code and project contracts, and were valid findings fixed and verified?
 - Were any unaccepted findings recorded with their reasons?

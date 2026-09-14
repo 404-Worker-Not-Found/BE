@@ -29,12 +29,7 @@ reviews:
       - "WIP"
 
   path_filters:
-    - "!**/build/**"
-    - "!**/.gradle/**"
-    - "!**/gradlew"
-    - "!**/gradlew.bat"
-    - "!**/*.drawio"
-    - "!**/.DS_Store"
+    - "**"
 
   path_instructions:
     - path: "**/src/main/java/**"

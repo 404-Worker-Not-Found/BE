@@ -355,6 +355,8 @@ Implication for agents:
 - Require completed CodeRabbit coverage of the current PR head, including documentation-only commits. An earlier reviewed commit is not sufficient.
 - A rate limit, skipped review, pending review, or successful status check without actual review coverage is not review completion.
 - When rate-limited, keep the PR open, wait until the stated reset time, and request review again. Never substitute the agent's own review or a documentation-only exception.
+- Keep `.coderabbit.yaml` path filters inclusive so changed paths are not excluded by repository configuration.
+- Treat automatic review pause separately from a rate limit. When `auto_pause_after_reviewed_commits` pauses reviews, request `@coderabbitai review` and confirm actual coverage of the latest head; if the request is rate-limited, wait for its reset time before retrying.
 - Prefer squash-and-merge when completing PRs.
 - After merge, expect the work branch to be deleted before starting new work.
 
