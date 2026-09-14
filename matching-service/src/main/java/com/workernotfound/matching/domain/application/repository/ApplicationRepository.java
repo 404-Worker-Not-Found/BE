@@ -73,6 +73,16 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 	@Query("select distinct application.jobPostId from Application application")
 	List<Long> findDistinctJobPostIds();
 
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("""
+		select application
+		from Application application
+		where application.jobPostId = :jobPostId
+			and application.status = :status
+		order by application.id asc
+		""")
+	List<Application> findAllForUpdate(Long jobPostId, ApplicationStatus status);
+
 	@Query("""
 		select application.id
 		from Application application

@@ -18,6 +18,8 @@ spring:
       port: ${MATCHING_REDIS_PORT:6381}
 
 matching:
+  internal:
+    secret: ${INTERNAL_API_SECRET}
   jwt:
     secret: ${AUTH_JWT_SECRET}
   member-service:
