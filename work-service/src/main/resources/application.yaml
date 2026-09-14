@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: work-service
+  datasource:
+    url: ${WORK_DATASOURCE_URL}
+    username: ${WORK_DATASOURCE_USERNAME}
+    password: ${WORK_DATASOURCE_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+work:
+  internal:
+    secret: ${INTERNAL_API_SECRET}
+server:
+  port: ${WORK_SERVICE_PORT:8086}
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never

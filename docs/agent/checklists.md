@@ -119,7 +119,9 @@ When opening or updating a PR, check:
 
 When merging a PR, check:
 
-- Did one teammate review and approve, or were requested changes addressed?
+- Has CodeRabbit completed review of the current PR head?
+- Were its findings checked against code and project contracts, and were valid findings fixed and verified?
+- Were any unaccepted findings recorded with their reasons?
 - Is squash-and-merge being used?
 - Will the branch be deleted after merge?
 - Will the next unit of work start from a fresh branch?

@@ -341,8 +341,8 @@ Related files:
 ## 2026-06-15 - Review and Merge Strategy
 
 Decision:
-- One teammate reviews each PR.
-- After approval or after requested changes are addressed, the PR author merges the PR.
+- CodeRabbit reviews each PR. Assess its findings against the code and the project contracts, apply valid fixes, and verify them before merging.
+- After the CodeRabbit review is complete and valid findings are addressed, squash-and-merge the PR. A separate teammate approval is not required.
 - Use squash-and-merge.
 - Delete the branch after the PR is merged.
 - For a new unit of work, recreate a fresh branch from the appropriate base branch.
@@ -351,7 +351,8 @@ Reason:
 - This keeps review responsibility clear and keeps branch history tidy.
 
 Implication for agents:
-- Do not merge without review approval unless explicitly instructed.
+- Do not merge before CodeRabbit review completion and resolution of valid findings.
+- Recheck the current PR head after fixes; do not treat review of an earlier revision as review of later code changes.
 - Prefer squash-and-merge when completing PRs.
 - After merge, expect the work branch to be deleted before starting new work.
 
@@ -648,7 +649,7 @@ Decision:
 - Use Korean, balanced (`chill`) automatic reviews for non-draft pull requests targeting the default branch.
 - Use `AGENTS.md`, `docs/agent/*.md`, `docs/architecture/*.md`, and `docs/PROJECT_CONTEXT.md` as review guidelines.
 - Apply focused path instructions for security, external integrations, Flyway migrations, tests, build configuration, and local infrastructure.
-- Keep CodeRabbit's request-changes workflow disabled so the existing teammate approval and merge process remains authoritative.
+- Keep CodeRabbit's request-changes workflow disabled. Follow the CodeRabbit review, finding assessment, fix, verification, and squash-merge process confirmed on 2026-09-15.
 
 Reason:
 - Version-controlled settings make review behavior visible and reviewable with the codebase.
@@ -658,7 +659,7 @@ Reason:
 Implication for agents:
 - Update `.coderabbit.yaml` when CodeRabbit review behavior or repository structure changes.
 - Keep reusable project rules in their owning agent or architecture document instead of duplicating them extensively in path instructions.
-- Do not enable automatic approval or replace the required teammate review without an explicit workflow decision.
+- Do not treat an automatic approval or a successful review check alone as proof that all findings were addressed; assess the actual review comments.
 
 Related files:
 - `.coderabbit.yaml`
@@ -864,3 +865,46 @@ Related files:
 - `docs/architecture/matching-application-design.md`
 - `docs/architecture/mvp-domain-flow.md`
 - `matching-service/src/main/java/com/workernotfound/matching/domain/application`
+
+## 2026-09-15 - Scheduled Work Saga Commands
+
+Decision:
+- Implement scheduled work creation and compensation in `work-service` using service-owned MySQL and the existing matching Saga HTTP contract.
+- Persist each successful command key, request fingerprint, and result atomically with work state and history. Reject key reuse for a different operation or payload.
+- Serialize mutations through a per-matching database row and enforce at most one non-canceled work per matching with a database unique constraint.
+- Keep canceled attempts as history. A new Saga attempt uses a new creation key and may create a replacement only after the previous work is canceled.
+- Retrying an old creation returns its original work ID, even after cancellation. Repeating compensation for an old work cannot release the replacement's slot.
+- Limit the internal compensation endpoint to `SCHEDULED -> CANCELED`. Other lifecycle transitions and user cancellation require their own policy and APIs.
+
+Reason:
+- Matching can retry with new forward command IDs after all compensation succeeds; a permanent unique constraint on matching ID would block valid retries.
+- Stable responses allow recovery after a committed command loses its HTTP response.
+- Work is created before local matching confirmation inside the Saga, and may be canceled if a later step fails.
+
+Implication for agents:
+- Do not treat scheduled work creation alone as proof that matching is confirmed or expose check-in before confirmation is safely established.
+- Keep command records and canceled work for recovery; do not silently reactivate a canceled work on an old create retry.
+- Preserve work-date/time snapshots, including overnight schedules. Do not invent GPS, no-show, or attendance policy in the scheduled-work contract.
+
+Related files:
+- `docs/architecture/work-scheduled-design.md`
+- `work-service`
+
+## 2026-09-15 - CodeRabbit Review Before Squash Merge
+
+Decision:
+- Use CodeRabbit review instead of requiring a teammate review.
+- Read review findings, check their validity against code and project contracts, fix valid issues, and run relevant verification.
+- Complete review of the updated code and resolve valid findings before squash-and-merge. Delete the work branch after merge.
+
+Reason:
+- The user explicitly clarified the repository's intended GitHub workflow.
+
+Implication for agents:
+- Follow issue → branch from develop → implementation and verification → commit/push → PR to develop → CodeRabbit review → valid fixes and verification → squash merge.
+- Do not stop at PR creation when the user has authorized completion of this workflow.
+- Do not require a separate teammate approval or blindly apply every automated suggestion.
+
+Related files:
+- `docs/agent/checklists.md`
+- `.coderabbit.yaml`
