@@ -94,6 +94,25 @@ services:
       timeout: 5s
       retries: 10
 
+  chat-mysql:
+    image: mysql:8.4
+    container_name: wnf-chat-mysql
+    environment:
+      MYSQL_DATABASE: ${CHAT_DB_NAME}
+      MYSQL_ROOT_PASSWORD: ${CHAT_DB_ROOT_PASSWORD}
+      MYSQL_USER: ${CHAT_DB_USERNAME}
+      MYSQL_PASSWORD: ${CHAT_DB_PASSWORD}
+      TZ: Asia/Seoul
+    ports:
+      - "3312:3306"
+    volumes:
+      - chat-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   auth-redis:
     image: redis:7.4
     container_name: wnf-auth-redis
@@ -127,5 +146,6 @@ volumes:
   job-mysql-data:
   matching-mysql-data:
   work-mysql-data:
+  chat-mysql-data:
   auth-redis-data:
   matching-redis-data:
