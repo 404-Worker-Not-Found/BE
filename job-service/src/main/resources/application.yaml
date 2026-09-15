@@ -16,6 +16,10 @@ auth:
   jwt:
     secret: ${AUTH_JWT_SECRET}
 
+job:
+  application-admission:
+    ttl: ${APPLICATION_ADMISSION_TTL:5m}
+
 server:
   port: ${JOB_SERVICE_PORT:8083}
   error:

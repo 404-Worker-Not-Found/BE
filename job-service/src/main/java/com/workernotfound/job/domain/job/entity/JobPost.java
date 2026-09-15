@@ -78,6 +78,10 @@ public class JobPost extends BaseEntity {
     @Column(nullable = false)
     private JobStatus status;
 
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     @Builder
     private JobPost(
             Long businessId,
