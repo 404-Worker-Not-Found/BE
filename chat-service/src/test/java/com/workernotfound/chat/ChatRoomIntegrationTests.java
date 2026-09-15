@@ -291,4 +291,18 @@ class ChatRoomIntegrationTests extends com.workernotfound.chat.support.Integrati
     assertThat(service.create(command, request).chatRoomId()).isNotBlank();
   }
 
+  @Test
+  void unsupportedMethodAndMediaTypePreserveProtocolErrors() throws Exception {
+    mvc.perform(get("/api/chat-rooms/internal")
+            .header("X-Internal-Secret", "chat-test-internal-secret"))
+        .andExpect(status().isMethodNotAllowed())
+        .andExpect(header().string("Allow", org.hamcrest.Matchers.containsString("POST")))
+        .andExpect(jsonPath("$.code").value("GLOBAL-405-001"));
+    mvc.perform(post("/api/chat-rooms/internal")
+            .header("X-Internal-Secret", "chat-test-internal-secret")
+            .header("Idempotency-Key", key()).contentType("text/plain").content("{}"))
+        .andExpect(status().isUnsupportedMediaType())
+        .andExpect(jsonPath("$.code").value("GLOBAL-415-001"));
+  }
+
 }

@@ -13,6 +13,8 @@ public enum GlobalErrorCode implements ErrorCode {
   INVALID_TOKEN("GLOBAL-401-002", "유효하지 않은 토큰입니다.", HttpStatus.UNAUTHORIZED),
   FORBIDDEN("GLOBAL-403-001", "접근 권한이 없습니다.", HttpStatus.FORBIDDEN),
   NOT_FOUND("GLOBAL-404-001", "요청한 리소스를 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
+  METHOD_NOT_ALLOWED("GLOBAL-405-001", "지원하지 않는 HTTP 메서드입니다.", HttpStatus.METHOD_NOT_ALLOWED),
+  UNSUPPORTED_MEDIA_TYPE("GLOBAL-415-001", "지원하지 않는 Content-Type입니다.", HttpStatus.UNSUPPORTED_MEDIA_TYPE),
   INTERNAL_SERVER_ERROR("GLOBAL-500-001", "서버 내부 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
 
   private final String code;

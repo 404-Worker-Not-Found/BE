@@ -6,6 +6,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -63,6 +65,26 @@ public class GlobalExceptionHandler {
       Exception exception, HttpServletRequest request) {
     return error(
         GlobalErrorCode.INVALID_REQUEST, GlobalErrorCode.INVALID_REQUEST.getMessage(), request.getRequestURI(), null);
+  }
+
+  @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+  public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(
+      HttpRequestMethodNotSupportedException exception, HttpServletRequest request) {
+    GlobalErrorCode code = GlobalErrorCode.METHOD_NOT_ALLOWED;
+    return ResponseEntity.status(code.getHttpStatus())
+        .headers(exception.getHeaders())
+        .body(ApiResponse.error(code.getHttpStatus().value(), code.getCode(),
+            code.getMessage(), request.getRequestURI(), null));
+  }
+
+  @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+  public ResponseEntity<ApiResponse<Void>> handleMediaTypeNotSupported(
+      HttpMediaTypeNotSupportedException exception, HttpServletRequest request) {
+    GlobalErrorCode code = GlobalErrorCode.UNSUPPORTED_MEDIA_TYPE;
+    return ResponseEntity.status(code.getHttpStatus())
+        .headers(exception.getHeaders())
+        .body(ApiResponse.error(code.getHttpStatus().value(), code.getCode(),
+            code.getMessage(), request.getRequestURI(), null));
   }
 
   @ExceptionHandler(Exception.class)

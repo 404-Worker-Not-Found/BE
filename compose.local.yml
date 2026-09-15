@@ -104,7 +104,7 @@ services:
       MYSQL_PASSWORD: ${CHAT_DB_PASSWORD}
       TZ: Asia/Seoul
     ports:
-      - "3312:3306"
+      - "127.0.0.1:3312:3306"
     volumes:
       - chat-mysql-data:/var/lib/mysql
     healthcheck:
