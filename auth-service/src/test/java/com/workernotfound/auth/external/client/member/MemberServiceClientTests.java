@@ -1,5 +1,11 @@
 package com.workernotfound.auth.external.client.member;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.MockRestServiceServer.bindTo;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workernotfound.auth.external.client.member.dto.CreateOwnerMemberRequest;
 import com.workernotfound.auth.external.client.member.dto.MemberRole;
@@ -12,12 +18,6 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.client.MockRestServiceServer.bindTo;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class MemberServiceClientTests {
 
@@ -33,14 +33,19 @@ class MemberServiceClientTests {
 
 	@Test
 	void preservesKnownOwnerValidationError() {
-		server.expect(requestTo("http://member-service/api/members/internal/owners"))
-			.andRespond(withStatus(HttpStatus.BAD_REQUEST)
-				.contentType(MediaType.APPLICATION_JSON)
-				.body("{\"code\":\"OWNER-400-002\"}"));
+		server
+				.expect(requestTo("http://member-service/api/members/internal/owners"))
+				.andRespond(
+						withStatus(HttpStatus.BAD_REQUEST)
+								.contentType(MediaType.APPLICATION_JSON)
+								.body("{\"code\":\"OWNER-400-002\"}"));
 
 		assertThatThrownBy(() -> client.createOwner(ownerRequest()))
-			.isInstanceOfSatisfying(MemberServiceClientException.class, exception ->
-				assertThat(exception.getErrorCode()).isEqualTo(MemberServiceErrorCode.BUSINESS_NOT_OPERATING));
+				.isInstanceOfSatisfying(
+						MemberServiceClientException.class,
+						exception ->
+								assertThat(exception.getErrorCode())
+										.isEqualTo(MemberServiceErrorCode.BUSINESS_NOT_OPERATING));
 	}
 
 	@Test
@@ -48,10 +53,11 @@ class MemberServiceClientTests {
 		GlobalExceptionHandler handler = new GlobalExceptionHandler();
 		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/signup/owner");
 
-		var response = handler.handleMemberServiceClientException(
-			new MemberServiceClientException(HttpStatus.BAD_REQUEST, MemberServiceErrorCode.BUSINESS_NOT_OPERATING),
-			request
-		);
+		var response =
+				handler.handleMemberServiceClientException(
+						new MemberServiceClientException(
+								HttpStatus.BAD_REQUEST, MemberServiceErrorCode.BUSINESS_NOT_OPERATING),
+						request);
 
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 		ApiResponse<Void> body = response.getBody();
@@ -62,24 +68,67 @@ class MemberServiceClientTests {
 
 	@Test
 	void treatsUnknownEmptyErrorResponseAsExternalApiFailure() {
-		server.expect(requestTo("http://member-service/api/members/internal/owners"))
-			.andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
+		server
+				.expect(requestTo("http://member-service/api/members/internal/owners"))
+				.andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
 
 		assertThatThrownBy(() -> client.createOwner(ownerRequest()))
-			.isInstanceOfSatisfying(MemberServiceClientException.class, exception ->
-				assertThat(exception.getErrorCode()).isNull());
+				.isInstanceOfSatisfying(
+						MemberServiceClientException.class,
+						exception -> assertThat(exception.getErrorCode()).isNull());
+	}
+
+	@Test
+	void knownMemberAndWorkerErrorsKeepTheirStatusAndCodeThroughAuth() {
+		for (MemberServiceErrorCode code : MemberServiceErrorCode.values()) {
+			server.reset();
+			server
+					.expect(requestTo("http://member-service/api/members/internal/owners"))
+					.andRespond(
+							withStatus(code.getHttpStatus())
+									.contentType(MediaType.APPLICATION_JSON)
+									.body("{\"code\":\"" + code.getCode() + "\"}"));
+			assertThatThrownBy(() -> client.createOwner(ownerRequest()))
+					.isInstanceOfSatisfying(
+							MemberServiceClientException.class,
+							failure -> {
+								var response =
+										new GlobalExceptionHandler()
+												.handleMemberServiceClientException(
+														failure, new MockHttpServletRequest("POST", "/api/auth/signup/owner"));
+								assertThat(response.getStatusCode()).isEqualTo(code.getHttpStatus());
+								assertThat(response.getBody().code()).isEqualTo(code.getCode());
+							});
+			server.verify();
+		}
+	}
+
+	@Test
+	void knownCodeWithWrongStatusDoesNotBecomeBusinessRejection() {
+		server
+				.expect(requestTo("http://member-service/api/members/internal/owners"))
+				.andRespond(
+						withStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+								.contentType(MediaType.APPLICATION_JSON)
+								.body("{\"code\":\"MEMBER-409-001\"}"));
+		assertThatThrownBy(() -> client.createOwner(ownerRequest()))
+				.isInstanceOfSatisfying(
+						MemberServiceClientException.class,
+						failure -> {
+							assertThat(failure.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+							assertThat(failure.getErrorCode()).isNull();
+						});
 	}
 
 	private CreateOwnerMemberRequest ownerRequest() {
 		return new CreateOwnerMemberRequest(
-			"점주",
-			"owner@example.com",
-			"01012345678",
-			MemberRole.OWNER,
-			"1234567890",
-			"가게",
-			"CAFE",
-			null
-		);
+				"점주",
+				"owner@example.com",
+				"01012345678",
+				MemberRole.OWNER,
+				"1234567890",
+				"가게",
+				"CAFE",
+				null);
 	}
 }

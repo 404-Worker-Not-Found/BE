@@ -2,7 +2,9 @@ package com.workernotfound.member.domain.member.service;
 
 import com.workernotfound.member.domain.member.entity.Member;
 import com.workernotfound.member.domain.member.entity.enums.MemberRole;
+import com.workernotfound.member.domain.member.exception.MemberErrorCode;
 import com.workernotfound.member.domain.member.repository.MemberRepository;
+import com.workernotfound.member.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -15,12 +17,7 @@ public class MemberCommandService {
 	public Member createMember(String name, String email, String phoneNumber, MemberRole role) {
 		validateEmailAvailable(email);
 		validatePhoneNumberAvailable(phoneNumber);
-		return Member.builder()
-			.name(name)
-			.email(email)
-			.phoneNumber(phoneNumber)
-			.role(role)
-			.build();
+		return Member.builder().name(name).email(email).phoneNumber(phoneNumber).role(role).build();
 	}
 
 	public Member saveMember(Member member) {
@@ -33,13 +30,13 @@ public class MemberCommandService {
 
 	private void validateEmailAvailable(String email) {
 		if (memberRepository.existsByEmail(email)) {
-			throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
+			throw new BusinessException(MemberErrorCode.EMAIL_ALREADY_EXISTS);
 		}
 	}
 
 	private void validatePhoneNumberAvailable(String phoneNumber) {
 		if (memberRepository.existsByPhoneNumber(phoneNumber)) {
-			throw new IllegalArgumentException("이미 사용 중인 휴대폰 번호입니다.");
+			throw new BusinessException(MemberErrorCode.PHONE_ALREADY_EXISTS);
 		}
 	}
 }

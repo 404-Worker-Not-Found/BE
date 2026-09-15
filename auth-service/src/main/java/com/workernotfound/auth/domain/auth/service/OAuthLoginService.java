@@ -8,6 +8,7 @@ import com.workernotfound.auth.domain.account.repository.AuthAccountRepository;
 import com.workernotfound.auth.domain.account.repository.OAuthConnectionRepository;
 import com.workernotfound.auth.domain.auth.dto.request.OAuthLoginRequest;
 import com.workernotfound.auth.domain.auth.dto.response.OAuthLoginResponse;
+import com.workernotfound.auth.domain.auth.exception.AuthErrorCode;
 import com.workernotfound.auth.domain.token.dto.response.TokenResponse;
 import com.workernotfound.auth.domain.token.service.TokenService;
 import com.workernotfound.auth.external.client.oauth.OAuthProviderClient;
@@ -29,17 +30,14 @@ public class OAuthLoginService {
 
 	@Transactional
 	public OAuthLoginResponse login(OAuthProvider provider, OAuthLoginRequest request) {
-		OAuthProviderProfile profile = oAuthProviderClient.getProfile(
-			provider,
-			request.authorizationCode(),
-			request.redirectUri(),
-			request.state()
-		);
+		OAuthProviderProfile profile =
+				oAuthProviderClient.getProfile(
+						provider, request.authorizationCode(), request.redirectUri(), request.state());
 
 		return oAuthConnectionRepository
-			.findByProviderAndProviderUserId(provider, profile.providerUserId())
-			.map(connection -> loginConnectedAccount(connection, request.deviceId()))
-			.orElseGet(() -> connectOrCreateSignupTicket(provider, profile, request.deviceId()));
+				.findByProviderAndProviderUserId(provider, profile.providerUserId())
+				.map(connection -> loginConnectedAccount(connection, request.deviceId()))
+				.orElseGet(() -> connectOrCreateSignupTicket(provider, profile, request.deviceId()));
 	}
 
 	private OAuthLoginResponse loginConnectedAccount(OAuthConnection connection, String deviceId) {
@@ -48,60 +46,49 @@ public class OAuthLoginService {
 		authAccount.recordLogin(LocalDateTime.now());
 		TokenResponse tokenResponse = tokenService.issue(authAccount, deviceId);
 		return OAuthLoginResponse.login(
-			authAccount.getMemberId(),
-			authAccount.getEmail(),
-			authAccount.getRole(),
-			tokenResponse
-		);
+				authAccount.getMemberId(), authAccount.getEmail(), authAccount.getRole(), tokenResponse);
 	}
 
 	private OAuthLoginResponse connectOrCreateSignupTicket(
-		OAuthProvider provider,
-		OAuthProviderProfile profile,
-		String deviceId
-	) {
-		return authAccountRepository.findByEmail(profile.email())
-			.map(authAccount -> connectAndLogin(provider, profile, authAccount, deviceId))
-			.orElseGet(() -> createSignupTicket(provider, profile));
+			OAuthProvider provider, OAuthProviderProfile profile, String deviceId) {
+		return authAccountRepository
+				.findByEmail(profile.email())
+				.map(authAccount -> connectAndLogin(provider, profile, authAccount, deviceId))
+				.orElseGet(() -> createSignupTicket(provider, profile));
 	}
 
 	private OAuthLoginResponse connectAndLogin(
-		OAuthProvider provider,
-		OAuthProviderProfile profile,
-		AuthAccount authAccount,
-		String deviceId
-	) {
+			OAuthProvider provider,
+			OAuthProviderProfile profile,
+			AuthAccount authAccount,
+			String deviceId) {
 		validateActiveAccount(authAccount);
-		oAuthConnectionRepository.save(OAuthConnection.builder()
-			.authAccount(authAccount)
-			.provider(provider)
-			.providerUserId(profile.providerUserId())
-			.providerEmail(profile.email())
-			.connectedAt(LocalDateTime.now())
-			.build());
+		oAuthConnectionRepository.save(
+				OAuthConnection.builder()
+						.authAccount(authAccount)
+						.provider(provider)
+						.providerUserId(profile.providerUserId())
+						.providerEmail(profile.email())
+						.connectedAt(LocalDateTime.now())
+						.build());
 		authAccount.recordLogin(LocalDateTime.now());
 		TokenResponse tokenResponse = tokenService.issue(authAccount, deviceId);
 		return OAuthLoginResponse.login(
-			authAccount.getMemberId(),
-			authAccount.getEmail(),
-			authAccount.getRole(),
-			tokenResponse
-		);
+				authAccount.getMemberId(), authAccount.getEmail(), authAccount.getRole(), tokenResponse);
 	}
 
-	private OAuthLoginResponse createSignupTicket(OAuthProvider provider, OAuthProviderProfile profile) {
-		String ticket = oAuthSignupTicketService.save(new OAuthSignupTicket(
-			provider,
-			profile.providerUserId(),
-			profile.email(),
-			LocalDateTime.now()
-		));
+	private OAuthLoginResponse createSignupTicket(
+			OAuthProvider provider, OAuthProviderProfile profile) {
+		String ticket =
+				oAuthSignupTicketService.save(
+						new OAuthSignupTicket(
+								provider, profile.providerUserId(), profile.email(), LocalDateTime.now()));
 		return OAuthLoginResponse.signupRequired(ticket, profile.email());
 	}
 
 	private void validateActiveAccount(AuthAccount authAccount) {
 		if (authAccount.getStatus() != MemberStatus.ACTIVE) {
-			throw new AuthenticationException("활성 상태의 계정만 로그인할 수 있습니다.");
+			throw new AuthenticationException(AuthErrorCode.ACCOUNT_NOT_ACTIVE);
 		}
 	}
 }
