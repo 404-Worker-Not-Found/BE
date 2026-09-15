@@ -1,10 +1,12 @@
 package com.workernotfound.job.global.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workernotfound.job.global.exception.GlobalErrorCode;
 import com.workernotfound.job.global.response.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -20,9 +22,11 @@ import java.nio.charset.StandardCharsets;
 
 @Configuration
 @RequiredArgsConstructor
+@EnableConfigurationProperties(InternalApiProperties.class)
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final InternalSecretAuthenticationFilter internalSecretAuthenticationFilter;
     private final ObjectMapper objectMapper;
 
     @Bean
@@ -33,14 +37,15 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, e) ->
-                                writeError(response, request, 401, "UNAUTHORIZED", "인증이 필요합니다.")
+                                writeError(response, request, GlobalErrorCode.UNAUTHORIZED)
                         )
                         .accessDeniedHandler((request, response, e) ->
-                                writeError(response, request, 403, "FORBIDDEN", "접근 권한이 없습니다.")
+                                writeError(response, request, GlobalErrorCode.FORBIDDEN)
                         )
                 )
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(
+                                "/api/jobs/internal/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
@@ -50,6 +55,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/jobs").hasRole("OWNER")
                         .anyRequest().authenticated()
                 )
+                .addFilterBefore(internalSecretAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
@@ -57,16 +63,20 @@ public class SecurityConfig {
     private void writeError(
             HttpServletResponse response,
             HttpServletRequest request,
-            int status,
-            String code,
-            String message
+            GlobalErrorCode errorCode
     ) throws IOException {
-        response.setStatus(status);
+        response.setStatus(errorCode.getHttpStatus().value());
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         objectMapper.writeValue(
                 response.getWriter(),
-                ApiResponse.error(status, code, message, request.getRequestURI(), null)
+                ApiResponse.error(
+                        errorCode.getHttpStatus().value(),
+                        errorCode.getCode(),
+                        errorCode.getMessage(),
+                        request.getRequestURI(),
+                        null
+                )
         );
     }
 }

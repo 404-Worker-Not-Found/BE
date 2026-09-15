@@ -53,6 +53,8 @@ Current state:
 - `member-service` exists as a Spring Boot service.
 - `member-service` has implemented the initial member, owner, worker, and location profile flow.
 - `job-service` has implemented the initial job posting domain.
+- `job-service` protects internal service-to-service endpoints under `/api/jobs/internal/**` with the shared `X-Internal-Secret` header, matching auth-service and member-service. The application-admission and matching-seat-reservation endpoints matching-service depends on are not yet implemented behind this protection.
+- `job-service` tests use Testcontainers with MySQL for the test datasource.
 - `matching-service` has service-owned MySQL and Flyway configuration, the application persistence model, and the worker-facing application create, read, list, and cancel APIs.
 - The repository has a first ERD draft for the MSA design.
 - The matching application domain has a focused ERD and implementation design that supersede the application and scoring tables in the first ERD draft.
