@@ -19,7 +19,7 @@ repositories {
 
 ext {
 	testcontainersVersion = '2.0.5'
-	springdocOpenapiVersion = '3.0.3'
+	springdocOpenapiVersion = '3.1.1'
 }
 
 dependencies {

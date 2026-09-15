@@ -197,7 +197,10 @@ class ChatRoomIntegrationTests extends com.workernotfound.chat.support.Integrati
         .andExpect(status().isBadRequest());
     mvc.perform(get("/v3/api-docs"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.paths['/api/chat-rooms/internal']").exists());
+        .andExpect(jsonPath("$.paths['/api/chat-rooms/internal']").exists())
+        .andExpect(jsonPath("$.components.schemas.ChatRoomRequest.type").value("object"))
+        .andExpect(jsonPath("$.components.schemas.ChatRoomRequest.default").doesNotHaveJsonPath())
+        .andExpect(jsonPath("$.components.schemas.ChatRoomRequest.properties.workId.type").value("string"));
     mvc.perform(get("/swagger-ui/index.html")).andExpect(status().isOk());
   }
 
