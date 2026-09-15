@@ -914,3 +914,24 @@ Implication for agents:
 Related files:
 - `docs/agent/checklists.md`
 - `.coderabbit.yaml`
+
+## 2026-09-15 - Chat Room Saga Commands
+
+Decision:
+- Implement the existing matching Saga create/close contract in chat-service with service-owned MySQL.
+- Persist command results and room history atomically, serialize by matching, and allow at most one OPEN room per matching.
+- Retain CLOSED rooms and return the original result for old command retries. A new creation key may create a replacement after closure; late closure must not affect it.
+- Treat OPEN as internal provisioning only. Add confirmation and participant authorization before exposing user messaging.
+- Use BusinessException with domain codes for expected failures; do not classify arbitrary IllegalArgumentException as a client error in the new service.
+
+Reason:
+- Saga retries and compensation must not duplicate rooms or close a replacement, and unexpected server failures must remain distinguishable from definitive command rejection.
+
+Implication for agents:
+- Preserve the idempotency fingerprint format for existing commands when evolving request schemas.
+- Keep messaging, WebSocket, user room access, and confirmation consumption as separate follow-up work.
+
+Related files:
+- `docs/architecture/chat-room-design.md`
+- `docs/architecture/error-handling-review.md`
+- `chat-service`

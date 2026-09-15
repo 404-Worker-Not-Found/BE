@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: chat-service
+  datasource:
+    url: ${CHAT_DATASOURCE_URL}
+    username: ${CHAT_DATASOURCE_USERNAME}
+    password: ${CHAT_DATASOURCE_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+chat:
+  internal:
+    secret: ${INTERNAL_API_SECRET}
+server:
+  port: ${CHAT_SERVICE_PORT:8087}
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
