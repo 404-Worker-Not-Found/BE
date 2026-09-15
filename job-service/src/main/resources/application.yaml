@@ -19,6 +19,8 @@ auth:
 job:
   application-admission:
     ttl: ${APPLICATION_ADMISSION_TTL:5m}
+  internal:
+    secret: ${INTERNAL_API_SECRET}
 
 server:
   port: ${JOB_SERVICE_PORT:8083}

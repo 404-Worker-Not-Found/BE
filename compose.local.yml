@@ -75,6 +75,25 @@ services:
       timeout: 5s
       retries: 10
 
+  work-mysql:
+    image: mysql:8.4
+    container_name: wnf-work-mysql
+    environment:
+      MYSQL_DATABASE: ${WORK_DB_NAME}
+      MYSQL_ROOT_PASSWORD: ${WORK_DB_ROOT_PASSWORD}
+      MYSQL_USER: ${WORK_DB_USERNAME}
+      MYSQL_PASSWORD: ${WORK_DB_PASSWORD}
+      TZ: Asia/Seoul
+    ports:
+      - "3311:3306"
+    volumes:
+      - work-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   auth-redis:
     image: redis:7.4
     container_name: wnf-auth-redis
@@ -107,5 +126,6 @@ volumes:
   member-mysql-data:
   job-mysql-data:
   matching-mysql-data:
+  work-mysql-data:
   auth-redis-data:
   matching-redis-data:
