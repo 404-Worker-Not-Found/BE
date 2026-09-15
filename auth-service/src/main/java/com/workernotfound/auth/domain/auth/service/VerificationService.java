@@ -1,6 +1,8 @@
 package com.workernotfound.auth.domain.auth.service;
 
 import com.workernotfound.auth.domain.auth.entity.enums.VerificationPurpose;
+import com.workernotfound.auth.domain.auth.exception.AuthErrorCode;
+import com.workernotfound.auth.global.exception.BusinessException;
 import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -39,26 +41,28 @@ public class VerificationService {
 		smsVerificationSender.send(phoneNumber, verificationCode);
 	}
 
-	public boolean verifyEmailCode(VerificationPurpose purpose, String email, String verificationCode) {
-		boolean verified = verifyCode(
-			emailCodeKey(purpose, email),
-			emailAttemptKey(purpose, email),
-			verificationCode,
-			EMAIL_CODE_TTL
-		);
+	public boolean verifyEmailCode(
+			VerificationPurpose purpose, String email, String verificationCode) {
+		boolean verified =
+				verifyCode(
+						emailCodeKey(purpose, email),
+						emailAttemptKey(purpose, email),
+						verificationCode,
+						EMAIL_CODE_TTL);
 		if (verified) {
 			saveVerifiedFlag(emailVerifiedKey(purpose, email));
 		}
 		return verified;
 	}
 
-	public boolean verifySmsCode(VerificationPurpose purpose, String phoneNumber, String verificationCode) {
-		boolean verified = verifyCode(
-			smsCodeKey(purpose, phoneNumber),
-			smsAttemptKey(purpose, phoneNumber),
-			verificationCode,
-			SMS_CODE_TTL
-		);
+	public boolean verifySmsCode(
+			VerificationPurpose purpose, String phoneNumber, String verificationCode) {
+		boolean verified =
+				verifyCode(
+						smsCodeKey(purpose, phoneNumber),
+						smsAttemptKey(purpose, phoneNumber),
+						verificationCode,
+						SMS_CODE_TTL);
 		if (verified) {
 			saveVerifiedFlag(smsVerifiedKey(purpose, phoneNumber));
 		}
@@ -70,7 +74,8 @@ public class VerificationService {
 	}
 
 	public boolean isSmsVerified(VerificationPurpose purpose, String phoneNumber) {
-		return VERIFIED_VALUE.equals(redisTemplate.opsForValue().get(smsVerifiedKey(purpose, phoneNumber)));
+		return VERIFIED_VALUE.equals(
+				redisTemplate.opsForValue().get(smsVerifiedKey(purpose, phoneNumber)));
 	}
 
 	private void saveVerificationCode(String key, String verificationCode, Duration ttl) {
@@ -78,7 +83,8 @@ public class VerificationService {
 		redisTemplate.opsForValue().set(key, hashedCode, ttl);
 	}
 
-	private boolean verifyCode(String key, String attemptKey, String verificationCode, Duration attemptTtl) {
+	private boolean verifyCode(
+			String key, String attemptKey, String verificationCode, Duration attemptTtl) {
 		String hashedCode = redisTemplate.opsForValue().get(key);
 		if (hashedCode == null) {
 			return false;
@@ -99,7 +105,7 @@ public class VerificationService {
 	private void validateSendRateLimit(String key) {
 		Boolean available = redisTemplate.opsForValue().setIfAbsent(key, "1", SEND_RATE_LIMIT_TTL);
 		if (!Boolean.TRUE.equals(available)) {
-			throw new IllegalArgumentException("인증번호는 1분 후 다시 요청할 수 있습니다.");
+			throw new BusinessException(AuthErrorCode.VERIFICATION_RATE_LIMITED);
 		}
 	}
 

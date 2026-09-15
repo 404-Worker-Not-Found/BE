@@ -48,6 +48,7 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(HandlerMethodValidationException.class)
   public ResponseEntity<ApiResponse<Void>> handleMethodValidationException(
       HandlerMethodValidationException exception, HttpServletRequest request) {
+    if (exception.isForReturnValue()) return handleException(exception, request);
     return error(
         GlobalErrorCode.VALIDATION_ERROR,
         GlobalErrorCode.VALIDATION_ERROR.getMessage(),
@@ -64,33 +65,43 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ApiResponse<Void>> handleInvalidRequestException(
       Exception exception, HttpServletRequest request) {
     return error(
-        GlobalErrorCode.INVALID_REQUEST, GlobalErrorCode.INVALID_REQUEST.getMessage(), request.getRequestURI(), null);
+        GlobalErrorCode.INVALID_REQUEST,
+        GlobalErrorCode.INVALID_REQUEST.getMessage(),
+        request.getRequestURI(),
+        null);
   }
 
-  @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
-  public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(
-      HttpRequestMethodNotSupportedException exception, HttpServletRequest request) {
-    GlobalErrorCode code = GlobalErrorCode.METHOD_NOT_ALLOWED;
-    return ResponseEntity.status(code.getHttpStatus())
-        .headers(exception.getHeaders())
-        .body(ApiResponse.error(code.getHttpStatus().value(), code.getCode(),
-            code.getMessage(), request.getRequestURI(), null));
-  }
-
-  @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
-  public ResponseEntity<ApiResponse<Void>> handleMediaTypeNotSupported(
-      HttpMediaTypeNotSupportedException exception, HttpServletRequest request) {
-    GlobalErrorCode code = GlobalErrorCode.UNSUPPORTED_MEDIA_TYPE;
-    return ResponseEntity.status(code.getHttpStatus())
-        .headers(exception.getHeaders())
-        .body(ApiResponse.error(code.getHttpStatus().value(), code.getCode(),
-            code.getMessage(), request.getRequestURI(), null));
+  @ExceptionHandler({
+    HttpRequestMethodNotSupportedException.class,
+    HttpMediaTypeNotSupportedException.class,
+    org.springframework.web.HttpMediaTypeNotAcceptableException.class,
+    org.springframework.web.servlet.resource.NoResourceFoundException.class,
+    org.springframework.web.servlet.NoHandlerFoundException.class
+  })
+  public ResponseEntity<ApiResponse<Void>> handleHttpProtocolException(
+      Exception exception, HttpServletRequest request) {
+    org.springframework.web.ErrorResponse failure =
+        (org.springframework.web.ErrorResponse) exception;
+    int status = failure.getStatusCode().value();
+    return ResponseEntity.status(status)
+        .headers(failure.getHeaders())
+        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+        .body(
+            ApiResponse.error(
+                status,
+                "GLOBAL-" + status + "-001",
+                org.springframework.http.HttpStatus.valueOf(status).getReasonPhrase(),
+                request.getRequestURI(),
+                null));
   }
 
   @ExceptionHandler(Exception.class)
   public ResponseEntity<ApiResponse<Void>> handleException(
       Exception exception, HttpServletRequest request) {
-    log.error("처리하지 못한 서버 오류: {}", exception.getClass().getName(), exception);
+    log.error(
+        "처리하지 못한 서버 오류: type={}, origin={}",
+        exception.getClass().getName(),
+        exception.getStackTrace().length == 0 ? "unknown" : exception.getStackTrace()[0]);
     return error(
         GlobalErrorCode.INTERNAL_SERVER_ERROR,
         GlobalErrorCode.INTERNAL_SERVER_ERROR.getMessage(),

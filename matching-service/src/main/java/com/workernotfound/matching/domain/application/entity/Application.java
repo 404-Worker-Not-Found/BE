@@ -1,7 +1,9 @@
 package com.workernotfound.matching.domain.application.entity;
 
 import com.workernotfound.matching.domain.application.entity.enums.ApplicationStatus;
+import com.workernotfound.matching.domain.application.exception.ApplicationErrorCode;
 import com.workernotfound.matching.global.entity.BaseEntity;
+import com.workernotfound.matching.global.exception.BusinessException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -10,38 +12,32 @@ import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
 @Getter
 @Entity
 @Table(
-	name = "applications",
-	uniqueConstraints = {
-		@UniqueConstraint(
-			name = "uk_applications_job_post_worker",
-			columnNames = {"job_post_id", "worker_member_id"}
-		),
-		@UniqueConstraint(
-			name = "uk_applications_admission",
-			columnNames = "job_application_admission_id"
-		)
-	},
-	indexes = {
-		@Index(
-			name = "idx_applications_worker_applied",
-			columnList = "worker_member_id, applied_at, id"
-		),
-		@Index(
-			name = "idx_applications_job_status_applied",
-			columnList = "job_post_id, status, applied_at, id"
-		)
-	}
-)
+		name = "applications",
+		uniqueConstraints = {
+			@UniqueConstraint(
+					name = "uk_applications_job_post_worker",
+					columnNames = {"job_post_id", "worker_member_id"}),
+			@UniqueConstraint(
+					name = "uk_applications_admission",
+					columnNames = "job_application_admission_id")
+		},
+		indexes = {
+			@Index(
+					name = "idx_applications_worker_applied",
+					columnList = "worker_member_id, applied_at, id"),
+			@Index(
+					name = "idx_applications_job_status_applied",
+					columnList = "job_post_id, status, applied_at, id")
+		})
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Application extends BaseEntity {
 
@@ -73,12 +69,11 @@ public class Application extends BaseEntity {
 
 	@Builder
 	private Application(
-		Long jobPostId,
-		Long workerMemberId,
-		Long ownerMemberId,
-		Long jobApplicationAdmissionId,
-		LocalDateTime appliedAt
-	) {
+			Long jobPostId,
+			Long workerMemberId,
+			Long ownerMemberId,
+			Long jobApplicationAdmissionId,
+			LocalDateTime appliedAt) {
 		this.jobPostId = jobPostId;
 		this.workerMemberId = workerMemberId;
 		this.ownerMemberId = ownerMemberId;
@@ -90,7 +85,7 @@ public class Application extends BaseEntity {
 
 	public void cancel() {
 		if (status != ApplicationStatus.APPLIED) {
-			throw new IllegalStateException("접수된 지원만 취소할 수 있습니다.");
+			throw new BusinessException(ApplicationErrorCode.APPLICATION_STATE_CONFLICT);
 		}
 		this.status = ApplicationStatus.CANCELED;
 		this.revision++;
@@ -98,7 +93,7 @@ public class Application extends BaseEntity {
 
 	public void select() {
 		if (status != ApplicationStatus.APPLIED) {
-			throw new IllegalStateException("접수된 지원만 선정할 수 있습니다.");
+			throw new BusinessException(ApplicationErrorCode.APPLICATION_STATE_CONFLICT);
 		}
 		this.status = ApplicationStatus.SELECTED;
 		this.revision++;
@@ -106,7 +101,7 @@ public class Application extends BaseEntity {
 
 	public void reject() {
 		if (status != ApplicationStatus.APPLIED) {
-			throw new IllegalStateException("접수된 지원만 비선정 처리할 수 있습니다.");
+			throw new BusinessException(ApplicationErrorCode.APPLICATION_STATE_CONFLICT);
 		}
 		this.status = ApplicationStatus.REJECTED;
 		this.revision++;

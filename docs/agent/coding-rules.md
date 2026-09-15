@@ -56,3 +56,8 @@ accountApplicationService.getAccount(accountId);
 - Define custom exceptions for expected business errors.
 - Do not overuse try/catch blocks that only hide or ignore errors.
 - Do not swallow errors silently.
+- Do not classify every IllegalArgumentException as invalid client input; internal invariant and infrastructure failures remain server errors.
+- Preserve standard Spring MVC HTTP statuses and headers, and return safe messages instead of raw binding or remote-response exception messages.
+- Catch only invalid-token failures as authentication failures. Keep JWT engine failures distinct and handle them at the filter boundary with a safe server-error response.
+- Preserve remote failure metadata until the application layer decides whether to reject, retry, or compensate; only map explicitly known remote status/code pairs to public business errors.
+- Keep tokens, credentials, request bodies, and potentially sensitive exception messages out of error logs.

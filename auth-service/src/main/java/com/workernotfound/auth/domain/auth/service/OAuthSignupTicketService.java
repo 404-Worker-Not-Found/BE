@@ -2,6 +2,7 @@ package com.workernotfound.auth.domain.auth.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workernotfound.auth.domain.auth.exception.AuthErrorCode;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -28,20 +29,20 @@ public class OAuthSignupTicketService {
 	public OAuthSignupTicket getAndDelete(String ticket) {
 		String value = redisTemplate.opsForValue().getAndDelete(ticketKey(ticket));
 		if (value == null) {
-			throw new SignupException("OAuth signup ticket이 유효하지 않습니다.");
+			throw new SignupException(AuthErrorCode.INVALID_SIGNUP_TICKET);
 		}
 		return deserialize(value);
 	}
 
 	public void restore(String ticket, OAuthSignupTicket signupTicket) {
-		Duration remainingTtl = Duration.between(
-			LocalDateTime.now(),
-			signupTicket.issuedAt().plus(TICKET_TTL)
-		);
+		Duration remainingTtl =
+				Duration.between(LocalDateTime.now(), signupTicket.issuedAt().plus(TICKET_TTL));
 		if (remainingTtl.isZero() || remainingTtl.isNegative()) {
 			return;
 		}
-		redisTemplate.opsForValue().setIfAbsent(ticketKey(ticket), serialize(signupTicket), remainingTtl);
+		redisTemplate
+				.opsForValue()
+				.setIfAbsent(ticketKey(ticket), serialize(signupTicket), remainingTtl);
 	}
 
 	private String ticketKey(String ticket) {
@@ -52,7 +53,7 @@ public class OAuthSignupTicketService {
 		try {
 			return objectMapper.writeValueAsString(signupTicket);
 		} catch (JsonProcessingException exception) {
-			throw new SignupException("OAuth signup ticket 저장에 실패했습니다.");
+			throw new IllegalStateException("OAuth signup ticket 저장에 실패했습니다.", exception);
 		}
 	}
 
@@ -60,7 +61,7 @@ public class OAuthSignupTicketService {
 		try {
 			return objectMapper.readValue(value, OAuthSignupTicket.class);
 		} catch (JsonProcessingException exception) {
-			throw new SignupException("OAuth signup ticket을 읽을 수 없습니다.");
+			throw new IllegalStateException("OAuth signup ticket을 읽을 수 없습니다.", exception);
 		}
 	}
 }
