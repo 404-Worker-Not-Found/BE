@@ -233,6 +233,9 @@ class PaymentIntegrationTests extends IntegrationTestSupport {
         """.formatted(IDS.incrementAndGet(), job);
     mvc.perform(post("/api/payments/internal/locks").contentType("application/json").content(body))
         .andExpect(status().isUnauthorized());
+    mvc.perform(post("/api/payments/internal/locks").header("X-Internal-Secret", "wrong-secret")
+        .header("Idempotency-Key", key()).contentType("application/json").content(body))
+        .andExpect(status().isUnauthorized());
     mvc.perform(post("/api/payments/internal/locks").header("X-Internal-Secret", "payment-test-internal-secret")
         .contentType("application/json").content(body)).andExpect(status().isBadRequest());
     String command = key();
@@ -276,7 +279,31 @@ class PaymentIntegrationTests extends IntegrationTestSupport {
   }
 
   @Test
-  void httpRejectsInvalidAmountsIdsCurrenciesAndKeys() throws Exception {
+  void httpRejectsInvalidIdsAndCurrencies() throws Exception {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var valid = mapper.createObjectNode().put("matchingId", 1).put("jobPostId", 1)
+        .put("ownerMemberId", 20).put("workerMemberId", 30).put("amount", 1).put("currency", "KRW");
+    for (String field : List.of("matchingId", "jobPostId", "ownerMemberId", "workerMemberId")) {
+      for (String value : List.of("0", "-1", "null")) {
+        var invalid = valid.deepCopy();
+        invalid.set(field, mapper.readTree(value));
+        assertInvalidLockBody(mapper.writeValueAsString(invalid));
+      }
+    }
+    for (String currency : List.of("krw", "KR", "KRWW", "")) {
+      assertInvalidLockBody(mapper.writeValueAsString(valid.deepCopy().put("currency", currency)));
+    }
+    assertInvalidLockBody(mapper.writeValueAsString(valid.deepCopy().putNull("currency")));
+  }
+
+  private void assertInvalidLockBody(String body) throws Exception {
+    mvc.perform(post("/api/payments/internal/locks").header("X-Internal-Secret", "payment-test-internal-secret")
+        .header("Idempotency-Key", key()).contentType("application/json").content(body))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void httpRejectsInvalidAmountsAndKeys() throws Exception {
     String body = """
         {"matchingId":1,"jobPostId":1,"ownerMemberId":20,"workerMemberId":30,"amount":%s,"currency":"KRW"}
         """;

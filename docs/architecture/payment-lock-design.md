@@ -8,7 +8,7 @@ payment-service는 공고별 예치 잔액에서 매칭 급여를 잠그고, 확
 
 ## 내부 API
 
-모든 요청은 X-Internal-Secret과 1~128자 공백 없는 ASCII Idempotency-Key가 필요하다. 응답은 공통 ApiResponse다.
+모든 요청은 X-Internal-Secret과 1~128자 공백 없는 ASCII Idempotency-Key가 필요하다. 응답은 공통 ApiResponse다. 내부 secret이 누락되거나 공백이면 서비스 시작 단계에서 설정 검증에 실패한다.
 
 | 명령 | 경로 | 요청과 응답 |
 | --- | --- | --- |
