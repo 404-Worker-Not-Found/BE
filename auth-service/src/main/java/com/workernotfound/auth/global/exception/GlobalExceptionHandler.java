@@ -1,8 +1,5 @@
 package com.workernotfound.auth.global.exception;
 
-import com.workernotfound.auth.domain.auth.service.AuthenticationException;
-import com.workernotfound.auth.domain.auth.service.SignupException;
-import com.workernotfound.auth.domain.token.service.RefreshTokenException;
 import com.workernotfound.auth.external.client.member.MemberServiceClientException;
 import com.workernotfound.auth.external.client.oauth.OAuth2ClientException;
 import com.workernotfound.auth.global.response.ApiResponse;
@@ -11,123 +8,145 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+@lombok.extern.slf4j.Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
 	@ExceptionHandler(BusinessException.class)
 	public ResponseEntity<ApiResponse<Void>> handleBusinessException(
-		BusinessException exception,
-		HttpServletRequest request
-	) {
-		return error(exception.getErrorCode(), exception.getMessage(), request.getRequestURI(), exception.getReasons());
-	}
-
-	@ExceptionHandler(AuthenticationException.class)
-	public ResponseEntity<ApiResponse<Void>> handleAuthenticationException(
-		AuthenticationException exception,
-		HttpServletRequest request
-	) {
-		return error(GlobalErrorCode.UNAUTHORIZED, exception.getMessage(), request.getRequestURI(), null);
-	}
-
-	@ExceptionHandler(RefreshTokenException.class)
-	public ResponseEntity<ApiResponse<Void>> handleRefreshTokenException(
-		RefreshTokenException exception,
-		HttpServletRequest request
-	) {
-		return error(GlobalErrorCode.INVALID_TOKEN, exception.getMessage(), request.getRequestURI(), null);
-	}
-
-	@ExceptionHandler(SignupException.class)
-	public ResponseEntity<ApiResponse<Void>> handleSignupException(
-		SignupException exception,
-		HttpServletRequest request
-	) {
-		return error(GlobalErrorCode.INVALID_REQUEST, exception.getMessage(), request.getRequestURI(), null);
+			BusinessException exception, HttpServletRequest request) {
+		return error(
+				exception.getErrorCode(),
+				exception.getMessage(),
+				request.getRequestURI(),
+				exception.getReasons());
 	}
 
 	@ExceptionHandler(MemberServiceClientException.class)
 	public ResponseEntity<ApiResponse<Void>> handleMemberServiceClientException(
-		MemberServiceClientException exception,
-		HttpServletRequest request
-	) {
+			MemberServiceClientException exception, HttpServletRequest request) {
 		if (exception.getErrorCode() != null) {
 			return error(
-				exception.getErrorCode(),
-				exception.getErrorCode().getMessage(),
-				request.getRequestURI(),
-				null
-			);
+					exception.getErrorCode(),
+					exception.getErrorCode().getMessage(),
+					request.getRequestURI(),
+					null);
 		}
-		return error(GlobalErrorCode.EXTERNAL_API_ERROR, GlobalErrorCode.EXTERNAL_API_ERROR.getMessage(),
-			request.getRequestURI(), null);
+		return error(
+				GlobalErrorCode.EXTERNAL_API_ERROR,
+				GlobalErrorCode.EXTERNAL_API_ERROR.getMessage(),
+				request.getRequestURI(),
+				null);
 	}
 
 	@ExceptionHandler(OAuth2ClientException.class)
 	public ResponseEntity<ApiResponse<Void>> handleOAuth2ClientException(
-		OAuth2ClientException exception,
-		HttpServletRequest request
-	) {
-		return error(GlobalErrorCode.EXTERNAL_API_ERROR, exception.getMessage(), request.getRequestURI(), null);
+			OAuth2ClientException exception, HttpServletRequest request) {
+		return error(
+				GlobalErrorCode.EXTERNAL_API_ERROR,
+				GlobalErrorCode.EXTERNAL_API_ERROR.getMessage(),
+				request.getRequestURI(),
+				null);
 	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)
 	public ResponseEntity<ApiResponse<Void>> handleValidationException(
-		MethodArgumentNotValidException exception,
-		HttpServletRequest request
-	) {
-		Map<String, Object> reasons = exception.getBindingResult().getFieldErrors().stream()
-			.collect(Collectors.toMap(
-				fieldError -> fieldError.getField(),
-				fieldError -> fieldError.getDefaultMessage() == null ? "invalid value" : fieldError.getDefaultMessage(),
-				(first, second) -> first
-			));
-		return error(GlobalErrorCode.VALIDATION_ERROR, GlobalErrorCode.VALIDATION_ERROR.getMessage(),
-			request.getRequestURI(), reasons);
+			MethodArgumentNotValidException exception, HttpServletRequest request) {
+		Map<String, Object> reasons =
+				exception.getBindingResult().getFieldErrors().stream()
+						.collect(
+								Collectors.toMap(
+										fieldError -> fieldError.getField(),
+										fieldError ->
+												fieldError.getDefaultMessage() == null
+														? "유효하지 않은 값입니다."
+														: fieldError.getDefaultMessage(),
+										(first, second) -> first));
+		return error(
+				GlobalErrorCode.VALIDATION_ERROR,
+				GlobalErrorCode.VALIDATION_ERROR.getMessage(),
+				request.getRequestURI(),
+				reasons);
+	}
+
+	@ExceptionHandler(HandlerMethodValidationException.class)
+	public ResponseEntity<ApiResponse<Void>> handleMethodValidationException(
+			HandlerMethodValidationException exception, HttpServletRequest request) {
+		if (exception.isForReturnValue()) return handleException(exception, request);
+		return error(
+				GlobalErrorCode.VALIDATION_ERROR,
+				GlobalErrorCode.VALIDATION_ERROR.getMessage(),
+				request.getRequestURI(),
+				null);
 	}
 
 	@ExceptionHandler({
-		IllegalArgumentException.class,
 		HttpMessageNotReadableException.class,
 		MethodArgumentTypeMismatchException.class,
+		org.springframework.web.bind.MissingRequestHeaderException.class,
 		MissingServletRequestParameterException.class
 	})
 	public ResponseEntity<ApiResponse<Void>> handleInvalidRequestException(
-		Exception exception,
-		HttpServletRequest request
-	) {
-		return error(GlobalErrorCode.INVALID_REQUEST, exception.getMessage(), request.getRequestURI(), null);
+			Exception exception, HttpServletRequest request) {
+		return error(
+				GlobalErrorCode.INVALID_REQUEST,
+				GlobalErrorCode.INVALID_REQUEST.getMessage(),
+				request.getRequestURI(),
+				null);
+	}
+
+	@ExceptionHandler({
+		HttpRequestMethodNotSupportedException.class,
+		HttpMediaTypeNotSupportedException.class,
+		org.springframework.web.HttpMediaTypeNotAcceptableException.class,
+		org.springframework.web.servlet.resource.NoResourceFoundException.class,
+		org.springframework.web.servlet.NoHandlerFoundException.class
+	})
+	public ResponseEntity<ApiResponse<Void>> handleHttpProtocolException(
+			Exception exception, HttpServletRequest request) {
+		org.springframework.web.ErrorResponse failure =
+				(org.springframework.web.ErrorResponse) exception;
+		int status = failure.getStatusCode().value();
+		return ResponseEntity.status(status)
+				.headers(failure.getHeaders())
+				.contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+				.body(
+						ApiResponse.error(
+								status,
+								"GLOBAL-" + status + "-001",
+								org.springframework.http.HttpStatus.valueOf(status).getReasonPhrase(),
+								request.getRequestURI(),
+								null));
 	}
 
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ApiResponse<Void>> handleException(
-		Exception exception,
-		HttpServletRequest request
-	) {
-		return error(GlobalErrorCode.INTERNAL_SERVER_ERROR, GlobalErrorCode.INTERNAL_SERVER_ERROR.getMessage(),
-			request.getRequestURI(), null);
+			Exception exception, HttpServletRequest request) {
+		log.error(
+				"처리하지 못한 서버 오류: type={}, origin={}",
+				exception.getClass().getName(),
+				exception.getStackTrace().length == 0 ? "unknown" : exception.getStackTrace()[0]);
+		return error(
+				GlobalErrorCode.INTERNAL_SERVER_ERROR,
+				GlobalErrorCode.INTERNAL_SERVER_ERROR.getMessage(),
+				request.getRequestURI(),
+				null);
 	}
 
 	private ResponseEntity<ApiResponse<Void>> error(
-		ErrorCode errorCode,
-		String message,
-		String path,
-		Map<String, Object> reasons
-	) {
-		return ResponseEntity
-			.status(errorCode.getHttpStatus())
-			.body(ApiResponse.error(
-				errorCode.getHttpStatus().value(),
-				errorCode.getCode(),
-				message,
-				path,
-				reasons
-			));
+			ErrorCode errorCode, String message, String path, Map<String, Object> reasons) {
+		return ResponseEntity.status(errorCode.getHttpStatus())
+				.body(
+						ApiResponse.error(
+								errorCode.getHttpStatus().value(), errorCode.getCode(), message, path, reasons));
 	}
 }

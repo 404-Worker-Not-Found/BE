@@ -1,8 +1,10 @@
 package com.workernotfound.auth.domain.auth.service;
 
-public class AuthenticationException extends RuntimeException {
+import com.workernotfound.auth.domain.auth.exception.AuthErrorCode;
+import com.workernotfound.auth.global.exception.BusinessException;
 
-	public AuthenticationException(String message) {
-		super(message);
+public class AuthenticationException extends BusinessException {
+	public AuthenticationException(AuthErrorCode errorCode) {
+		super(errorCode);
 	}
 }

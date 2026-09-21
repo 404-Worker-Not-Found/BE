@@ -2,6 +2,7 @@ package com.workernotfound.auth.domain.token.service;
 
 import com.workernotfound.auth.domain.token.dto.request.LogoutRequest;
 import com.workernotfound.auth.domain.token.entity.RefreshToken;
+import com.workernotfound.auth.domain.token.exception.TokenErrorCode;
 import com.workernotfound.auth.domain.token.repository.RefreshTokenRepository;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -18,8 +19,10 @@ public class LogoutService {
 	@Transactional
 	public void logout(LogoutRequest request) {
 		String tokenHash = tokenHasher.hash(request.refreshToken());
-		RefreshToken refreshToken = refreshTokenRepository.findByTokenHash(tokenHash)
-			.orElseThrow(() -> new RefreshTokenException("refresh token을 찾을 수 없습니다."));
+		RefreshToken refreshToken =
+				refreshTokenRepository
+						.findByTokenHash(tokenHash)
+						.orElseThrow(() -> new RefreshTokenException(TokenErrorCode.REFRESH_TOKEN_NOT_FOUND));
 		if (refreshToken.getRevokedAt() == null) {
 			refreshToken.revoke(LocalDateTime.now());
 		}

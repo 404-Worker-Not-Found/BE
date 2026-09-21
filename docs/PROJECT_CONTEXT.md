@@ -275,6 +275,14 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - Local HTTP/MySQL ports are 8087/3312. `./scripts/local-run.sh chat` runs the service; repository verification includes its MySQL integration tests.
 - See `docs/architecture/chat-room-design.md` and `docs/architecture/error-handling-review.md`.
 
+## Error Handling State
+
+- Member and auth signup/login/token business rejections expose domain codes. Member/owner/worker missing-resource lookups return 404, duplicate checks return 409, and verification resend limits return 429.
+- Auth recognizes the new member/worker error codes through a status/code whitelist; matching retains its member-404 eligibility mapping and Saga unknown-outcome handling.
+- Auth/member/job/matching JWT filters parse once and distinguish invalid tokens from engine failures; engine errors produce safe 500 responses through the MVC resolver.
+- All six services preserve standard MVC protocol statuses and sanitize binding and unexpected error responses. OAuth signup-ticket serialization failures are server errors with retained causes.
+- See `docs/architecture/error-handling-review.md` for the error contract and internal guards that intentionally remain runtime exceptions.
+
 ## Current Persistence Dependencies
 
 Current persistence-related dependencies:

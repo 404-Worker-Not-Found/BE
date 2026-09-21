@@ -1,5 +1,7 @@
 package com.workernotfound.auth.domain.auth.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.workernotfound.auth.domain.account.entity.enums.OAuthProvider;
 import com.workernotfound.auth.support.IntegrationTestSupport;
 import java.time.LocalDateTime;
@@ -8,15 +10,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 class OAuthSignupTicketServiceTests extends IntegrationTestSupport {
 
-	@Autowired
-	private OAuthSignupTicketService oAuthSignupTicketService;
+	@Autowired private OAuthSignupTicketService oAuthSignupTicketService;
 
-	@Autowired
-	private StringRedisTemplate redisTemplate;
+	@Autowired private StringRedisTemplate redisTemplate;
 
 	@Test
 	void restoresTicketWithOnlyItsRemainingOriginalLifetime() {
@@ -42,13 +40,19 @@ class OAuthSignupTicketServiceTests extends IntegrationTestSupport {
 		assertThat(redisTemplate.hasKey(ticketKey(ticket))).isFalse();
 	}
 
+	@Test
+	void corruptedStoredTicketIsServerFailureAndRetainsCause() {
+		String ticket = java.util.UUID.randomUUID().toString();
+		redisTemplate.opsForValue().set(ticketKey(ticket), "not json");
+		org.assertj.core.api.Assertions.assertThatThrownBy(
+						() -> oAuthSignupTicketService.getAndDelete(ticket))
+				.isInstanceOf(IllegalStateException.class)
+				.hasCauseInstanceOf(com.fasterxml.jackson.core.JsonProcessingException.class);
+	}
+
 	private OAuthSignupTicket signupTicket(LocalDateTime issuedAt) {
 		return new OAuthSignupTicket(
-			OAuthProvider.KAKAO,
-			"kakao-owner",
-			"oauth-owner@example.com",
-			issuedAt
-		);
+				OAuthProvider.KAKAO, "kakao-owner", "oauth-owner@example.com", issuedAt);
 	}
 
 	private String ticketKey(String ticket) {
