@@ -17,6 +17,7 @@ public class PaymentDeposit {
   @Column(nullable = false, length = 3) private String currency;
   @Column(nullable = false, precision = 19, scale = 2) private BigDecimal depositedAmount;
   @Column(nullable = false, precision = 19, scale = 2) private BigDecimal lockedAmount;
+  @Column(nullable = false) private boolean fundingBlocked;
   @Version private Long version;
 
   @Builder
@@ -29,6 +30,7 @@ public class PaymentDeposit {
   }
 
   public void reserve(Long ownerId, String requestedCurrency, BigDecimal amount) {
+    if (fundingBlocked) throw new BusinessException(PaymentErrorCode.FUNDING_BLOCKED);
     if (!ownerMemberId.equals(ownerId) || !currency.equals(requestedCurrency))
       throw new BusinessException(PaymentErrorCode.DEPOSIT_MISMATCH);
     if (depositedAmount.subtract(lockedAmount).compareTo(amount) < 0)

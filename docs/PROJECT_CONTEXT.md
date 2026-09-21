@@ -138,7 +138,7 @@ Current matching application implementation:
 - A worker can list and read only their own matching proposals and can idempotently decline a `PENDING` proposal. Declining records a `DECLINED` matching history while the application remains `APPLIED`.
 - A worker matching acceptance endpoint and a persisted confirmation Saga now coordinate recruitment-seat reservation, payment locking, scheduled-work creation, chat-room creation, and reverse-order compensation. Only a fully completed Saga changes the matching to `CONFIRMED` and the application to `SELECTED` and stores `ApplicationSelected` and `MatchConfirmed` Outbox events.
 - Confirmation commands persist separate stable idempotency keys for forward and compensation steps and retain external resource IDs before advancing. A lease prevents concurrent coordinators. Unknown outcomes resume the same forward command without premature compensation, while definitively rejected commands compensate known resources and start a new attempt only after compensation succeeds.
-- The payment-service implements deposit-backed lock/release commands, but provider-verified deposit ingestion and the job-service seat-reservation contract are not implemented. Matching acceptance therefore fails closed until the remaining service owners implement the documented internal contracts; no temporary successful confirmation is fabricated.
+- The payment-service implements deposit-backed lock/release commands, and Toss test-payment verification/ingestion. Actual test-key checkout and job-service funding/seat-reservation integration remain pending. Matching acceptance therefore fails closed until the remaining service owners implement the documented internal contracts; no temporary successful confirmation is fabricated.
 - A shared-secret internal recruitment-completion endpoint rejects remaining `APPLIED` applications and cancels their `PENDING` matching proposals in one transaction. It stores the completed job version as a durable barrier against late applications, rebuilds the Redis queues once per job, persists status histories and `ApplicationRejected` Outbox events, and refuses completion while a confirmation Saga has an unknown outcome or unfinished compensation. A higher job version permits applications after reopening. The job-service producer remains owned by the job domain.
 - A database-leased Outbox relay publishes domain-event envelopes to the `matching:domain-events` Redis Stream. It preserves aggregate revision order, retries failures with capped exponential backoff, recovers expired leases, and provides at-least-once delivery with stable `eventId` values for consumer deduplication. Local Redis uses synchronous AOF persistence; production event Redis must provide equivalent durability and a no-eviction policy.
 - Versioned score batch and application score snapshot persistence is implemented with `CALCULATING`/`READY`/`FAILED` lifecycle states. Missing external inputs remain nullable and are distinguished through `missing_inputs` instead of fabricated zero scores.
@@ -161,7 +161,7 @@ Implemented:
 - `matching-service`: application and matching service
 - `work-service`: scheduled work and Saga compensation service
 - `chat-service`: internal chat room creation and Saga compensation service
-- `payment-service`: deposit-backed payment lock and Saga compensation service (PG deposit ingestion pending)
+- `payment-service`: deposit-backed payment lock and Saga compensation service with Toss test deposit ingestion
 
 Planned or represented in the ERD:
 
@@ -281,9 +281,12 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - Java 17, Spring Boot 4.1.0, service-owned MySQL/Flyway, internal-secret security, and accessible Springdoc.
 - Implements matching Saga lock/release APIs with stable command fingerprints, persistent successful and rejected outcomes, per-matching serialization, and per-job deposit locking.
 - Requires an existing deposit with matching owner/currency and sufficient available balance. Released attempts retain their original IDs; late release never unlocks a replacement.
-- Provider selection, deposit timing, payment approval/webhook verification, and verified deposit ingestion remain pending. No public payment or arbitrary credit endpoint exists; test deposits are fixtures only.
+- Toss Payments test-card/KRW integration now creates immutable orders from trusted job-service snapshots, supports JWT owner-only approval/query, verifies provider results, and credits deposits atomically with durable funding notifications.
+- Orders remain recoverable across uncertain provider outcomes with stable confirmation keys and fenced leases. Webhooks only schedule authenticated provider re-query for already-bound payment keys. Verified cancellations block new matching locks.
+- The decided policy is payment-before-publication. job-service still needs PAYMENT_PENDING, internal order provisioning, and revision-aware funding-status consumption; its current implementation creates OPEN jobs immediately.
+- Actual Toss test keys and frontend checkout have not been connected. Production escrow, payouts and refunds are outside this unit.
 - HTTP/MySQL ports are 8085/3313. Local execution and repository verification include payment-service.
-- See `docs/architecture/payment-lock-design.md` for the boundary and follow-up work. Full matching acceptance remains blocked on verified funding and job-service contracts.
+- See `docs/architecture/payment-lock-design.md` for the boundary and follow-up work. See `docs/architecture/toss-deposit-design.md` for the provider and job/frontend contracts. Full matching acceptance still requires actual test checkout and job-service integration.
 
 ## Error Handling State
 

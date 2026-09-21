@@ -983,3 +983,26 @@ Implication for agents:
 Related files:
 - `docs/architecture/payment-lock-design.md`
 - `payment-service`
+
+
+## 2026-09-22 - Toss Test Deposits Before Job Publication
+
+Decision:
+- Use Toss Payments directly in the test environment, initially card payments and integer KRW only. Reject live secret keys in this implementation.
+- Create jobs privately in PAYMENT_PENDING and open them only after verified funding. The job domain computes the total expected wage and owns publication; payment-service accepts trusted internal order snapshots, not browser-supplied pricing.
+- Keep order amount, owner and job version immutable. Replace only unbound READY or verified FAILED orders; uncertain or funded orders cannot be replaced for a new charge.
+- Authenticate owner approval and query with the existing JWT identity contract. Persist the provider payment key before approval and recover unknown outcomes with the same order/key rather than making another charge.
+- Treat webhook bodies as hints; re-query known bound keys with provider authentication before changing funds. Commit deposit credit, history and durable job notification atomically.
+- Fence job funding notifications by order and funding revision. A delayed older acknowledgement cannot clear a newer notification, and the job receiver must reject stale revisions.
+- Block new matching locks on verified cancellation or partial cancellation; keep existing allocated balances for later refund/settlement handling.
+
+Reason:
+- An unfunded public job can attract applicants but fail at acceptance. Stable orders and verified payment facts prevent browser amount tampering, duplicate credits and orphaned publication updates.
+
+Implementation boundary:
+- job-service is owned by a teammate and still needs private creation, order provisioning and funding-status consumption. No job implementation was changed in this unit.
+- Actual test checkout requires private test keys and frontend authentication. Test deposits and internal allocation are not production escrow or worker payouts.
+
+Related files:
+- `docs/architecture/toss-deposit-design.md`
+- `payment-service`

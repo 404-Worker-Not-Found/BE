@@ -11,6 +11,16 @@ spring:
     hibernate:
       ddl-auto: validate
 payment:
+  jwt:
+    secret: ${AUTH_JWT_SECRET}
+  toss:
+    enabled: ${TOSS_ENABLED:false}
+    secret-key: ${TOSS_SECRET_KEY:}
+  job-service:
+    base-url: ${JOB_SERVICE_BASE_URL:http://localhost:8083}
+  recovery:
+    enabled: true
+    interval: 30s
   internal:
     secret: ${INTERNAL_API_SECRET}
 server:
