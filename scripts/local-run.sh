@@ -14,6 +14,7 @@ Usage:
   ./scripts/local-run.sh job       Run job-service with .env
   ./scripts/local-run.sh matching  Run matching-service with .env
   ./scripts/local-run.sh work      Run work-service with .env
+  ./scripts/local-run.sh chat      Run chat-service with .env
   ./scripts/local-run.sh stop      Stop local containers
   ./scripts/local-run.sh status    Show local container status
 EOF
@@ -64,6 +65,11 @@ case "${1:-}" in
   work)
     load_env
     cd "${ROOT_DIR}/work-service"
+    ./gradlew bootRun
+    ;;
+  chat)
+    load_env
+    cd "${ROOT_DIR}/chat-service"
     ./gradlew bootRun
     ;;
   stop)

@@ -3,9 +3,11 @@ package com.workernotfound.matching.domain.matching.entity;
 import com.workernotfound.matching.domain.application.entity.Application;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingSelectionType;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingStatus;
+import com.workernotfound.matching.domain.matching.exception.MatchingErrorCode;
 import com.workernotfound.matching.domain.score.entity.MatchingScoreBatch;
 import com.workernotfound.matching.domain.score.entity.MatchingScoreSnapshot;
 import com.workernotfound.matching.global.entity.BaseEntity;
+import com.workernotfound.matching.global.exception.BusinessException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -28,27 +30,29 @@ import lombok.NoArgsConstructor;
 @Getter
 @Entity
 @Table(
-	name = "matchings",
-	uniqueConstraints = @UniqueConstraint(
-		name = "uk_matchings_application",
-		columnNames = "application_id"
-	),
-	indexes = {
-		@Index(name = "idx_matchings_job_status_selected", columnList = "job_post_id, status, selected_at, id"),
-		@Index(name = "idx_matchings_worker_status_selected", columnList = "worker_member_id, status, selected_at, id"),
-		@Index(name = "idx_matchings_owner_job_status", columnList = "owner_member_id, job_post_id, status")
-	}
-)
+		name = "matchings",
+		uniqueConstraints =
+				@UniqueConstraint(name = "uk_matchings_application", columnNames = "application_id"),
+		indexes = {
+			@Index(
+					name = "idx_matchings_job_status_selected",
+					columnList = "job_post_id, status, selected_at, id"),
+			@Index(
+					name = "idx_matchings_worker_status_selected",
+					columnList = "worker_member_id, status, selected_at, id"),
+			@Index(
+					name = "idx_matchings_owner_job_status",
+					columnList = "owner_member_id, job_post_id, status")
+		})
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Matching extends BaseEntity {
 
 	@OneToOne(fetch = FetchType.LAZY, optional = false)
 	@JoinColumn(
-		name = "application_id",
-		nullable = false,
-		updatable = false,
-		foreignKey = @ForeignKey(name = "fk_matchings_application")
-	)
+			name = "application_id",
+			nullable = false,
+			updatable = false,
+			foreignKey = @ForeignKey(name = "fk_matchings_application"))
 	private Application application;
 
 	@Column(name = "job_post_id", nullable = false, updatable = false)
@@ -62,18 +66,16 @@ public class Matching extends BaseEntity {
 
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(
-		name = "score_batch_id",
-		updatable = false,
-		foreignKey = @ForeignKey(name = "fk_matchings_score_batch")
-	)
+			name = "score_batch_id",
+			updatable = false,
+			foreignKey = @ForeignKey(name = "fk_matchings_score_batch"))
 	private MatchingScoreBatch scoreBatch;
 
 	@OneToOne(fetch = FetchType.LAZY)
 	@JoinColumn(
-		name = "score_snapshot_id",
-		updatable = false,
-		foreignKey = @ForeignKey(name = "fk_matchings_score_snapshot")
-	)
+			name = "score_snapshot_id",
+			updatable = false,
+			foreignKey = @ForeignKey(name = "fk_matchings_score_snapshot"))
 	private MatchingScoreSnapshot scoreSnapshot;
 
 	@Enumerated(EnumType.STRING)
@@ -102,13 +104,12 @@ public class Matching extends BaseEntity {
 
 	@Builder
 	private Matching(
-		Application application,
-		MatchingScoreBatch scoreBatch,
-		MatchingScoreSnapshot scoreSnapshot,
-		MatchingSelectionType selectionType,
-		LocalDateTime selectedAt,
-		LocalDateTime expiresAt
-	) {
+			Application application,
+			MatchingScoreBatch scoreBatch,
+			MatchingScoreSnapshot scoreSnapshot,
+			MatchingSelectionType selectionType,
+			LocalDateTime selectedAt,
+			LocalDateTime expiresAt) {
 		this.application = application;
 		this.jobPostId = application.getJobPostId();
 		this.ownerMemberId = application.getOwnerMemberId();
@@ -124,7 +125,7 @@ public class Matching extends BaseEntity {
 
 	public void cancel() {
 		if (status != MatchingStatus.PENDING) {
-			throw new IllegalStateException("대기 중인 매칭만 취소할 수 있습니다.");
+			throw new BusinessException(MatchingErrorCode.MATCHING_STATE_CONFLICT);
 		}
 		this.status = MatchingStatus.CANCELED;
 		this.revision++;
@@ -132,7 +133,7 @@ public class Matching extends BaseEntity {
 
 	public void decline() {
 		if (status != MatchingStatus.PENDING) {
-			throw new IllegalStateException("대기 중인 매칭만 거절할 수 있습니다.");
+			throw new BusinessException(MatchingErrorCode.MATCHING_STATE_CONFLICT);
 		}
 		this.status = MatchingStatus.DECLINED;
 		this.revision++;
@@ -140,7 +141,7 @@ public class Matching extends BaseEntity {
 
 	public void confirm(LocalDateTime confirmedAt) {
 		if (status != MatchingStatus.PENDING) {
-			throw new IllegalStateException("대기 중인 매칭만 확정할 수 있습니다.");
+			throw new BusinessException(MatchingErrorCode.MATCHING_STATE_CONFLICT);
 		}
 		this.status = MatchingStatus.CONFIRMED;
 		this.confirmedAt = confirmedAt;

@@ -914,3 +914,48 @@ Implication for agents:
 Related files:
 - `docs/agent/checklists.md`
 - `.coderabbit.yaml`
+
+## 2026-09-15 - Chat Room Saga Commands
+
+Decision:
+- Implement the existing matching Saga create/close contract in chat-service with service-owned MySQL.
+- Persist command results and room history atomically, serialize by matching, and allow at most one OPEN room per matching.
+- Retain CLOSED rooms and return the original result for old command retries. A new creation key may create a replacement after closure; late closure must not affect it.
+- Treat OPEN as internal provisioning only. Add confirmation and participant authorization before exposing user messaging.
+- Use BusinessException with domain codes for expected failures; do not classify arbitrary IllegalArgumentException as a client error in the new service.
+
+Reason:
+- Saga retries and compensation must not duplicate rooms or close a replacement, and unexpected server failures must remain distinguishable from definitive command rejection.
+
+Implication for agents:
+- Preserve the idempotency fingerprint format for existing commands when evolving request schemas.
+- Keep messaging, WebSocket, user room access, and confirmation consumption as separate follow-up work.
+
+Related files:
+- `docs/architecture/chat-room-design.md`
+- `docs/architecture/error-handling-review.md`
+- `chat-service`
+
+## 2026-09-15 - Existing Service Error Boundaries
+
+Decision:
+- Use domain-coded business exceptions for member/signup/token/application/matching rejections and retain internal invariant/infrastructure failures as server errors.
+- Member lookup failures use 404, duplicate checks use 409, and verification resend limits use 429. Auth forwards known member/worker errors only when both status and code match its whitelist.
+- Parse JWTs once in authentication filters and distinguish invalid credentials from signing-engine failures. Preserve anonymous access policies for invalid credentials; explicitly route engine failures to safe 500 responses.
+- Preserve standard MVC protocol statuses and headers and sanitize binding, external API, and unexpected server-error responses in all six services.
+- Keep matching Saga remote metadata and unknown-outcome recovery semantics unchanged.
+
+Reason:
+- Generic 400 and false validation results hid business meaning and server failures, while early remote-error flattening could lead to incorrect retry or compensation decisions.
+
+Implication for agents:
+- Follow `docs/architecture/error-handling-review.md` for public error-code changes and remaining internal guards.
+- Do not globally convert unknown DB constraint violations to duplicates or network failures to definitive rejections.
+- Record safe exception types/locations rather than raw sensitive exception messages.
+
+
+## 2026-09-21 - Signup Database Conflict Translation
+
+- Translate only `uk_auth_accounts_email` and `uk_oauth_connections_provider_user` violations to the corresponding auth 409 business errors.
+- Translate in `SignupService`, outside the persistence transaction, after rollback and the existing member compensation attempt. This also covers commit-time failures.
+- Retain the original cause and suppressed compensation failures; unrelated integrity violations remain server errors.
