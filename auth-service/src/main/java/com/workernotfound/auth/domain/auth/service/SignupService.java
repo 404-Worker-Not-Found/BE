@@ -20,6 +20,8 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.hibernate.exception.ConstraintViolationException;
 
 @Service
 @Slf4j
@@ -46,7 +48,7 @@ public class SignupService {
 					request.deviceId());
 		} catch (RuntimeException exception) {
 			compensateCreatedMember(memberResponse.memberId(), exception);
-			throw exception;
+			throw translatePersistenceFailure(exception);
 		}
 	}
 
@@ -63,7 +65,7 @@ public class SignupService {
 					request.deviceId());
 		} catch (RuntimeException exception) {
 			compensateCreatedMember(memberResponse.memberId(), exception);
-			throw exception;
+			throw translatePersistenceFailure(exception);
 		}
 	}
 
@@ -83,7 +85,7 @@ public class SignupService {
 					memberResponse.memberId(), signupTicket, MemberRole.OWNER, request.deviceId());
 		} catch (RuntimeException exception) {
 			compensateCreatedMember(memberResponse.memberId(), exception);
-			throw exception;
+			throw translatePersistenceFailure(exception);
 		}
 	}
 
@@ -104,7 +106,7 @@ public class SignupService {
 					memberResponse.memberId(), signupTicket, MemberRole.WORKER, request.deviceId());
 		} catch (RuntimeException exception) {
 			compensateCreatedMember(memberResponse.memberId(), exception);
-			throw exception;
+			throw translatePersistenceFailure(exception);
 		}
 	}
 
@@ -134,11 +136,32 @@ public class SignupService {
 		}
 	}
 
+	private RuntimeException translatePersistenceFailure(RuntimeException exception) {
+		if (!(exception instanceof DataIntegrityViolationException)) return exception;
+		for (Throwable cause = exception.getCause(); cause != null; cause = cause.getCause()) {
+			if (!(cause instanceof ConstraintViolationException violation)) continue;
+			String constraint = violation.getConstraintName();
+			if (constraint == null) return exception;
+			String name = constraint.substring(constraint.lastIndexOf('.') + 1);
+			AuthErrorCode errorCode = switch (name) {
+				case "uk_auth_accounts_email" -> AuthErrorCode.EMAIL_ALREADY_EXISTS;
+				case "uk_oauth_connections_provider_user" -> AuthErrorCode.OAUTH_ALREADY_CONNECTED;
+				default -> null;
+			};
+			if (errorCode == null) return exception;
+			SignupException conflict = new SignupException(errorCode);
+			conflict.initCause(exception);
+			return conflict;
+		}
+		return exception;
+	}
+
 	private void compensateCreatedMember(Long memberId, RuntimeException originalException) {
 		try {
 			memberServiceClient.deleteMemberForSignupCompensation(memberId);
 		} catch (RuntimeException compensationException) {
-			log.warn("member-service 회원가입 보상 삭제에 실패했습니다. memberId={}", memberId, compensationException);
+			log.warn("member-service 회원가입 보상 삭제에 실패했습니다. memberId={}, type={}",
+				memberId, compensationException.getClass().getName());
 			originalException.addSuppressed(compensationException);
 		}
 	}

@@ -952,3 +952,10 @@ Implication for agents:
 - Follow `docs/architecture/error-handling-review.md` for public error-code changes and remaining internal guards.
 - Do not globally convert unknown DB constraint violations to duplicates or network failures to definitive rejections.
 - Record safe exception types/locations rather than raw sensitive exception messages.
+
+
+## 2026-09-21 - Signup Database Conflict Translation
+
+- Translate only `uk_auth_accounts_email` and `uk_oauth_connections_provider_user` violations to the corresponding auth 409 business errors.
+- Translate in `SignupService`, outside the persistence transaction, after rollback and the existing member compensation attempt. This also covers commit-time failures.
+- Retain the original cause and suppressed compensation failures; unrelated integrity violations remain server errors.

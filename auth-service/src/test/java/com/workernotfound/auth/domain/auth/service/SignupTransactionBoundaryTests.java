@@ -71,6 +71,23 @@ class SignupTransactionBoundaryTests extends IntegrationTestSupport {
 	}
 
 	@Test
+	void preservesUnknownConstraintAndCompensationFailure() {
+		saveEmailVerified(OWNER_EMAIL);
+		saveSmsVerified(OWNER_PHONE_NUMBER);
+		when(memberServiceClient.createOwner(any())).thenReturn(ownerMemberResponse(803L, OWNER_EMAIL));
+		var cause = new org.hibernate.exception.ConstraintViolationException(
+			"unknown constraint", new java.sql.SQLException(), "uk_unrelated");
+		var failure = new org.springframework.dao.DataIntegrityViolationException("persistence failure", cause);
+		var compensationFailure = new IllegalStateException("compensation failed");
+		when(signupPersistenceService.saveLocalAccountAndIssueToken(any(), any(), any(), any(), any()))
+			.thenThrow(failure);
+		org.mockito.Mockito.doThrow(compensationFailure).when(memberServiceClient).deleteMemberForSignupCompensation(803L);
+
+		assertThatThrownBy(() -> signupService.signupOwner(ownerSignupRequest())).isSameAs(failure);
+		assertThat(failure.getSuppressed()).containsExactly(compensationFailure);
+	}
+
+	@Test
 	void callsOAuthOwnerMemberServiceOutsideAuthTransaction() {
 		String ticket =
 				oAuthSignupTicketService.save(
