@@ -959,3 +959,27 @@ Implication for agents:
 - Translate only `uk_auth_accounts_email` and `uk_oauth_connections_provider_user` violations to the corresponding auth 409 business errors.
 - Translate in `SignupService`, outside the persistence transaction, after rollback and the existing member compensation attempt. This also covers commit-time failures.
 - Retain the original cause and suppressed compensation failures; unrelated integrity violations remain server errors.
+
+
+## 2026-09-21 - Deposit-backed Payment Saga Commands
+
+Decision:
+- Implement the existing matching lock/release contract with payment-service-owned MySQL and per-job deposit balances.
+- Serialize by command, matching, then deposit; prevent overspending across different matches and permit one active lock per matching.
+- Retain successful and definitively rejected command outcomes. A rejected command must not become successful later when funds become available; a new attempt uses a new key.
+- Keep released attempts and return original IDs for old create retries. Late release cannot change a replacement lock or return funds twice.
+- Treat RELEASED as the lock lifecycle, separate from PG refund and the broader payment state model. Lock release restores available deposited funds.
+- Do not fabricate deposited funds. Provider choice, deposit timing, verified payment ingestion, and real PG integration remain pending; tests alone insert funding fixtures.
+
+Reason:
+- The matching Saga already expects stable payment IDs and reverse compensation, while multiple workers can consume one job's funding.
+- A definitive rejection must remain definitive across delayed retries so compensation cannot be followed by an orphaned payment lock.
+
+Implication for agents:
+- Provider integration must verify server-owned order, amount, currency and successful payment before atomically crediting a deduplicated deposit ledger.
+- Keep business rejection checks before balance mutation; unexpected persistence errors roll back instead of committing a rejection.
+- Do not equate successful fixture-based tests with verified deposit ingestion or end-to-end matching acceptance.
+
+Related files:
+- `docs/architecture/payment-lock-design.md`
+- `payment-service`

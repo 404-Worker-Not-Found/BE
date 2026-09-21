@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: payment-service
+  datasource:
+    url: ${PAYMENT_DATASOURCE_URL}
+    username: ${PAYMENT_DATASOURCE_USERNAME}
+    password: ${PAYMENT_DATASOURCE_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+payment:
+  internal:
+    secret: ${INTERNAL_API_SECRET}
+server:
+  port: ${PAYMENT_SERVICE_PORT:8085}
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
