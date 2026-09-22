@@ -213,7 +213,7 @@
 | `ApplicationSubmitted` | `matching-service` | `job-service`, `notification-service` | 지원자 수와 지원 알림 갱신 |
 | `ApplicationCanceled` | `matching-service` | `job-service`, `notification-service` | 지원 현황 갱신 |
 | `RecruitmentCompleted` | `job-service` | `matching-service`, `notification-service` | 미선정 지원과 남은 매칭 제안 종료 |
-| `MatchConfirmed` | `matching-service` | `job-service`, `notification-service` | 공고 상태와 매칭 완료 알림 갱신 |
+| `MatchConfirmed` | `matching-service` | `work-service`, `job-service`, `notification-service` | 근무 확정 반영, 공고 상태와 매칭 완료 알림 갱신 |
 | `MatchCandidateExpired` | `matching-service` | `notification-service` | 후보 만료 알림 생성 |
 | `MatchingExhausted` | `matching-service` | `job-service`, `notification-service` | 공고 재오픈 검토와 알림 생성 |
 | `WorkCheckedIn` | `work-service` | `notification-service` | 출근 알림 생성 |

@@ -1006,3 +1006,21 @@ Implementation boundary:
 Related files:
 - `docs/architecture/toss-deposit-design.md`
 - `payment-service`
+
+
+## 2026-09-22 - Work Confirmation and Participant Queries
+
+Decision:
+- Consume matching `MatchConfirmed` v1 to record work confirmation separately from scheduled-work provisioning. Keep work lifecycle status `SCHEDULED` until future attendance commands.
+- Validate the event envelope and the stored work snapshot, serialize with existing matching/work locks, and persist the event receipt and confirmation in one transaction before Redis ACK.
+- Use the dedicated `work-confirmation-v1` group with one shared logical consumer across replicas. Scan pending records with a rotating cursor and independently read new records; MySQL makes concurrent redelivery safe.
+- Expose only confirmed participant-owned work through JWT-authenticated list/detail APIs. Do not infer confirmation for existing rows or expose payment IDs.
+- Do not revive canceled attempts, apply stale revisions, or allow Saga compensation after confirmation. User cancellation remains a separate future contract.
+
+Reason:
+- Scheduled work is provisioned before the confirmation Saga completes. Creation alone must not grant user access or future attendance eligibility.
+- At-least-once delivery needs durable duplicate handling and recovery after a committed update loses its acknowledgment.
+
+Related files:
+- `docs/architecture/work-scheduled-design.md`
+- `work-service`
