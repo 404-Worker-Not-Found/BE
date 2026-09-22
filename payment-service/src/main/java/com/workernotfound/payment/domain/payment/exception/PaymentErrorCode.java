@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 @Getter
 @RequiredArgsConstructor
 public enum PaymentErrorCode implements ErrorCode {
+  FUNDING_BLOCKED("PAYMENT-409-006", "예치 결제 상태 확인이 필요합니다.", HttpStatus.CONFLICT),
   PAYMENT_NOT_FOUND("PAYMENT-404-001", "결제 잠금을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
   DEPOSIT_NOT_FOUND("PAYMENT-409-001", "검증된 예치 금액이 없습니다.", HttpStatus.CONFLICT),
   COMMAND_CONFLICT("PAYMENT-409-002", "동일 명령 키를 다른 요청에 사용할 수 없습니다.", HttpStatus.CONFLICT),

@@ -24,6 +24,7 @@ public class OpenApiConfig {
     return new OpenAPI()
         .components(
             new Components()
+                .addSecuritySchemes("bearerAuth", new SecurityScheme().type(SecurityScheme.Type.HTTP).scheme("bearer").bearerFormat("JWT"))
                 .addSecuritySchemes(
                     INTERNAL_AUTH,
                     new SecurityScheme()

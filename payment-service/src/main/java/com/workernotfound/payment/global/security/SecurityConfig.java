@@ -18,12 +18,12 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
-@EnableConfigurationProperties(InternalApiProperties.class)
+@EnableConfigurationProperties({InternalApiProperties.class, JwtProperties.class})
 public class SecurityConfig {
 
   @Bean
   public SecurityFilterChain securityFilterChain(
-      HttpSecurity http, InternalApiProperties internalApiProperties, ObjectMapper objectMapper)
+      HttpSecurity http, InternalApiProperties internalApiProperties, ObjectMapper objectMapper, JwtAuthenticationFilter jwtFilter)
       throws Exception {
     return http.csrf(AbstractHttpConfigurer::disable)
         .logout(AbstractHttpConfigurer::disable)
@@ -44,14 +44,17 @@ public class SecurityConfig {
             auth ->
                 auth.requestMatchers(
                         "/api/payments/internal/**",
+                        "/api/payments/webhooks/toss",
                         "/v3/api-docs/**",
                         "/swagger-ui/**",
                         "/swagger-ui.html",
                         "/error")
                     .permitAll()
+                    .requestMatchers("/api/payments/orders/**").hasRole("OWNER")
                     .anyRequest()
                     .denyAll())
         // TODO: API Gateway나 mTLS 기반 서비스 간 인증으로 대체한다.
+        .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
         .addFilterBefore(
             internalSecretAuthenticationFilter(internalApiProperties, objectMapper),
             UsernamePasswordAuthenticationFilter.class)

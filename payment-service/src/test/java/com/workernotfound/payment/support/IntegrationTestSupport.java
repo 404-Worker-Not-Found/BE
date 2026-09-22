@@ -18,6 +18,8 @@ public abstract class IntegrationTestSupport {
     registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
     registry.add("spring.datasource.username", MYSQL::getUsername);
     registry.add("spring.datasource.password", MYSQL::getPassword);
+    registry.add("payment.jwt.secret", () -> "payment-test-jwt-secret-with-at-least-32-bytes");
+    registry.add("payment.recovery.enabled", () -> "false");
     registry.add("payment.internal.secret", () -> "payment-test-internal-secret");
   }
 }
