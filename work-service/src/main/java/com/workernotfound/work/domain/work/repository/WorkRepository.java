@@ -9,6 +9,22 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface WorkRepository extends JpaRepository<Work, Long> {
+  @Query(
+      "select w from Work w where w.confirmedAt is not null and "
+          + "((:role = 'OWNER' and w.ownerMemberId = :memberId) or "
+          + "(:role = 'WORKER' and w.workerMemberId = :memberId))")
+  org.springframework.data.domain.Page<Work> findConfirmedByMember(
+      @Param("memberId") Long memberId,
+      @Param("role") String role,
+      org.springframework.data.domain.Pageable pageable);
+
+  @Query(
+      "select w from Work w where w.id = :id and w.confirmedAt is not null and "
+          + "((:role = 'OWNER' and w.ownerMemberId = :memberId) or "
+          + "(:role = 'WORKER' and w.workerMemberId = :memberId))")
+  Optional<Work> findConfirmedByIdAndMember(
+      @Param("id") Long id, @Param("memberId") Long memberId, @Param("role") String role);
+
   @Query("select w.matchingId from Work w where w.id = :id")
   Optional<Long> findMatchingIdById(@Param("id") Long id);
 
