@@ -284,9 +284,10 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - Toss Payments test-card/KRW integration now creates immutable orders from trusted job-service snapshots, supports JWT owner-only approval/query, verifies provider results, and credits deposits atomically with durable funding notifications.
 - Orders remain recoverable across uncertain provider outcomes with stable confirmation keys and fenced leases. Webhooks only schedule authenticated provider re-query for already-bound payment keys. Verified cancellations block new matching locks.
 - The decided policy is payment-before-publication. job-service still needs PAYMENT_PENDING, internal order provisioning, and revision-aware funding-status consumption; its current implementation creates OPEN jobs immediately.
-- Actual Toss test keys and frontend checkout have not been connected. Production escrow, payouts and refunds are outside this unit.
+- On 2026-09-22, private Toss test keys and a temporary local checkout verified a KRW 1,000 test-card payment through provider approval and DB deposit credit (DEPOSITED; one deposited history entry). Synthetic local owner/job IDs and a local test JWT were used; real login, product frontend and job creation were not exercised.
+- Funding notification remains pending (funded=true, delivered=false). Actual webhook delivery and job publication E2E remain unverified. Production escrow, payouts and refunds are outside this unit.
 - HTTP/MySQL ports are 8085/3313. Local execution and repository verification include payment-service.
-- See `docs/architecture/payment-lock-design.md` for the boundary and follow-up work. See `docs/architecture/toss-deposit-design.md` for the provider and job/frontend contracts. Full matching acceptance still requires actual test checkout and job-service integration.
+- See `docs/architecture/payment-lock-design.md` for the boundary and follow-up work. See `docs/architecture/toss-deposit-design.md` for the provider and job/frontend contracts. Full matching acceptance still requires product frontend and job-service integration.
 
 ## Error Handling State
 

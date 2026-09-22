@@ -88,7 +88,28 @@ POST /api/jobs/internal/{jobPostId}/funding-status
 
 기본 TOSS_ENABLED=false이며 키 없이 가짜 승인 성공을 반환하지 않는다. 실제 토스 테스트를 하려면 개인 .env에 TOSS_ENABLED=true와 TOSS_SECRET_KEY를 설정하고 ./scripts/local-run.sh payment로 실행한다. test_sk_ 또는 test_gsk_만 받으며 라이브 키는 시작 단계에서 거부한다. 공통 AUTH_JWT_SECRET도 필요하다.
 
-현재 검증은 MySQL Testcontainers와 HTTP 계약 mock을 사용한다. 실제 테스트 키·브라우저 결제 인증·공고 담당자 API가 준비되면 토스 샌드박스 E2E를 별도로 실행해야 한다.
+자동 검증은 MySQL Testcontainers와 HTTP 계약 mock을 사용한다. 공고 공개까지 포함한 전체 서비스 E2E는 별도로 검증해야 한다.
+
+### 2026-09-22 로컬 토스 테스트 결과
+
+- 개인 테스트 키와 임시 로컬 결제 화면으로 1,000원 카드 결제를 수행했다. 토스 인증 → payment-service 승인 → DB 예치 반영까지 확인했다.
+- 주문 조회 결과는 DEPOSITED, DB deposited_amount는 1000.00, locked_amount는 0.00, funding_blocked는 false였다. 상태 이력은 READY, CONFIRMING, DEPOSITED가 각각 1건이었다.
+- 공고 알림은 funded=true, delivered=false로 남았다. 공고 수신 API가 연결되지 않았으므로 공고 공개 성공으로 간주하지 않는다.
+- 별도 테스트 점주·공고 ID와 로컬 테스트용 JWT를 사용했다. 실제 로그인·공고 생성·제품 프런트 연동까지 검증한 것은 아니다.
+- 임시 화면은 저장소 밖의 로컬 도구이며 제품 프런트가 아니다. 실제 출금·에스크로·근로자 지급을 검증한 것이 아니다.
+- 실제 토스 웹훅 수신, 토스 장애 복구, 결제 취소 흐름은 이번 수동 결제에서 확인하지 않았다. 기존 자동 테스트 결과와 구분한다.
+
+### 지금 진행 가능한 작업과 팀원 의존 작업
+
+| 작업 | 진행 조건 |
+| --- | --- |
+| 프런트·공고 담당자에게 주문/승인/알림 계약 전달 | 지금 진행 가능. 이 문서의 요청·응답 계약 사용 |
+| 실제 프런트 결제 화면 연결 및 실패·취소 안내 | 공고 API 완성 전에도 계약과 테스트 주문으로 준비 가능 |
+| 공고 비공개 생성 및 결제 주문 생성 연결 | 공고 담당자의 PAYMENT_PENDING·주문 생성 구현 필요 |
+| 예치 완료 알림 수신 후 OPEN 전환 | 공고 담당자의 funding-status API 및 revision 검증 구현 필요 |
+| 결제 전 비노출 → 결제 후 공개 전체 검증 | 위 공고 API와 실제 프런트 연결 후 진행 |
+
+결제 서비스의 기본 설정과 테스트 예치 확인은 완료했다. 공고 담당자의 구현을 임의로 대신 변경하지 않으며, 공고 공개까지의 완료 판정은 연동 후로 남긴다.
 
 ## 공식 문서
 
