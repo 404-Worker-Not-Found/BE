@@ -30,9 +30,13 @@ public class JobFindService {
     private final JobPostRepository jobPostRepository;
     private final IndustryCategoryRepository industryCategoryRepository;
 
-    public JobDetailResponse findJobDetail(Long jobId) {
-        JobPost post = jobPostRepository.findById(jobId)
+    public JobPost findJobPost(Long jobId) {
+        return jobPostRepository.findById(jobId)
                 .orElseThrow(() -> new BusinessException(JobErrorCode.JOB_NOT_FOUND));
+    }
+
+    public JobDetailResponse findJobDetail(Long jobId) {
+        JobPost post = findJobPost(jobId);
         Map<Long, String> categoryNameMap = buildCategoryNameMap();
         String categoryName = resolveCategoryName(categoryNameMap, post.getCategoryId());
         return JobDetailResponse.of(post, categoryName);

@@ -26,14 +26,15 @@ public class JobApplicationAdmissionCommandService {
 
     @Transactional
     public JobApplicationAdmission create(Long jobPostId, Long workerMemberId, String idempotencyKey) {
+        // 공고 행 잠금을 먼저 잡아야 같은 키의 동시 요청이 앞선 커밋 결과를 조회할 수 있다.
+        JobPost jobPost = jobPostRepository.findByIdForUpdate(jobPostId)
+                .orElseThrow(() -> new BusinessException(JobErrorCode.JOB_NOT_FOUND));
+
         Optional<JobApplicationAdmission> existing =
                 jobApplicationAdmissionRepository.findByIdempotencyKey(idempotencyKey);
         if (existing.isPresent()) {
-            return reuseExisting(existing.get());
+            return reuseExisting(existing.get(), jobPostId, workerMemberId);
         }
-
-        JobPost jobPost = jobPostRepository.findByIdForUpdate(jobPostId)
-                .orElseThrow(() -> new BusinessException(JobErrorCode.JOB_NOT_FOUND));
 
         validateOpen(jobPost);
         validateApplicationDeadline(jobPost);
@@ -41,13 +42,25 @@ public class JobApplicationAdmissionCommandService {
         return jobApplicationAdmissionRepository.save(newAdmission(jobPost, workerMemberId, idempotencyKey));
     }
 
-    private JobApplicationAdmission reuseExisting(JobApplicationAdmission admission) {
+    private JobApplicationAdmission reuseExisting(
+            JobApplicationAdmission admission,
+            Long jobPostId,
+            Long workerMemberId
+    ) {
+        if (!isSameRequest(admission, jobPostId, workerMemberId)) {
+            throw new BusinessException(JobErrorCode.IDEMPOTENCY_KEY_REUSED);
+        }
         boolean stillValid = admission.getStatus() == ApplicationAdmissionStatus.RESERVED
                 && admission.getExpiresAt().isAfter(LocalDateTime.now());
         if (!stillValid) {
             throw new BusinessException(JobErrorCode.ADMISSION_EXPIRED);
         }
         return admission;
+    }
+
+    private boolean isSameRequest(JobApplicationAdmission admission, Long jobPostId, Long workerMemberId) {
+        return admission.getJobPostId().equals(jobPostId)
+                && admission.getWorkerMemberId().equals(workerMemberId);
     }
 
     private JobApplicationAdmission newAdmission(JobPost jobPost, Long workerMemberId, String idempotencyKey) {

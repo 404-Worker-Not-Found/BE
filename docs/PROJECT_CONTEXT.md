@@ -54,7 +54,7 @@ Current state:
 - `member-service` exists as a Spring Boot service.
 - `member-service` has implemented the initial member, owner, worker, and location profile flow.
 - `job-service` has implemented the initial job posting domain.
-- `job-service` protects internal service-to-service endpoints under `/api/jobs/internal/**` with the shared `X-Internal-Secret` header, matching auth-service and member-service. The application-admission and matching-seat-reservation endpoints matching-service depends on are not yet implemented behind this protection.
+- `job-service` protects internal service-to-service endpoints under `/api/jobs/internal/**` with the shared `X-Internal-Secret` header, matching auth-service and member-service. The application-admission endpoint (`POST /api/jobs/internal/{jobPostId}/application-admissions`) is implemented behind this protection; it locks the job row, checks `OPEN` and the application deadline, and returns the same admission for a repeated `Idempotency-Key`. Marking admissions `CONSUMED` from `ApplicationSubmitted` events and the matching-seat-reservation endpoints are not yet implemented.
 - `job-service` tests use Testcontainers with MySQL for the test datasource.
 - `matching-service` has service-owned MySQL and Flyway configuration, the application persistence model, and the worker-facing application create, read, list, and cancel APIs.
 - The repository has a first ERD draft for the MSA design.
@@ -127,7 +127,7 @@ Current matching application implementation:
 
 - JWT-authenticated `WORKER` members can create, read, list, and cancel their own applications.
 - Application creation validates an `ACTIVE` `WORKER` through the existing member-service internal API.
-- The matching-service client for the job-service application-admission contract is implemented. The job-service endpoint still needs to be implemented by the job domain owner before end-to-end application creation can run.
+- The matching-service client for the job-service application-admission contract is implemented, and the job-service endpoint is available. matching-service maps both the documented symbolic codes and job-service domain codes (`JOB-409-001`~`003`) to application errors.
 - Application creation and cancellation persist status history and a `PENDING` Outbox event in the same local transaction.
 - After the application transaction commits, the matching-service projects `APPLIED` application IDs into a job-specific Redis Set and synchronizes the current score ranking. Cancellation removes the ID and recalculates the remaining ranking.
 - A scheduled recovery rebuilds each application Set from MySQL, which remains the source of truth. It restores the latest current-policy `READY` score batch or recalculates when the active applications and score snapshots differ. Score calculation commits before Redis projection, and Redis failures are logged without rolling back an application or completed score batch.
