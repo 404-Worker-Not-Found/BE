@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: payment-service
+  datasource:
+    url: ${PAYMENT_DATASOURCE_URL}
+    username: ${PAYMENT_DATASOURCE_USERNAME}
+    password: ${PAYMENT_DATASOURCE_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+payment:
+  jwt:
+    secret: ${AUTH_JWT_SECRET}
+  toss:
+    enabled: ${TOSS_ENABLED:false}
+    secret-key: ${TOSS_SECRET_KEY:}
+  job-service:
+    base-url: ${JOB_SERVICE_BASE_URL:http://localhost:8083}
+  recovery:
+    enabled: true
+    interval: 30s
+  internal:
+    secret: ${INTERNAL_API_SECRET}
+server:
+  port: ${PAYMENT_SERVICE_PORT:8085}
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never

@@ -113,6 +113,25 @@ services:
       timeout: 5s
       retries: 10
 
+  payment-mysql:
+    image: mysql:8.4
+    container_name: wnf-payment-mysql
+    environment:
+      MYSQL_DATABASE: ${PAYMENT_DB_NAME}
+      MYSQL_ROOT_PASSWORD: ${PAYMENT_DB_ROOT_PASSWORD}
+      MYSQL_USER: ${PAYMENT_DB_USERNAME}
+      MYSQL_PASSWORD: ${PAYMENT_DB_PASSWORD}
+      TZ: Asia/Seoul
+    ports:
+      - "127.0.0.1:3313:3306"
+    volumes:
+      - payment-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   auth-redis:
     image: redis:7.4
     container_name: wnf-auth-redis
@@ -147,5 +166,6 @@ volumes:
   matching-mysql-data:
   work-mysql-data:
   chat-mysql-data:
+  payment-mysql-data:
   auth-redis-data:
   matching-redis-data:

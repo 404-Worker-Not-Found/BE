@@ -27,5 +27,6 @@ run_gradle_build "$REPO_ROOT/job-service"
 run_gradle_build "$REPO_ROOT/matching-service"
 run_gradle_build "$REPO_ROOT/work-service"
 run_gradle_build "$REPO_ROOT/chat-service"
+run_gradle_build "$REPO_ROOT/payment-service"
 
 echo "==> Repository verification completed"

@@ -109,7 +109,7 @@
 
 `job-service`는 공고 행 잠금 또는 같은 효과의 조건부 갱신으로 공고가 매칭 가능한 상태인지와 `confirmed + reserved < recruitCount`인지 확인한다. 성공 응답에는 `reservationId`, `jobPostId`, `ownerMemberId`, `jobVersion`, `reservedAt`, `expiresAt`을 포함한다. 예약은 `RESERVED`, `CONSUMED`, `RELEASED`, `EXPIRED` 상태를 보관하고 같은 멱등 키에는 같은 결과를 반환한다. 확정과 해제는 예약 명령과 구분되는 각각의 안정적인 멱등 키를 사용한다.
 
-`matching-service`에는 이 계약과 payment/work/chat 계약을 호출하는 클라이언트 및 확정 Saga가 구현되어 있다. `work-service`의 예정 근무 생성·취소와 `chat-service`의 채팅방 생성·종료 계약은 구현되어 있다. payment 서비스와 `job-service`의 자리 예약 API는 아직 구현되지 않았으므로 실제 수락 호출은 의존 서비스가 준비되기 전까지 실패 닫힘 방식으로 종료된다. 외부 계약이 준비되지 않았는데도 `PENDING`을 확정 상태로 바꾸거나 임시 성공 응답을 사용하지 않는다.
+`matching-service`에는 이 계약과 payment/work/chat 계약을 호출하는 클라이언트 및 확정 Saga가 구현되어 있다. `work-service`의 예정 근무 생성·취소와 `chat-service`의 채팅방 생성·종료 계약은 구현되어 있다. `payment-service`의 예치 잔액 기반 잠금·해제 계약도 구현되어 있다. 토스 테스트 예치 반영은 구현되어 있으나 실제 키·결제 인증과 공고 계약 연결은 아직 필요하다. `job-service`의 자리 예약 API도 아직 구현되지 않았으므로 실제 수락 호출은 의존 서비스가 준비되기 전까지 실패 닫힘 방식으로 종료된다. 외부 계약이 준비되지 않았는데도 `PENDING`을 확정 상태로 바꾸거나 임시 성공 응답을 사용하지 않는다.
 
 자리 예약 응답은 후속 명령에 필요한 `workDate`, `startTime`, `endTime`, `lockedAmount`, `currency` 공고 스냅샷도 포함한다. payment/work/chat 내부 명령은 각각 아래 경계를 사용한다.
 
