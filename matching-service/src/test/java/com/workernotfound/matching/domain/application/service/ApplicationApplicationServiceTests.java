@@ -26,6 +26,8 @@ import java.time.LocalTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -198,6 +200,29 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 		))
 			.isInstanceOfSatisfying(BusinessException.class, exception ->
 				assertThat(exception.getErrorCode()).isEqualTo(ApplicationErrorCode.JOB_NOT_OPEN));
+		assertThat(applicationRepository.count()).isZero();
+	}
+
+	@ParameterizedTest
+	@CsvSource({
+		"JOB-409-001, JOB_NOT_OPEN",
+		"JOB-409-002, APPLICATION_DEADLINE_PASSED",
+		"JOB-409-003, ADMISSION_EXPIRED"
+	})
+	void mapsJobServiceDomainCodesToApplicationErrors(String jobCode, ApplicationErrorCode expected) {
+		stubEligibleWorker();
+		when(jobServiceClient.createApplicationAdmission(
+			org.mockito.ArgumentMatchers.eq(JOB_POST_ID),
+			org.mockito.ArgumentMatchers.eq(WORKER_MEMBER_ID),
+			anyString()
+		)).thenThrow(new JobServiceClientException(HttpStatus.CONFLICT, jobCode));
+
+		assertThatThrownBy(() -> applicationService.create(
+			WORKER_MEMBER_ID,
+			new CreateApplicationRequest(JOB_POST_ID)
+		))
+			.isInstanceOfSatisfying(BusinessException.class, exception ->
+				assertThat(exception.getErrorCode()).isEqualTo(expected));
 		assertThat(applicationRepository.count()).isZero();
 	}
 
