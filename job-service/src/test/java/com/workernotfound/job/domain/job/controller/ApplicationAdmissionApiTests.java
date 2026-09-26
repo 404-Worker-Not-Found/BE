@@ -43,7 +43,7 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.admissionId").value(notNullValue()))
                 .andExpect(jsonPath("$.data.jobPostId").value(jobPost.getId()))
-                .andExpect(jsonPath("$.data.jobVersion").value(jobPost.getVersion()))
+                .andExpect(jsonPath("$.data.jobVersion").value(1))
                 .andExpect(jsonPath("$.data.ownerMemberId").value(7))
                 .andExpect(jsonPath("$.data.categoryId").value(1))
                 .andExpect(jsonPath("$.data.workDate").value(jobPost.getWorkDate().toString()))

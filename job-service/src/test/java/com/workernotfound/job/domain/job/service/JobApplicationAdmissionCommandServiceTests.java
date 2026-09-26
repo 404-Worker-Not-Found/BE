@@ -43,7 +43,8 @@ class JobApplicationAdmissionCommandServiceTests extends IntegrationTestSupport 
         assertThat(admission.getJobPostId()).isEqualTo(jobPost.getId());
         assertThat(admission.getWorkerMemberId()).isEqualTo(100L);
         assertThat(admission.getStatus()).isEqualTo(ApplicationAdmissionStatus.RESERVED);
-        assertThat(admission.getJobVersion()).isEqualTo(jobPost.getVersion());
+        assertThat(jobPost.getVersion()).isEqualTo(1L);
+        assertThat(admission.getJobVersion()).isEqualTo(1L);
         assertThat(admission.getExpiresAt()).isAfter(admission.getAdmittedAt());
     }
 

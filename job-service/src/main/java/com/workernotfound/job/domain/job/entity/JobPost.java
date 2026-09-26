@@ -80,7 +80,7 @@ public class JobPost extends BaseEntity {
 
     @Version
     @Column(nullable = false)
-    private Long version;
+    private Long version = 1L;
 
     @Builder
     private JobPost(
