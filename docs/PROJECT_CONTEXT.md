@@ -254,6 +254,19 @@ Current implementation state:
 
 Member signup design notes are recorded in `docs/architecture/auth-member-signup-design.md`.
 
+## Job Service Context
+
+- `job-service` uses Java 17, Spring Boot 4.1.0, service-owned MySQL, Flyway, Spring Security, and Springdoc.
+- It owns job posts and industry categories. Owners create jobs with `POST /api/jobs` (`OWNER` JWT); detail and search reads are public.
+- Jobs are currently created as `OPEN` immediately. `OPEN`/`MATCHING`/`CLOSED` are defined, but no status transition API exists and `job_status_histories` is not yet written.
+- Business ownership goes through the `BusinessValidator` port; the current `StubBusinessValidator` only logs and must not be treated as real verification.
+- Search returns `OPEN` jobs before their application deadline and filters, sorts, and pages in memory. The detail `applicantCount` is `null` until a matching-service count contract exists.
+- `job_posts.version` is the JPA optimistic-lock value, starts at 1, and is copied into application admissions as `jobVersion`.
+- The internal application-admission API locks the job row, checks `OPEN` and the deadline, and returns the original admission for a repeated `Idempotency-Key`. It rejects key reuse for a different job or worker with `JOB-409-004`.
+- Seat reservation, recruitment completion notification, `PAYMENT_PENDING` publication, and admission `CONSUMED` handling remain future work.
+- Local HTTP/MySQL ports are 8083/3309. `./scripts/local-run.sh job` runs the service; repository verification includes its MySQL integration tests.
+- See `docs/architecture/job-post-design.md`.
+
 ## Work Service Context
 
 - `work-service` uses Java 17, Spring Boot 4.1.0, service-owned MySQL, Flyway, Spring Security, and Springdoc.
