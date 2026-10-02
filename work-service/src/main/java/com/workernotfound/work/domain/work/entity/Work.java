@@ -48,6 +48,11 @@ public class Work {
   private LocalDateTime createdAt;
 
   private LocalDateTime canceledAt;
+  private LocalDateTime confirmedAt;
+
+  @Column(nullable = false)
+  private long confirmationRevision;
+
   @Version private Long version;
 
   @Builder
@@ -72,9 +77,16 @@ public class Work {
     this.createdAt = LocalDateTime.now();
   }
 
+  public void confirm(long revision, LocalDateTime occurredAt) {
+    if (revision <= confirmationRevision || status == WorkStatus.CANCELED) return;
+    if (confirmedAt == null) confirmedAt = occurredAt;
+    confirmationRevision = revision;
+  }
+
   public boolean cancel() {
     if (status == WorkStatus.CANCELED) return false;
-    if (status != WorkStatus.SCHEDULED) throw new BusinessException(WorkErrorCode.CANNOT_CANCEL);
+    if (status != WorkStatus.SCHEDULED || confirmedAt != null)
+      throw new BusinessException(WorkErrorCode.CANNOT_CANCEL);
     status = WorkStatus.CANCELED;
     canceledAt = LocalDateTime.now();
     return true;
