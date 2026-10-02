@@ -35,7 +35,13 @@ public class JwtTokenProvider {
 
 	@PostConstruct
 	void initialize() {
-		this.secretKey = jwtProperties.secret().getBytes(StandardCharsets.UTF_8);
+		String secret = jwtProperties.secret();
+		if (secret == null || secret.isBlank())
+			throw new IllegalStateException("JWT secret이 설정되지 않았습니다.");
+		byte[] key = secret.getBytes(StandardCharsets.UTF_8);
+		if (key.length < 32)
+			throw new IllegalStateException("JWT secret은 32바이트 이상이어야 합니다.");
+		this.secretKey = key;
 	}
 
 	public String createAccessToken(Long authAccountId, Long memberId, MemberRole role) {

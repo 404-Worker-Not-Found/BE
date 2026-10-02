@@ -1048,3 +1048,16 @@ Reason:
 Related files:
 - `docs/architecture/chat-room-design.md`
 - `chat-service`
+
+## 2026-10-02 - Shared JWT Signing Secret Minimum
+
+Decision:
+- Require the shared JWT secret used by auth-service and chat-service to be nonblank and at least 32 UTF-8 bytes. Reject invalid configuration at startup.
+
+Reason:
+- A missing or short HMAC key must not reach token issuance or validation at request time. Both services use the same `AUTH_JWT_SECRET` setting.
+
+Related files:
+- `.env.example`
+- `auth-service`
+- `chat-service`
