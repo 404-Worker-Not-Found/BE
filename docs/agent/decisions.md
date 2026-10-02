@@ -1021,6 +1021,13 @@ Reason:
 - Scheduled work is provisioned before the confirmation Saga completes. Creation alone must not grant user access or future attendance eligibility.
 - At-least-once delivery needs durable duplicate handling and recovery after a committed update loses its acknowledgment.
 
+Implication for agents:
+- Do not infer confirmation from `SCHEDULED` status or scheduled-work creation alone.
+- Persist the confirmation update and event receipt in one transaction, and acknowledge only after commit.
+- Validate the confirmation event envelope and stored work snapshot before applying or acknowledging it.
+- Keep participant queries limited to the authenticated member's confirmed work and do not expose payment identifiers.
+- Preserve duplicate and stale-event handling; do not revive canceled attempts or allow Saga compensation after confirmation.
+
 Related files:
 - `docs/architecture/work-scheduled-design.md`
 - `work-service`
