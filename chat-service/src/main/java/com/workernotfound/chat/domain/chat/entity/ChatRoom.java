@@ -61,13 +61,15 @@ public class ChatRoom {
     this.createdAt = LocalDateTime.now();
   }
 
-  public boolean close() {
-    if (status == ChatRoomStatus.CLOSED) return false;
+  public boolean isClosed() {
+    return status == ChatRoomStatus.CLOSED;
+  }
+
+  public void close() {
     if (confirmedAt != null)
       throw new BusinessException(ChatRoomErrorCode.CONFIRMED_CHAT_CANNOT_CLOSE);
     status = ChatRoomStatus.CLOSED;
     closedAt = LocalDateTime.now();
-    return true;
   }
 
   public void confirm(long revision, LocalDateTime occurredAt) {

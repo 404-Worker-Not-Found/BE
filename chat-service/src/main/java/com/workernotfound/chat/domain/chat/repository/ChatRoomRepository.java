@@ -1,10 +1,10 @@
 package com.workernotfound.chat.domain.chat.repository;
 
 import com.workernotfound.chat.domain.chat.entity.ChatRoom;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;

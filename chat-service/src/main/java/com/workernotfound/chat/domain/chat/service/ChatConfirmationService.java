@@ -23,14 +23,14 @@ public class ChatConfirmationService {
   @Transactional
   public void confirm(MatchConfirmedEvent event) {
     validate(event);
-    Long activeId = commands.lockMatching(event.matchingId());
+    Long activeChatRoomId = commands.lockMatching(event.matchingId());
     ChatRoom room = rooms.findByIdForUpdate(Long.valueOf(event.chatRoomId()))
         .orElseThrow(() -> new IllegalStateException("확정 대상 채팅방이 없습니다."));
     validateSnapshot(room, event);
     recordEvent(event);
     // A canceled attempt cannot confirm itself or affect its replacement.
     if (room.getStatus() == ChatRoomStatus.CLOSED) return;
-    if (!Objects.equals(activeId, room.getId()))
+    if (!Objects.equals(activeChatRoomId, room.getId()))
       throw new IllegalStateException("확정 대상이 활성 채팅방과 일치하지 않습니다.");
     room.confirm(event.revision(), event.occurredAt());
   }

@@ -26,15 +26,6 @@ public class JwtTokenParser {
     this.secretKey = jwtProperties.secret().getBytes(StandardCharsets.UTF_8);
   }
 
-  public boolean validateAccessToken(String token) {
-    try {
-      parseAccessToken(token);
-      return true;
-    } catch (InvalidAccessTokenException exception) {
-      return false;
-    }
-  }
-
   public AuthenticatedMember parseAccessToken(String token) {
     if (token == null || token.isBlank())
       throw new InvalidAccessTokenException("access token이 없습니다.");
