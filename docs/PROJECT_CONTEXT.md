@@ -274,7 +274,7 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 
 - `work-service` uses Java 17, Spring Boot 4.1.0, service-owned MySQL, Flyway, Spring Security, and Springdoc.
 - Internal scheduled-work creation and compensation APIs match the matching confirmation Saga contract and require `X-Internal-Secret` plus `Idempotency-Key`.
-- Creation stores external matching/job/member/payment references, work schedule including the required `endTimeNextDay` flag, `SCHEDULED` status, and status history in one transaction.
+- Creation stores external matching/job/member/payment references, work schedule including `endTimeNextDay` (inferred from the times when an older request omits it), `SCHEDULED` status, and status history in one transaction.
 - Durable command keys return the original result on retries and reject reuse with a different operation or payload.
 - A per-matching database lock and unique active-matching constraint prevent duplicate active work. Compensation cancels only `SCHEDULED` work, keeps history, and permits a new creation command after cancellation.
 - Late compensation for an older canceled work never cancels the replacement work. This internal API is Saga compensation, not the user-facing work cancellation flow.

@@ -1115,7 +1115,7 @@ Decision:
 - A repeated reservation key returns the stored snapshot regardless of status. Confirm and release record only the first successful command key; a different key on an already processed reservation is a conflict. Confirm retries on `CONSUMED` succeed even after the original expiry, and release of `EXPIRED` succeeds.
 - The per-worker expected wage is floor(work minutes × (`baseHourlyWage` + `extraWage`) / 60) in integer KRW. `extraWage` is an hourly addition, and null means 0. Break time is not deducted. The total deposit is the per-worker amount × `recruitCount`.
 - matching-service treats a well-formed, already expired seat-reservation response as a definitive rejection: it compensates that reservation and starts a new attempt. Unknown outcomes are not compensated.
-- `endTimeNextDay` travels from the job seat snapshot through the matching Saga to scheduled-work creation. It must equal `endTime <= startTime`.
+- `endTimeNextDay` travels from the job seat snapshot through the matching Saga to scheduled-work creation. It must equal `endTime <= startTime`. work-service infers it from the times when a request omits it or sends null, so retries of older-format commands still reach the stored command instead of failing with 400. The creation fingerprint keeps the pre-field format.
 
 Reason:
 - The user confirmed the 10-minute TTL, the hourly `extraWage`, and the work-start cutoff on 2026-10-04.
