@@ -76,7 +76,7 @@
 - 같은 공고에서 같은 `matchingId` 또는 `applicationId`가 `RESERVED`·`CONSUMED`로 자리를 점유하고 있으면 다른 키라도 `JOB-409-008`이다. 종료된(`RELEASED`·`EXPIRED`) 시도 이후에는 새 키로 다시 예약할 수 있다. `matchingId`에 영구 유일 제약을 두지 않는다.
 - 점유 수가 `recruitCount` 이상이면 `JOB-409-007`이다.
 - 응답 스냅샷은 발급 당시 공고의 버전, 점주 ID, 근무 일시, `endTimeNextDay`, 1인 예정 급여(`lockedAmount`, 정수 KRW), 통화 `KRW`다. 스냅샷과 요청 식별 필드는 `updatable = false`다.
-- `expiresAt = reservedAt + MATCHING_SEAT_RESERVATION_TTL`(기본 10분, 지원 접수 승인 TTL과 별도 설정)이며 재요청으로 연장하지 않는다.
+- `expiresAt = reservedAt + MATCHING_SEAT_RESERVATION_TTL`(기본 10분, 지원 접수 승인 TTL과 별도 설정)이며 재요청으로 연장하지 않는다. 시각 정밀도는 아래 [시각 저장 정밀도](#시각-저장-정밀도)를 따른다.
 
 ### 확정
 
@@ -98,6 +98,18 @@
 ### 만료 회수
 
 `MATCHING_SEAT_RESERVATION_EXPIRY_SWEEP_INTERVAL`(기본 1분)마다 만료된 `RESERVED`가 있는 공고를 최대 `MATCHING_SEAT_RESERVATION_EXPIRY_SWEEP_BATCH_SIZE`(기본 100)개 고른다. 공고마다 별도 트랜잭션에서 공고 행을 잠그고 회수하므로 한 트랜잭션이 여러 공고를 오래 잠그지 않는다. 상태 조건이 있어 반복 실행이나 여러 인스턴스 실행에서도 중복 회수하지 않는다. 한 공고의 실패는 로그만 남기고 다음 공고를 계속 처리한다. `MATCHING_SEAT_RESERVATION_EXPIRY_SWEEP_ENABLED=false`로 끌 수 있으며, 꺼져 있어도 새 예약 요청이 해당 공고의 만료 예약을 회수한다.
+
+### 시각 저장 정밀도
+
+예약 시각 컬럼은 `DATETIME(6)`이고 MySQL은 더 정밀한 값을 반올림해 저장한다. `Clock`은 나노초를 줄 수 있으므로, 최초 응답의 메모리 값과 재요청이 DB에서 읽은 값이 달라지지 않도록 저장 전에 직접 정규화한다.
+
+- `reservedAt` = 발급 시각을 마이크로초로 절삭한 값.
+- `expiresAt` = `reservedAt + TTL`을 마이크로초로 절삭한 값. TTL의 마이크로초 미만은 결과적으로 버려진다.
+- 같은 엔티티 값을 저장과 최초 응답에 함께 쓰며, 재요청은 저장된 값을 그대로 돌려준다. 현재 시각으로 다시 계산하지 않는다.
+- `consumedAt`, `releasedAt`, `expiredAt`도 같은 방식으로 절삭해 저장한다.
+- 절삭 후 1마이크로초 이상 남지 않는 TTL(예: 999ns)은 기동 시 설정 오류로 거절한다.
+- 만료 판정은 `expiresAt <= 현재 시각`이며, Java 비교에는 절삭하지 않은 현재 시각을 쓴다. 저장된 `expiresAt`은 항상 마이크로초 단위이므로 이 판정은 절삭한 현재 시각과의 비교와 같다. 만료 회수 쿼리에는 절삭한 현재 시각을 인자로 넘겨, MySQL이 나노초 인자를 반올림해 만료 경계가 앞당겨지지 않게 한다. 결과적으로 `expiresAt` 직전(1ns 전)에는 확정할 수 있고, `expiresAt`과 그 이후에는 확정할 수 없다.
+- 이미 저장된 예약의 시각과 TTL은 일괄 수정하지 않는다. MySQL이 반올림해 저장했으므로 기존 값도 마이크로초 단위다.
 
 ### 멱등 키 제약 변환
 
