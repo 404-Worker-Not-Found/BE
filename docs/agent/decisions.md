@@ -1031,3 +1031,34 @@ Implication for agents:
 Related files:
 - `docs/architecture/work-scheduled-design.md`
 - `work-service`
+
+## 2026-10-02 - Chat Confirmation and Participant Queries
+
+Decision:
+- Consume matching `MatchConfirmed` v1 to record chat confirmation separately from internal room provisioning. `OPEN` alone does not grant user access.
+- Validate the event envelope and stored room snapshot, serialize with the existing matching slot and room locks, and persist the event receipt and confirmation in one transaction before Redis ACK.
+- Calculate `MatchConfirmed` v1 receipt fingerprints from its fixed field set in order, using ISO local date-time and length-prefixed values. Do not use the consumer record's `toString()`, since new record fields must not change prior event fingerprints.
+- Use the dedicated `chat-confirmation-v1` group and one shared logical consumer across replicas. Recover pending records before reading new records; retain failed deliveries for retry.
+- Expose only confirmed OPEN rooms to their authenticated owner or worker through list/detail APIs. Do not infer confirmation for old rooms.
+- Reject Saga compensation closure after confirmation. A closed old attempt cannot confirm or affect a replacement room.
+
+Reason:
+- Chat rooms are provisioned before matching confirmation finishes. Early user access would expose a room for a match that may still be compensated.
+- At-least-once delivery requires durable duplicate handling and recovery after a committed update loses its acknowledgment.
+
+Related files:
+- `docs/architecture/chat-room-design.md`
+- `chat-service`
+
+## 2026-10-02 - Shared JWT Signing Secret Minimum
+
+Decision:
+- Require the shared JWT secret used by auth-service and chat-service to be nonblank and at least 32 UTF-8 bytes. Reject invalid configuration at startup.
+
+Reason:
+- A missing or short HMAC key must not reach token issuance or validation at request time. Both services use the same `AUTH_JWT_SECRET` setting.
+
+Related files:
+- `.env.example`
+- `auth-service`
+- `chat-service`

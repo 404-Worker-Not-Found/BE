@@ -54,7 +54,8 @@ public class ChatRoomApplicationService {
         rooms
             .findByIdForUpdate(chatRoomId)
             .orElseThrow(() -> new BusinessException(ChatRoomErrorCode.CHAT_NOT_FOUND));
-    if (room.close()) {
+    if (!room.isClosed()) {
+      room.close();
       commands.history(chatRoomId, "OPEN", "CLOSED", key);
       commands.release(room.getMatchingId(), chatRoomId);
     }

@@ -14,6 +14,16 @@ import org.springframework.test.util.ReflectionTestUtils;
 class JwtFailureBoundaryTests {
 	static final String SECRET = "boundary-test-key-at-least-32-characters";
 
+	@Test
+	void rejectsMissingOrWeakSecretAtStartup() {
+		for (String secret : java.util.Arrays.asList(null, "", "   ", "short")) {
+			var parser = new JwtTokenProvider(new JwtProperties(
+					secret, java.time.Duration.ofMinutes(10), java.time.Duration.ofDays(1)));
+			assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(parser, "initialize"))
+					.isInstanceOf(IllegalStateException.class);
+		}
+	}
+
 	JwtTokenProvider parser() {
 		var parser =
 				new JwtTokenProvider(
