@@ -7,6 +7,7 @@ import com.workernotfound.chat.domain.chat.repository.*;
 import jakarta.validation.Validator;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -62,9 +63,30 @@ public class ChatConfirmationService {
   private String fingerprint(MatchConfirmedEvent event) {
     try {
       return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-          .digest(event.toString().getBytes(StandardCharsets.UTF_8)));
+          .digest(canonicalPayloadV1(event).getBytes(StandardCharsets.UTF_8)));
     } catch (NoSuchAlgorithmException exception) {
       throw new IllegalStateException("SHA-256 알고리즘을 사용할 수 없습니다.", exception);
     }
+  }
+
+  private String canonicalPayloadV1(MatchConfirmedEvent event) {
+    StringBuilder payload = new StringBuilder();
+    append(payload, event.eventId());
+    append(payload, event.eventType());
+    append(payload, event.occurredAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+    append(payload, event.aggregateId().toString());
+    append(payload, event.revision().toString());
+    append(payload, event.version().toString());
+    append(payload, event.matchingId().toString());
+    append(payload, event.chatRoomId());
+    append(payload, event.workId());
+    append(payload, event.jobPostId().toString());
+    append(payload, event.ownerMemberId().toString());
+    append(payload, event.workerMemberId().toString());
+    return payload.toString();
+  }
+
+  private void append(StringBuilder payload, String value) {
+    payload.append(value.length()).append(':').append(value);
   }
 }

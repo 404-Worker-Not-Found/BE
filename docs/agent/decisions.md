@@ -1037,6 +1037,7 @@ Related files:
 Decision:
 - Consume matching `MatchConfirmed` v1 to record chat confirmation separately from internal room provisioning. `OPEN` alone does not grant user access.
 - Validate the event envelope and stored room snapshot, serialize with the existing matching slot and room locks, and persist the event receipt and confirmation in one transaction before Redis ACK.
+- Calculate `MatchConfirmed` v1 receipt fingerprints from its fixed field set in order, using ISO local date-time and length-prefixed values. Do not use the consumer record's `toString()`, since new record fields must not change prior event fingerprints.
 - Use the dedicated `chat-confirmation-v1` group and one shared logical consumer across replicas. Recover pending records before reading new records; retain failed deliveries for retry.
 - Expose only confirmed OPEN rooms to their authenticated owner or worker through list/detail APIs. Do not infer confirmation for old rooms.
 - Reject Saga compensation closure after confirmation. A closed old attempt cannot confirm or affect a replacement room.

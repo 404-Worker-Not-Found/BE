@@ -12,10 +12,12 @@ import com.workernotfound.chat.external.redis.ChatConfirmationConsumer;
 import com.workernotfound.chat.global.exception.BusinessException;
 import com.workernotfound.chat.support.IntegrationTestSupport;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
@@ -225,5 +227,25 @@ class ChatConfirmationIntegrationTests extends IntegrationTestSupport {
     assertThat(jdbc.queryForObject(
         "SELECT confirmation_revision FROM chat_rooms WHERE id = ?", Long.class,
         id)).isEqualTo(2);
+  }
+
+  @Test
+  void confirmationReceiptUsesFixedV1Fields() throws Exception {
+    var request = request(IDS.incrementAndGet());
+    String id = create(request);
+    var event = event(request, id, 2);
+    confirmations.confirm(event);
+
+    var fields = List.of(event.eventId(), "MatchConfirmed", "2026-09-22T12:00:00",
+        request.matchingId().toString(), "2", "1", request.matchingId().toString(), id,
+        request.workId(), request.jobPostId().toString(),
+        request.ownerMemberId().toString(), request.workerMemberId().toString());
+    String payload = fields.stream().map(value -> value.length() + ":" + value)
+        .collect(Collectors.joining());
+    String expected = HexFormat.of().formatHex(
+        MessageDigest.getInstance("SHA-256").digest(payload.getBytes(StandardCharsets.UTF_8)));
+    assertThat(jdbc.queryForObject(
+        "SELECT fingerprint FROM chat_confirmation_events WHERE event_id = ?", String.class,
+        event.eventId())).isEqualTo(expected);
   }
 }
