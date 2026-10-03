@@ -160,7 +160,7 @@ Implemented:
 - `job-service`: job posting service
 - `matching-service`: application and matching service
 - `work-service`: scheduled work and Saga compensation service
-- `chat-service`: internal chat room creation and Saga compensation service
+- `chat-service`: internal chat room creation and Saga compensation, matching-confirmation consumption, and participant room queries
 - `payment-service`: deposit-backed payment lock and Saga compensation service with Toss test deposit ingestion
 
 Planned or represented in the ERD:
@@ -275,7 +275,9 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - Durable command keys return the original result on retries and reject reuse with a different operation or payload.
 - A per-matching database lock and unique active-matching constraint prevent duplicate active work. Compensation cancels only `SCHEDULED` work, keeps history, and permits a new creation command after cancellation.
 - Late compensation for an older canceled work never cancels the replacement work. This internal API is Saga compensation, not the user-facing work cancellation flow.
-- GPS check-in, work execution/completion, user-facing history, and event consumers remain future work. Status names are defined, but only `SCHEDULED -> CANCELED` is exposed in this unit.
+- work-service consumes `MatchConfirmed` v1 from the matching Redis Stream, persists confirmation and deduplicated event receipts atomically, and acknowledges only after commit. Pending events recover after failure or restart; canceled attempts cannot confirm their replacement.
+- JWT-authenticated owners and workers can list and read only their own confirmed work through `/api/works/me`. Unconfirmed and unrelated work returns no list entry or 404 detail. Confirmation is separate from `SCHEDULED` and blocks Saga compensation.
+- GPS check-in and work execution/completion remain future work. Only unconfirmed `SCHEDULED -> CANCELED` compensation is exposed. MySQL and Redis integration tests cover confirmation, pending recovery, duplicate delivery and query authorization.
 - MySQL integration tests cover command retries, conflicts, concurrent creation/cancellation, internal authentication, and Swagger access.
 - Local execution is available through `./scripts/local-run.sh work`; the service uses port 8086 and its local MySQL uses port 3311.
 
@@ -285,7 +287,8 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - Internal room creation and compensation closure implement the existing matching Saga contract with `X-Internal-Secret` and `Idempotency-Key`.
 - Durable command records, per-matching locks, and a unique active matching constraint prevent duplicate rooms. Closed rooms remain as history, and late closure cannot affect a replacement room.
 - Business errors use `ChatRoomErrorCode` and `BusinessException`; unexpected runtime failures return a safe 500 rather than being classified as invalid input.
-- OPEN denotes a provisioned internal room, not proof of confirmed matching. User access, messages, real-time transport, and confirmation-event consumption are future work.
+- OPEN denotes a provisioned internal room, not proof of confirmed matching. The service consumes `MatchConfirmed` v1, records confirmation and event receipts atomically, and exposes only confirmed OPEN rooms to their JWT-authenticated owner or worker through list/detail APIs. Pending Redis events recover after failure or restart; canceled attempts cannot confirm a replacement room.
+- Message persistence, sending, real-time transport, and general user room closure remain future work.
 - Local HTTP/MySQL ports are 8087/3312. `./scripts/local-run.sh chat` runs the service; repository verification includes its MySQL integration tests.
 - See `docs/architecture/chat-room-design.md` and `docs/architecture/error-handling-review.md`.
 

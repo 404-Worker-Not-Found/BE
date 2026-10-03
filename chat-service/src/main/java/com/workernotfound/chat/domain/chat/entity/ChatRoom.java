@@ -1,6 +1,8 @@
 package com.workernotfound.chat.domain.chat.entity;
 
 import com.workernotfound.chat.domain.chat.entity.enums.ChatRoomStatus;
+import com.workernotfound.chat.domain.chat.exception.ChatRoomErrorCode;
+import com.workernotfound.chat.global.exception.BusinessException;
 import jakarta.persistence.*;
 import java.time.*;
 import lombok.*;
@@ -37,6 +39,10 @@ public class ChatRoom {
   private LocalDateTime createdAt;
 
   private LocalDateTime closedAt;
+  private LocalDateTime confirmedAt;
+
+  @Column(nullable = false)
+  private long confirmationRevision;
   @Version private Long version;
 
   @Builder
@@ -55,10 +61,20 @@ public class ChatRoom {
     this.createdAt = LocalDateTime.now();
   }
 
-  public boolean close() {
-    if (status == ChatRoomStatus.CLOSED) return false;
+  public boolean isClosed() {
+    return status == ChatRoomStatus.CLOSED;
+  }
+
+  public void close() {
+    if (confirmedAt != null)
+      throw new BusinessException(ChatRoomErrorCode.CONFIRMED_CHAT_CANNOT_CLOSE);
     status = ChatRoomStatus.CLOSED;
     closedAt = LocalDateTime.now();
-    return true;
+  }
+
+  public void confirm(long revision, LocalDateTime occurredAt) {
+    if (revision <= confirmationRevision || status == ChatRoomStatus.CLOSED) return;
+    if (confirmedAt == null) confirmedAt = occurredAt;
+    confirmationRevision = revision;
   }
 }

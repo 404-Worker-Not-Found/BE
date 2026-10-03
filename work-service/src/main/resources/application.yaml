@@ -6,11 +6,22 @@ spring:
     username: ${WORK_DATASOURCE_USERNAME}
     password: ${WORK_DATASOURCE_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${MATCHING_REDIS_HOST:localhost}
+      port: ${MATCHING_REDIS_PORT:6381}
+      timeout: 2s
+      connect-timeout: 2s
   jpa:
     open-in-view: false
     hibernate:
       ddl-auto: validate
 work:
+  jwt:
+    secret: ${AUTH_JWT_SECRET}
+  events:
+    enabled: ${WORK_EVENTS_ENABLED:true}
+    stream: ${MATCHING_OUTBOX_STREAM_KEY:matching:domain-events}
   internal:
     secret: ${INTERNAL_API_SECRET}
 server:

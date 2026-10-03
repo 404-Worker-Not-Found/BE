@@ -1008,6 +1008,62 @@ Related files:
 - `payment-service`
 
 
+## 2026-09-22 - Work Confirmation and Participant Queries
+
+Decision:
+- Consume matching `MatchConfirmed` v1 to record work confirmation separately from scheduled-work provisioning. Keep work lifecycle status `SCHEDULED` until future attendance commands.
+- Validate the event envelope and the stored work snapshot, serialize with existing matching/work locks, and persist the event receipt and confirmation in one transaction before Redis ACK.
+- Use the dedicated `work-confirmation-v1` group with one shared logical consumer across replicas. Scan pending records with a rotating cursor and independently read new records; MySQL makes concurrent redelivery safe.
+- Expose only confirmed participant-owned work through JWT-authenticated list/detail APIs. Do not infer confirmation for existing rows or expose payment IDs.
+- Do not revive canceled attempts, apply stale revisions, or allow Saga compensation after confirmation. User cancellation remains a separate future contract.
+
+Reason:
+- Scheduled work is provisioned before the confirmation Saga completes. Creation alone must not grant user access or future attendance eligibility.
+- At-least-once delivery needs durable duplicate handling and recovery after a committed update loses its acknowledgment.
+
+Implication for agents:
+- Do not infer confirmation from `SCHEDULED` status or scheduled-work creation alone.
+- Persist the confirmation update and event receipt in one transaction, and acknowledge only after commit.
+- Validate the confirmation event envelope and stored work snapshot before applying or acknowledging it.
+- Keep participant queries limited to the authenticated member's confirmed work and do not expose payment identifiers.
+- Preserve duplicate and stale-event handling; do not revive canceled attempts or allow Saga compensation after confirmation.
+
+Related files:
+- `docs/architecture/work-scheduled-design.md`
+- `work-service`
+
+## 2026-10-02 - Chat Confirmation and Participant Queries
+
+Decision:
+- Consume matching `MatchConfirmed` v1 to record chat confirmation separately from internal room provisioning. `OPEN` alone does not grant user access.
+- Validate the event envelope and stored room snapshot, serialize with the existing matching slot and room locks, and persist the event receipt and confirmation in one transaction before Redis ACK.
+- Calculate `MatchConfirmed` v1 receipt fingerprints from its fixed field set in order, using ISO local date-time and length-prefixed values. Do not use the consumer record's `toString()`, since new record fields must not change prior event fingerprints.
+- Use the dedicated `chat-confirmation-v1` group and one shared logical consumer across replicas. Recover pending records before reading new records; retain failed deliveries for retry.
+- Expose only confirmed OPEN rooms to their authenticated owner or worker through list/detail APIs. Do not infer confirmation for old rooms.
+- Reject Saga compensation closure after confirmation. A closed old attempt cannot confirm or affect a replacement room.
+
+Reason:
+- Chat rooms are provisioned before matching confirmation finishes. Early user access would expose a room for a match that may still be compensated.
+- At-least-once delivery requires durable duplicate handling and recovery after a committed update loses its acknowledgment.
+
+Related files:
+- `docs/architecture/chat-room-design.md`
+- `chat-service`
+
+## 2026-10-02 - Shared JWT Signing Secret Minimum
+
+Decision:
+- Require the shared JWT secret used by auth-service and chat-service to be nonblank and at least 32 UTF-8 bytes. Reject invalid configuration at startup.
+
+Reason:
+- A missing or short HMAC key must not reach token issuance or validation at request time. Both services use the same `AUTH_JWT_SECRET` setting.
+
+Related files:
+- `.env.example`
+- `auth-service`
+- `chat-service`
+
+
 ## 2026-10-03 - Job Admission Idempotency Conflict Translation
 
 Decision:
