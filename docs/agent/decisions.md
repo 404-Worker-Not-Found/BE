@@ -1083,3 +1083,25 @@ Related files:
 - `docs/architecture/job-post-design.md`
 - `job-service/src/main/java/com/workernotfound/job/global/exception/GlobalExceptionHandler.java`
 - `job-service/src/test/java/com/workernotfound/job/domain/job/service/JobApplicationAdmissionConstraintErrorTests.java`
+
+## 2026-10-04 - Job Application Admission TTL
+
+Decision:
+- Keep the initial application-admission TTL at five minutes. Configure it with `job.application-admission.ttl`, backed by `APPLICATION_ADMISSION_TTL` with a `5m` default.
+- Calculate `expiresAt` as `admittedAt + ttl` when issuing an admission. A configuration change applies to newly issued admissions; existing admissions retain their persisted expiry.
+- A retry of the same job, worker and idempotency key returns the existing unexpired `RESERVED` admission without extending its expiry. Expired admissions return `JOB-409-003`; a new key must pass the current job status and deadline checks again.
+
+Reason:
+- Admission issuance and matching-service application persistence are separate operations. A short validity window gives internal calls and retries room to recover from transient latency or failures.
+- Five minutes is an initial operational tradeoff: it permits short recovery attempts while limiting how long an unused approval can be reused after the job changes or closes. It is not a measured latency guarantee and should be revisited using observed application-save and retry durations.
+- An admission does not reserve a recruitment seat. Its TTL limits approval reuse; it does not extend the job's application deadline for new admissions or guarantee a matching slot.
+
+Implication for agents:
+- Keep the duration configurable and preserve the original expiry on idempotent retries.
+- Verify both orderings of job closure and admission issuance against the same MySQL job-row lock. The current race tests simulate closure in a separate transaction because the production status-transition API is not implemented yet; connect that API to these scenarios when it is added.
+
+Related files:
+- `job-service/src/main/resources/application.yaml`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/ApplicationAdmissionProperties.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobApplicationAdmissionCommandService.java`
+- `job-service/src/test/java/com/workernotfound/job/domain/job/service/JobApplicationAdmissionClosingRaceTests.java`
