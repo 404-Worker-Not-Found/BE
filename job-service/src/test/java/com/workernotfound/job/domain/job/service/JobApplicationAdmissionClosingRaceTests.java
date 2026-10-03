@@ -9,11 +9,18 @@ import com.workernotfound.job.domain.job.repository.JobApplicationAdmissionRepos
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
 import com.workernotfound.job.global.exception.BusinessException;
 import com.workernotfound.job.support.IntegrationTestSupport;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,8 +38,33 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 class JobApplicationAdmissionClosingRaceTests extends IntegrationTestSupport {
+
+    private static final String JOB_LOCK_WAIT_QUERY = """
+            SELECT 1
+            FROM performance_schema.data_lock_waits waits
+            JOIN performance_schema.data_locks requested
+              ON requested.ENGINE = waits.ENGINE
+             AND requested.ENGINE_LOCK_ID = waits.REQUESTING_ENGINE_LOCK_ID
+            JOIN performance_schema.threads requester
+              ON requester.THREAD_ID = waits.REQUESTING_THREAD_ID
+            JOIN performance_schema.threads blocker
+              ON blocker.THREAD_ID = waits.BLOCKING_THREAD_ID
+            WHERE requester.PROCESSLIST_ID = ?
+              AND blocker.PROCESSLIST_ID = ?
+              AND requested.OBJECT_SCHEMA = ?
+              AND requested.OBJECT_NAME = 'job_posts'
+              AND requested.INDEX_NAME = 'PRIMARY'
+              AND requested.LOCK_TYPE = 'RECORD'
+              AND requested.LOCK_MODE LIKE 'X%'
+              AND requested.LOCK_STATUS = 'WAITING'
+              AND requested.LOCK_DATA = ?
+            """;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Autowired
     private JobApplicationAdmissionCommandService admissionService;
@@ -49,14 +81,15 @@ class JobApplicationAdmissionClosingRaceTests extends IntegrationTestSupport {
     private ExecutorService executor;
     private CountDownLatch firstLocked;
     private CountDownLatch releaseFirst;
-    private CountDownLatch secondAttempted;
+    private long firstConnectionId;
+    private CompletableFuture<Long> contenderConnectionId;
 
     @BeforeEach
     void setUp() {
         executor = Executors.newFixedThreadPool(2);
         firstLocked = new CountDownLatch(1);
         releaseFirst = new CountDownLatch(1);
-        secondAttempted = new CountDownLatch(1);
+        contenderConnectionId = new CompletableFuture<>();
     }
 
     @AfterEach
@@ -78,12 +111,10 @@ class JobApplicationAdmissionClosingRaceTests extends IntegrationTestSupport {
             closeJob(jobPost.getId());
             return null;
         }));
-        await(firstLocked);
-        Future<JobApplicationAdmission> admission = executor.submit(() -> {
-            secondAttempted.countDown();
-            return admissionService.create(jobPost.getId(), 100L, key);
-        });
-        assertWaitingForJobLock(admission);
+        awaitLatch(firstLocked);
+        Future<JobApplicationAdmission> admission = executor.submit(() -> runContender(() ->
+                admissionService.create(jobPost.getId(), 100L, key)));
+        assertWaitingForJobLock(admission, jobPost.getId());
 
         releaseFirst.countDown();
         closing.get(10, TimeUnit.SECONDS);
@@ -102,12 +133,12 @@ class JobApplicationAdmissionClosingRaceTests extends IntegrationTestSupport {
         String key = "admission-first-" + UUID.randomUUID();
         Future<JobApplicationAdmission> admission = executor.submit(() -> holdBeforeCommit(() ->
                 admissionService.create(jobPost.getId(), 100L, key)));
-        await(firstLocked);
-        Future<?> closing = executor.submit(() -> {
-            secondAttempted.countDown();
+        awaitLatch(firstLocked);
+        Future<?> closing = executor.submit(() -> runContender(() -> {
             closeJob(jobPost.getId());
-        });
-        assertWaitingForJobLock(closing);
+            return null;
+        }));
+        assertWaitingForJobLock(closing, jobPost.getId());
 
         releaseFirst.countDown();
         JobApplicationAdmission issued = admission.get(10, TimeUnit.SECONDS);
@@ -127,10 +158,11 @@ class JobApplicationAdmissionClosingRaceTests extends IntegrationTestSupport {
     // 운영 서비스의 REQUIRED 트랜잭션을 참여시켜, 실제 쓰기 후 커밋 전까지 행 잠금을 유지한다.
     private <T> T holdBeforeCommit(Supplier<T> operation) {
         return new TransactionTemplate(transactionManager).execute(status -> {
+            firstConnectionId = currentConnectionId();
             T result = operation.get();
             firstLocked.countDown();
             try {
-                await(releaseFirst);
+                assertThat(releaseFirst.await(30, TimeUnit.SECONDS)).isTrue();
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException("경쟁 테스트 트랜잭션 대기가 중단되었습니다.", exception);
@@ -139,13 +171,40 @@ class JobApplicationAdmissionClosingRaceTests extends IntegrationTestSupport {
         });
     }
 
-    private void assertWaitingForJobLock(Future<?> contender) throws InterruptedException {
-        await(secondAttempted);
+    private <T> T runContender(Supplier<T> operation) {
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            contenderConnectionId.complete(currentConnectionId());
+            return operation.get();
+        });
+    }
+
+    private long currentConnectionId() {
+        return ((Number) entityManager.createNativeQuery("SELECT CONNECTION_ID()").getSingleResult()).longValue();
+    }
+
+    private void assertWaitingForJobLock(Future<?> contender, Long jobPostId) throws Exception {
+        long connectionId = contenderConnectionId.get(10, TimeUnit.SECONDS);
+        try (Connection observer = openLockObserverConnection();
+                PreparedStatement query = observer.prepareStatement(JOB_LOCK_WAIT_QUERY)) {
+            query.setLong(1, connectionId);
+            query.setLong(2, firstConnectionId);
+            query.setString(3, observer.getCatalog());
+            query.setString(4, jobPostId.toString());
+            query.setQueryTimeout(2);
+            await().alias("경쟁 트랜잭션이 첫 트랜잭션의 공고 행 잠금을 기다려야 한다")
+                    .pollInSameThread().pollInterval(Duration.ofMillis(50)).atMost(Duration.ofSeconds(5))
+                    .until(() -> {
+                        assertThat(contender.isDone()).as("잠금 관찰 전에 경쟁 요청이 끝나면 안 된다").isFalse();
+                        try (ResultSet waiting = query.executeQuery()) {
+                            return waiting.next();
+                        }
+                    });
+        }
         assertThatThrownBy(() -> contender.get(300, TimeUnit.MILLISECONDS))
                 .isInstanceOf(TimeoutException.class);
     }
 
-    private void await(CountDownLatch latch) throws InterruptedException {
+    private void awaitLatch(CountDownLatch latch) throws InterruptedException {
         assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
     }
 
