@@ -1105,3 +1105,29 @@ Related files:
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/ApplicationAdmissionProperties.java`
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobApplicationAdmissionCommandService.java`
 - `job-service/src/test/java/com/workernotfound/job/domain/job/service/JobApplicationAdmissionClosingRaceTests.java`
+
+## 2026-10-04 - Matching Seat Reservation and Expected Wage
+
+Decision:
+- job-service reserves recruitment seats only for `OPEN` or `MATCHING` jobs and only before work start (`workDate + startTime`). The application deadline is not the seat-reservation deadline.
+- Seat reservations expire `MATCHING_SEAT_RESERVATION_TTL` (default 10 minutes) after issuance. This is separate from the application-admission TTL and is never extended by retries.
+- Reserve, confirm, release, and expiry recovery lock the job row before the reservation row so `CONSUMED + valid RESERVED <= recruitCount` always holds. Expiry recovery updates by primary key only, never by a secondary-index range `UPDATE`, to avoid gap-lock deadlocks with reservation inserts on other jobs.
+- A repeated reservation key returns the stored snapshot regardless of status. Confirm and release record only the first successful command key; a different key on an already processed reservation is a conflict. Confirm retries on `CONSUMED` succeed even after the original expiry, and release of `EXPIRED` succeeds.
+- The per-worker expected wage is floor(work minutes × (`baseHourlyWage` + `extraWage`) / 60) in integer KRW. `extraWage` is an hourly addition, and null means 0. Break time is not deducted. The total deposit is the per-worker amount × `recruitCount`.
+- matching-service treats a well-formed, already expired seat-reservation response as a definitive rejection: it compensates that reservation and starts a new attempt. Unknown outcomes are not compensated.
+- `endTimeNextDay` travels from the job seat snapshot through the matching Saga to scheduled-work creation. It must equal `endTime <= startTime`.
+
+Reason:
+- The user confirmed the 10-minute TTL, the hourly `extraWage`, and the work-start cutoff on 2026-10-04.
+- An expired reservation replayed with the same key could otherwise trap the Saga in endless same-key retries.
+
+Implication for agents:
+- Keep wage calculation in `JobWageCalculator`; do not duplicate it in payment-service. Record break-time, time-band premium, and urgency premium policies as new decisions before changing the formula.
+- Do not treat seat reservation or confirmation as recruitment completion; job status transition and the completion notification remain separate work.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `docs/architecture/matching-application-design.md`
+- `docs/architecture/work-scheduled-design.md`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/MatchingSeatReservationCommandService.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobWageCalculator.java`

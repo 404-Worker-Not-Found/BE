@@ -10,7 +10,7 @@
 
 | 명령 | 경로 | 요청/응답 |
 | --- | --- | --- |
-| 생성 | `POST /api/works/internal/scheduled` | 기존 Saga의 matchingId, jobPostId, ownerMemberId, workerMemberId, paymentId, workDate, startTime, endTime / `data.workId` 문자열 |
+| 생성 | `POST /api/works/internal/scheduled` | 기존 Saga의 matchingId, jobPostId, ownerMemberId, workerMemberId, paymentId, workDate, startTime, endTime, endTimeNextDay / `data.workId` 문자열 |
 | 보상 | `POST /api/works/internal/{workId}/cancel` | 본문 없음 / 성공 envelope |
 
 생성과 취소는 서로 다른 명령 키를 사용한다. 같은 키와 같은 요청은 원래 결과를 반환한다. 키를 다른 요청이나 다른 작업에 재사용하면 409다. 다른 키로 동일 matching의 활성 근무를 생성하면 409다. 없는 근무 취소는 404, 확정된 근무 또는 예정·취소 외 상태의 보상은 409다. 인증 실패는 401, 잘못된 입력은 400이다.
@@ -30,7 +30,7 @@
 
 상태 이름은 `SCHEDULED`, `CHECKED_IN`, `IN_PROGRESS`, `COMPLETED`, `CANCELED`, `FAILED`, `NO_SHOW`다. 근무 상태 전이는 생성과 미확정 근무의 `SCHEDULED -> CANCELED`만 처리한다. 매칭 확정은 상태 전이와 별개로 `confirmed_at`과 `confirmation_revision`에 기록한다. 출근·노쇼 정책, 사용자 취소, 근무 알림 이벤트는 후속 작업이다.
 
-자정을 넘는 근무도 일정 스냅샷으로 보관한다. 과거 날짜를 일괄 거부하면 복구 명령이 실패할 수 있으므로 현재 시각에 따른 만료 조건을 추가하지 않는다.
+자정을 넘는 근무도 일정 스냅샷으로 보관한다. 생성 요청의 `endTimeNextDay`는 필수이며 종료 시각이 시작 시각 이하일 때만 true여야 한다(어긋나면 400). `works.end_time_next_day`(V3)에 저장하고 본인 근무 조회 응답에 포함한다. V3 이전 행은 `end_time <= start_time`으로 채웠다. 익일 여부가 시각으로 결정되므로 생성 명령 지문은 필드 추가 전 형식을 그대로 유지해 기존 명령 재시도가 충돌하지 않는다. `MatchConfirmed` v1 이벤트는 바꾸지 않았으며, 일정 의미가 필요한 소비자는 같은 규칙으로 익일 여부를 판단한다. 과거 날짜를 일괄 거부하면 복구 명령이 실패할 수 있으므로 현재 시각에 따른 만료 조건을 추가하지 않는다.
 
 ## 로컬 실행
 
