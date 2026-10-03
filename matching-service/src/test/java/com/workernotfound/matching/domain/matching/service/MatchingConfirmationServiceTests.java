@@ -32,6 +32,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import com.workernotfound.matching.external.client.confirmation.dto.ScheduledWorkRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -98,6 +100,12 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 		MatchingConfirmationSaga saga = sagaRepository.findByMatchingId(matching.getId()).orElseThrow();
 		assertThat(saga.getStatus()).isEqualTo(MatchingConfirmationSagaStatus.COMPLETED);
 		assertThat(saga.isSeatConsumed()).isTrue();
+		assertThat(saga.getLatitude()).isEqualByComparingTo("37.5");
+		assertThat(saga.getLongitude()).isEqualByComparingTo("127.0");
+		ArgumentCaptor<ScheduledWorkRequest> request = ArgumentCaptor.forClass(ScheduledWorkRequest.class);
+		verify(client).createScheduledWork(request.capture(), anyString());
+		assertThat(request.getValue().latitude()).isEqualByComparingTo("37.5");
+		assertThat(request.getValue().longitude()).isEqualByComparingTo("127.0");
 		assertThat(applicationHistoryRepository.findByApplicationIdOrderByRevisionAsc(
 			matching.getApplication().getId()
 		)).extracting(history -> history.getToStatus()).containsExactly(ApplicationStatus.SELECTED);
@@ -372,7 +380,7 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 			valid.reservationId(), valid.jobPostId(), valid.jobVersion(), valid.ownerMemberId(), valid.workDate(),
 			valid.startTime(), valid.endTime(), null, valid.lockedAmount(), valid.currency(),
 			valid.reservedAt(), valid.expiresAt()
-		));
+		, null, null));
 
 		assertThatThrownBy(() -> confirmationService.accept(matching.getId(), 20L))
 			.isInstanceOf(BusinessException.class);
@@ -391,7 +399,7 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 			base.reservationId(), base.jobPostId(), base.jobVersion(), base.ownerMemberId(), base.workDate(),
 			LocalTime.of(22, 0), LocalTime.of(2, 0), true, base.lockedAmount(), base.currency(),
 			base.reservedAt(), base.expiresAt()
-		));
+		, null, null));
 		when(client.lockPayment(any(), anyString())).thenReturn(new PaymentLockResponse("payment-1"));
 		when(client.createScheduledWork(any(), anyString())).thenReturn(new ScheduledWorkResponse("work-1"));
 		when(client.createChatRoom(any(), anyString())).thenReturn(new ChatRoomResponse("chat-1"));
@@ -433,7 +441,8 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 			new BigDecimal("120000.00"),
 			"KRW",
 			expiresAt.minusMinutes(10),
-			expiresAt
+			expiresAt,
+			new BigDecimal("37.5"), new BigDecimal("127.0")
 		);
 	}
 

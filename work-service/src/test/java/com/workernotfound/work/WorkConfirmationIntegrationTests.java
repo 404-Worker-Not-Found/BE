@@ -51,7 +51,7 @@ class WorkConfirmationIntegrationTests extends IntegrationTestSupport {
         LocalDate.of(2026, 9, 23),
         LocalTime.of(23, 0),
         LocalTime.of(2, 0),
-        true);
+        true, null, null);
   }
 
   MatchConfirmedEvent event(ScheduledWorkRequest request, String workId, long revision) {

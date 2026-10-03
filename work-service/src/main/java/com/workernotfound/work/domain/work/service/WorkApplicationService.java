@@ -21,7 +21,7 @@ public class WorkApplicationService {
 
   @Transactional
   public ScheduledWorkResponse create(String key, ScheduledWorkRequest request) {
-    var command = lockCommand(key, "CREATE:" + request.fingerprintPayload());
+    var command = lockCommand(key, request.commandPayload());
     if (command.workId() != null) return ScheduledWorkResponse.from(command.workId());
     if (commands.lockMatching(request.matchingId()) != null) {
       throw new BusinessException(WorkErrorCode.ACTIVE_WORK_EXISTS);
@@ -38,6 +38,8 @@ public class WorkApplicationService {
                 .startTime(request.startTime())
                 .endTime(request.endTime())
                 .endTimeNextDay(request.endTimeNextDay())
+                .latitude(request.latitude())
+                .longitude(request.longitude())
                 .build());
     commands.activate(request.matchingId(), work.getId());
     commands.history(work.getId(), null, "SCHEDULED", key);

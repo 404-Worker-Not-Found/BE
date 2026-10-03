@@ -98,6 +98,12 @@ public class MatchingConfirmationSaga extends BaseEntity {
 	@Column(name = "work_date")
 	private LocalDate workDate;
 
+	@Column(precision = 10, scale = 7)
+	private BigDecimal latitude;
+
+	@Column(precision = 10, scale = 7)
+	private BigDecimal longitude;
+
 	@Column(name = "start_time")
 	private LocalTime startTime;
 
@@ -244,8 +250,12 @@ public class MatchingConfirmationSaga extends BaseEntity {
 		LocalTime endTime,
 		Boolean endTimeNextDay,
 		BigDecimal lockedAmount,
-		String currency
+		String currency,
+		BigDecimal latitude,
+		BigDecimal longitude
 	) {
+		this.latitude = latitude;
+		this.longitude = longitude;
 		this.seatReservationId = reservationId;
 		this.workDate = workDate;
 		this.startTime = startTime;
@@ -292,6 +302,8 @@ public class MatchingConfirmationSaga extends BaseEntity {
 	public void clearSeat() {
 		this.seatReservationId = null;
 		this.workDate = null;
+		this.latitude = null;
+		this.longitude = null;
 		this.startTime = null;
 		this.endTime = null;
 		this.endTimeNextDay = null;

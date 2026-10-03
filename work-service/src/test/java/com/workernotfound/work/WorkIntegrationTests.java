@@ -38,7 +38,7 @@ class WorkIntegrationTests extends com.workernotfound.work.support.IntegrationTe
         LocalDate.of(2026, 9, 20),
         LocalTime.of(23, 0),
         LocalTime.of(2, 0),
-        true);
+        true, null, null);
   }
 
   String key() {

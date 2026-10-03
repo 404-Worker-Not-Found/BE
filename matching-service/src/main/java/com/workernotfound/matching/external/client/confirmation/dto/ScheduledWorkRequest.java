@@ -1,6 +1,7 @@
 package com.workernotfound.matching.external.client.confirmation.dto;
 
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.time.LocalTime;
 
 public record ScheduledWorkRequest(
@@ -12,6 +13,8 @@ public record ScheduledWorkRequest(
 	LocalDate workDate,
 	LocalTime startTime,
 	LocalTime endTime,
-	Boolean endTimeNextDay
+	Boolean endTimeNextDay,
+	BigDecimal latitude,
+	BigDecimal longitude
 ) {
 }
