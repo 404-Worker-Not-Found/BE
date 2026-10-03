@@ -13,6 +13,7 @@ public record WorkResponse(
     LocalDate workDate,
     LocalTime startTime,
     LocalTime endTime,
+    boolean endTimeNextDay,
     WorkStatus status,
     LocalDateTime confirmedAt) {
   public static WorkResponse from(Work work) {
@@ -25,6 +26,7 @@ public record WorkResponse(
         work.getWorkDate(),
         work.getStartTime(),
         work.getEndTime(),
+        work.isEndTimeNextDay(),
         work.getStatus(),
         work.getConfirmedAt());
   }

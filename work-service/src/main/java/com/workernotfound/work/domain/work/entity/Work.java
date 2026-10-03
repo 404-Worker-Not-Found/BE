@@ -40,6 +40,9 @@ public class Work {
   @Column(nullable = false)
   private LocalTime endTime;
 
+  @Column(nullable = false)
+  private boolean endTimeNextDay;
+
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)
   private WorkStatus status;
@@ -64,7 +67,8 @@ public class Work {
       String paymentId,
       LocalDate workDate,
       LocalTime startTime,
-      LocalTime endTime) {
+      LocalTime endTime,
+      boolean endTimeNextDay) {
     this.matchingId = matchingId;
     this.jobPostId = jobPostId;
     this.ownerMemberId = ownerMemberId;
@@ -73,6 +77,7 @@ public class Work {
     this.workDate = workDate;
     this.startTime = startTime;
     this.endTime = endTime;
+    this.endTimeNextDay = endTimeNextDay;
     this.status = WorkStatus.SCHEDULED;
     this.createdAt = LocalDateTime.now();
   }
