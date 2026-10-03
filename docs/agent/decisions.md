@@ -1068,8 +1068,8 @@ Related files:
 
 Decision:
 - Translate only `uk_job_application_admissions_idempotency_key` violations to the `JOB-409-004` business error.
-- Translate in `JobApplicationService`, outside the admission persistence transaction, after rollback. This also covers commit-time failures.
-- Walk the whole cause chain to find the Hibernate `ConstraintViolationException`, and compare the constraint name without its table prefix. Retain the original cause; unrelated integrity violations remain server errors.
+- Translate in `GlobalExceptionHandler` at the global HTTP exception boundary, after the admission transaction has rolled back. This also covers commit-time failures; application and command services propagate persistence exceptions unchanged.
+- Walk the whole cause chain to find the Hibernate `ConstraintViolationException`, and compare the exact constraint name without its table prefix. Continue past unrelated constraints and stop safely on cycles. Preserve the original exception; unrelated integrity violations remain server errors.
 
 Reason:
 - The admission transaction locks the job post row, so concurrent requests reusing one idempotency key across different job posts are not serialized and only the unique constraint rejects them.
@@ -1081,5 +1081,5 @@ Implication for agents:
 
 Related files:
 - `docs/architecture/job-post-design.md`
-- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobApplicationService.java`
+- `job-service/src/main/java/com/workernotfound/job/global/exception/GlobalExceptionHandler.java`
 - `job-service/src/test/java/com/workernotfound/job/domain/job/service/JobApplicationAdmissionConstraintErrorTests.java`

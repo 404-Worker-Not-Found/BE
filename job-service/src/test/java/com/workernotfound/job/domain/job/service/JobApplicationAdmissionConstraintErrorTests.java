@@ -1,13 +1,11 @@
 package com.workernotfound.job.domain.job.service;
 
-import com.workernotfound.job.domain.job.dto.response.ApplicationAdmissionResponse;
 import com.workernotfound.job.domain.job.entity.JobApplicationAdmission;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.enums.UrgencyLevel;
-import com.workernotfound.job.domain.job.exception.JobErrorCode;
 import com.workernotfound.job.domain.job.repository.JobApplicationAdmissionRepository;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
-import com.workernotfound.job.global.exception.BusinessException;
+import com.workernotfound.job.global.exception.GlobalExceptionHandler;
 import com.workernotfound.job.support.IntegrationTestSupport;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -18,7 +16,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -27,21 +24,34 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+@AutoConfigureMockMvc
 class JobApplicationAdmissionConstraintErrorTests extends IntegrationTestSupport {
 
     private static final Long MISSING_JOB_POST_ID = 999_999L;
 
     @Autowired
-    private JobApplicationService jobApplicationService;
+    private MockMvc mockMvc;
+
+    @MockitoSpyBean
+    private GlobalExceptionHandler globalExceptionHandler;
 
     @MockitoSpyBean
     private JobPostRepository jobPostRepository;
@@ -54,6 +64,10 @@ class JobApplicationAdmissionConstraintErrorTests extends IntegrationTestSupport
     @BeforeEach
     void setUp() {
         executorService = Executors.newFixedThreadPool(2);
+        doAnswer(invocation -> {
+            assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            return invocation.callRealMethod();
+        }).when(globalExceptionHandler).handleException(any(), any());
     }
 
     @AfterEach
@@ -74,44 +88,47 @@ class JobApplicationAdmissionConstraintErrorTests extends IntegrationTestSupport
             return Optional.empty();
         }).when(jobApplicationAdmissionRepository).findByIdempotencyKey(idempotencyKey);
 
-        List<Future<ApplicationAdmissionResponse>> requests = List.of(
-                requestAdmission(firstJobPost.getId(), idempotencyKey),
-                requestAdmission(secondJobPost.getId(), idempotencyKey)
+        List<Future<MvcResult>> requests = List.of(
+                executorService.submit(() -> requestAdmission(firstJobPost.getId(), idempotencyKey)),
+                executorService.submit(() -> requestAdmission(secondJobPost.getId(), idempotencyKey))
         );
 
-        List<Throwable> failures = new ArrayList<>();
-        int successCount = 0;
-        for (Future<ApplicationAdmissionResponse> request : requests) {
-            try {
-                request.get(30, TimeUnit.SECONDS);
-                successCount++;
-            } catch (ExecutionException exception) {
-                failures.add(exception.getCause());
-            }
+        List<MvcResult> results = new ArrayList<>();
+        for (Future<MvcResult> request : requests) {
+            results.add(request.get(30, TimeUnit.SECONDS));
         }
 
-        assertThat(successCount).isOne();
-        assertThat(failures).singleElement()
-                .isInstanceOfSatisfying(BusinessException.class, failure -> {
-                    assertThat(failure.getErrorCode()).isEqualTo(JobErrorCode.IDEMPOTENCY_KEY_REUSED);
-                    assertThat(failure.getCause()).isInstanceOf(DataIntegrityViolationException.class);
-                });
+        assertThat(results).extracting(result -> result.getResponse().getStatus())
+                .containsExactlyInAnyOrder(200, 409);
+        MvcResult conflict = results.stream()
+                .filter(result -> result.getResponse().getStatus() == 409).findFirst().orElseThrow();
+        jsonPath("$.code").value("JOB-409-004").match(conflict);
+        // 서비스가 변환하지 않은 원래 저장 예외가 롤백 후 전역 처리기에 도달해야 한다.
+        assertThat(conflict.getResolvedException()).isInstanceOf(DataIntegrityViolationException.class);
+        verify(globalExceptionHandler).handleException(any(), any());
         assertThat(admissionCount(idempotencyKey)).isOne();
     }
 
     @Test
-    void keepsUnrelatedIntegrityViolationAsServerError() {
+    void keepsUnrelatedIntegrityViolationAsServerError() throws Exception {
         doReturn(Optional.of(missingJobPost())).when(jobPostRepository).findByIdForUpdate(MISSING_JOB_POST_ID);
 
-        assertThatThrownBy(() ->
-                jobApplicationService.createApplicationAdmission(MISSING_JOB_POST_ID, 100L, newKey()))
-                .isInstanceOf(DataIntegrityViolationException.class)
-                .isNotInstanceOf(BusinessException.class);
+        String idempotencyKey = newKey();
+        MvcResult result = requestAdmission(MISSING_JOB_POST_ID, idempotencyKey);
+        status().isInternalServerError().match(result);
+        jsonPath("$.code").value("GLOBAL-500-001").match(result);
+        assertThat(result.getResolvedException()).isInstanceOf(DataIntegrityViolationException.class);
+        verify(globalExceptionHandler).handleException(any(), any());
+        assertThat(admissionCount(idempotencyKey)).isZero();
     }
 
-    private Future<ApplicationAdmissionResponse> requestAdmission(Long jobPostId, String idempotencyKey) {
-        return executorService.submit(() ->
-                jobApplicationService.createApplicationAdmission(jobPostId, 100L, idempotencyKey));
+    private MvcResult requestAdmission(Long jobPostId, String idempotencyKey) throws Exception {
+        return mockMvc.perform(post("/api/jobs/internal/{jobPostId}/application-admissions", jobPostId)
+                        .header("X-Internal-Secret", "test-internal-secret")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"workerMemberId\":100}"))
+                .andReturn();
     }
 
     private long admissionCount(String idempotencyKey) {
