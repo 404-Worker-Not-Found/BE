@@ -41,10 +41,11 @@
 | --- | --- | --- |
 | 지원 접수 승인 | `POST /api/jobs/internal/{jobPostId}/application-admissions` | `workerMemberId` / `admissionId`, `jobPostId`, `jobVersion`, `ownerMemberId`, `categoryId`, `workDate`, `startTime`, `endTime`, `latitude`, `longitude`, `admittedAt`, `expiresAt` |
 
-`Idempotency-Key`는 1~100자의 공백 없는 ASCII다. 공고 행을 비관적 잠금으로 잡은 뒤 같은 키의 승인을 조회한다. 따라서 같은 키의 동시 요청도 앞선 요청의 결과를 본다.
+`Idempotency-Key`는 1~100자의 공백 없는 ASCII다. 공고 행을 비관적 잠금으로 잡은 뒤 같은 키의 승인을 조회한다. 따라서 같은 공고에 같은 키로 온 동시 요청은 앞선 요청의 결과를 본다. 공고가 서로 다르면 잠그는 행도 달라 조회가 직렬화되지 않으므로, `uk_job_application_admissions_idempotency_key` 유일 제약이 마지막 방어선이다.
 
 - 같은 키와 같은 공고·회원 요청이면 기존 승인을 반환한다. 만료됐거나 `RESERVED`가 아니면 `JOB-409-003`이다.
-- 같은 키를 다른 공고나 회원 요청에 재사용하면 `JOB-409-004`다.
+- 같은 키를 다른 공고나 회원 요청에 재사용하면 `JOB-409-004`다. 동시 요청이 유일 제약에서 걸린 경우에도 같은 코드로 응답한다.
+- 제약 위반 변환은 저장 트랜잭션이 롤백된 뒤 `JobApplicationService`에서 한다. cause 사슬 전체에서 Hibernate `ConstraintViolationException`을 찾아 제약 이름이 일치할 때만 변환하며, 그 외 무결성 위반은 서버 오류로 남긴다. MySQL은 제약 이름을 `테이블명.제약명`으로 보고한다.
 - 새 승인은 공고가 `OPEN`이고 지원 마감 전일 때만 발급한다. 승인 생성 시각이 지원 접수 시점이다.
 - 승인은 모집 자리를 차감하지 않는다. 모집 인원 동시성은 매칭 확정 단계의 자리 예약에서 다룬다.
 - 만료 시간은 `APPLICATION_ADMISSION_TTL`이며 기본 5분이다.

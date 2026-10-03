@@ -1006,3 +1006,24 @@ Implementation boundary:
 Related files:
 - `docs/architecture/toss-deposit-design.md`
 - `payment-service`
+
+
+## 2026-10-03 - Job Admission Idempotency Conflict Translation
+
+Decision:
+- Translate only `uk_job_application_admissions_idempotency_key` violations to the `JOB-409-004` business error.
+- Translate in `JobApplicationService`, outside the admission persistence transaction, after rollback. This also covers commit-time failures.
+- Walk the whole cause chain to find the Hibernate `ConstraintViolationException`, and compare the constraint name without its table prefix. Retain the original cause; unrelated integrity violations remain server errors.
+
+Reason:
+- The admission transaction locks the job post row, so concurrent requests reusing one idempotency key across different job posts are not serialized and only the unique constraint rejects them.
+- Sequential reuse already returns `JOB-409-004`, so the concurrent case must not return a 500 for the same contract violation.
+
+Implication for agents:
+- Follow this pattern for the seat reservation idempotency constraints in later job-service work.
+- Do not convert integrity violations inside a transaction, and do not convert them without matching the constraint name.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobApplicationService.java`
+- `job-service/src/test/java/com/workernotfound/job/domain/job/service/JobApplicationAdmissionConstraintErrorTests.java`
