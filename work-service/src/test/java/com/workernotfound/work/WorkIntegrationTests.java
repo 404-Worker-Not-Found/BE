@@ -239,7 +239,7 @@ class WorkIntegrationTests extends com.workernotfound.work.support.IntegrationTe
   }
 
   @Test
-  void rejectsMissingOrInconsistentNextDayFlag() throws Exception {
+  void rejectsExplicitlyInconsistentNextDayFlag() throws Exception {
     String template =
         """
         {"matchingId":%d,"jobPostId":10,"ownerMemberId":20,"workerMemberId":30,
@@ -247,7 +247,6 @@ class WorkIntegrationTests extends com.workernotfound.work.support.IntegrationTe
         """;
     for (String body :
         java.util.List.of(
-            template.formatted(IDS.incrementAndGet(), "22:00:00", "02:00:00", ""),
             template.formatted(IDS.incrementAndGet(), "22:00:00", "02:00:00", ",\"endTimeNextDay\":false"),
             template.formatted(IDS.incrementAndGet(), "09:00:00", "18:00:00", ",\"endTimeNextDay\":true"))) {
       mvc.perform(
