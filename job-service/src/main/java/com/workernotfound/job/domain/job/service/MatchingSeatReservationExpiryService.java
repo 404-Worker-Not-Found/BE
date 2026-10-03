@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.service;
 
+import com.workernotfound.job.domain.job.entity.JobMatchingSeatReservation;
 import com.workernotfound.job.domain.job.repository.JobMatchingSeatReservationRepository;
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -27,7 +28,7 @@ public class MatchingSeatReservationExpiryService {
 
     public int expireOverdueReservations() {
         List<Long> jobPostIds = reservationRepository.findJobPostIdsWithOverdueReservation(
-                LocalDateTime.now(clock),
+                JobMatchingSeatReservation.toStoredTime(LocalDateTime.now(clock)),
                 PageRequest.of(0, properties.expirySweepBatchSize())
         );
         int expired = 0;

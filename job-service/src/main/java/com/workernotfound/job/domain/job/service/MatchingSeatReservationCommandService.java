@@ -63,6 +63,9 @@ public class MatchingSeatReservationCommandService {
         validateNotHeld(jobPostId, matchingId, applicationId);
         validateSeatAvailable(jobPost);
 
+        // 발급 시각을 저장 정밀도로 절삭한 뒤 TTL을 더하고 다시 절삭한다. 재요청은 이 값을 그대로 돌려준다.
+        LocalDateTime reservedAt = JobMatchingSeatReservation.toStoredTime(now);
+        LocalDateTime expiresAt = JobMatchingSeatReservation.toStoredTime(reservedAt.plus(properties.ttl()));
         return reservationRepository.save(JobMatchingSeatReservation.builder()
                 .jobPostId(jobPostId)
                 .matchingId(matchingId)
@@ -77,8 +80,8 @@ public class MatchingSeatReservationCommandService {
                 .endTimeNextDay(jobPost.isEndTimeNextDay())
                 .lockedAmount(jobWageCalculator.calculateWagePerWorker(jobPost))
                 .currency(CURRENCY_KRW)
-                .reservedAt(now)
-                .expiresAt(now.plus(properties.ttl()))
+                .reservedAt(reservedAt)
+                .expiresAt(expiresAt)
                 .build());
     }
 
@@ -126,12 +129,15 @@ public class MatchingSeatReservationCommandService {
 
     // 범위 조건 UPDATE는 보조 인덱스 gap 잠금을 잡아 다른 공고의 예약 INSERT와 교착될 수 있다.
     // 공고 행 잠금 아래에서 대상 ID를 비잠금 조회한 뒤 기본 키로만 갱신한다.
+    // 저장된 expires_at은 항상 마이크로초 단위이므로 expiresAt <= now와 expiresAt <= 절삭한 now는 같은 판정이다.
+    // 쿼리 인자를 절삭해 두어야 MySQL이 나노초 인자를 반올림해 경계가 앞당겨지지 않는다. 회수 시각도 같은 값으로 저장한다.
     private int expireOverdueReservations(Long jobPostId, LocalDateTime now) {
-        List<Long> overdueIds = reservationRepository.findOverdueIdsByJobPostId(jobPostId, now);
+        LocalDateTime storedNow = JobMatchingSeatReservation.toStoredTime(now);
+        List<Long> overdueIds = reservationRepository.findOverdueIdsByJobPostId(jobPostId, storedNow);
         if (overdueIds.isEmpty()) {
             return 0;
         }
-        return reservationRepository.expireByIdIn(overdueIds, now);
+        return reservationRepository.expireByIdIn(overdueIds, storedNow);
     }
 
     // 같은 키의 동일 요청은 상태와 관계없이 저장된 스냅샷을 그대로 돌려준다. 종료된 예약을 되살리거나 새로 발급하지 않는다.

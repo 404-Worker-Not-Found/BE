@@ -16,6 +16,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 
 @Getter
 @Entity
@@ -38,6 +39,10 @@ import java.time.LocalTime;
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class JobMatchingSeatReservation extends BaseEntity {
+
+    // 시각 컬럼은 DATETIME(6)이고 MySQL은 그보다 정밀한 값을 반올림해 저장한다.
+    // 저장 전에 마이크로초 미만을 절삭해 최초 응답의 메모리 값과 이후 DB에서 읽은 값을 같게 한다.
+    public static final ChronoUnit TIME_PRECISION = ChronoUnit.MICROS;
 
     @Column(nullable = false, updatable = false)
     private Long jobPostId;
@@ -135,8 +140,12 @@ public class JobMatchingSeatReservation extends BaseEntity {
         this.lockedAmount = lockedAmount;
         this.currency = currency;
         this.status = MatchingSeatReservationStatus.RESERVED;
-        this.reservedAt = reservedAt;
-        this.expiresAt = expiresAt;
+        this.reservedAt = toStoredTime(reservedAt);
+        this.expiresAt = toStoredTime(expiresAt);
+    }
+
+    public static LocalDateTime toStoredTime(LocalDateTime time) {
+        return time.truncatedTo(TIME_PRECISION);
     }
 
     public boolean isSameReservationRequest(
@@ -151,6 +160,7 @@ public class JobMatchingSeatReservation extends BaseEntity {
                 && this.workerMemberId.equals(workerMemberId);
     }
 
+    // 기한 비교에는 절삭하지 않은 현재 시각을 쓴다. expiresAt <= now이면 만료다.
     public boolean isExpiredAt(LocalDateTime now) {
         return !expiresAt.isAfter(now);
     }
@@ -159,20 +169,20 @@ public class JobMatchingSeatReservation extends BaseEntity {
         requireStatus(MatchingSeatReservationStatus.RESERVED);
         this.status = MatchingSeatReservationStatus.CONSUMED;
         this.confirmIdempotencyKey = confirmIdempotencyKey;
-        this.consumedAt = now;
+        this.consumedAt = toStoredTime(now);
     }
 
     public void release(String releaseIdempotencyKey, LocalDateTime now) {
         requireStatus(MatchingSeatReservationStatus.RESERVED);
         this.status = MatchingSeatReservationStatus.RELEASED;
         this.releaseIdempotencyKey = releaseIdempotencyKey;
-        this.releasedAt = now;
+        this.releasedAt = toStoredTime(now);
     }
 
     public void expire(LocalDateTime now) {
         requireStatus(MatchingSeatReservationStatus.RESERVED);
         this.status = MatchingSeatReservationStatus.EXPIRED;
-        this.expiredAt = now;
+        this.expiredAt = toStoredTime(now);
     }
 
     // 이미 만료로 회수된 예약의 반환 명령을 성공 처리할 때 그 명령 키만 기록한다.
