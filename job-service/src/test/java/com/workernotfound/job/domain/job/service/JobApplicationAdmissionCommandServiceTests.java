@@ -46,6 +46,13 @@ class JobApplicationAdmissionCommandServiceTests extends IntegrationTestSupport 
         assertThat(jobPost.getVersion()).isEqualTo(1L);
         assertThat(admission.getJobVersion()).isEqualTo(1L);
         assertThat(admission.getExpiresAt()).isAfter(admission.getAdmittedAt());
+        assertThat(admission.getOwnerMemberId()).isEqualTo(jobPost.getOwnerId());
+        assertThat(admission.getCategoryId()).isEqualTo(jobPost.getCategoryId());
+        assertThat(admission.getWorkDate()).isEqualTo(jobPost.getWorkDate());
+        assertThat(admission.getStartTime()).isEqualTo(jobPost.getStartTime());
+        assertThat(admission.getEndTime()).isEqualTo(jobPost.getEndTime());
+        assertThat(admission.getLatitude()).isEqualByComparingTo(jobPost.getLatitude());
+        assertThat(admission.getLongitude()).isEqualByComparingTo(jobPost.getLongitude());
     }
 
     @Test
@@ -105,6 +112,13 @@ class JobApplicationAdmissionCommandServiceTests extends IntegrationTestSupport 
                         .workerMemberId(100L)
                         .idempotencyKey("key-expired")
                         .jobVersion(jobPost.getVersion())
+                        .ownerMemberId(jobPost.getOwnerId())
+                        .categoryId(jobPost.getCategoryId())
+                        .workDate(jobPost.getWorkDate())
+                        .startTime(jobPost.getStartTime())
+                        .endTime(jobPost.getEndTime())
+                        .latitude(jobPost.getLatitude())
+                        .longitude(jobPost.getLongitude())
                         .admittedAt(LocalDateTime.now().minusMinutes(10))
                         .expiresAt(LocalDateTime.now().minusMinutes(5))
                         .build()

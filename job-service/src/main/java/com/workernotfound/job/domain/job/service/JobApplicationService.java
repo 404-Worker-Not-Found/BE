@@ -39,8 +39,7 @@ public class JobApplicationService {
             Long workerMemberId,
             String idempotencyKey
     ) {
-        JobApplicationAdmission admission = createAdmission(jobPostId, workerMemberId, idempotencyKey);
-        return ApplicationAdmissionResponse.of(admission, jobFindService.findJobPost(jobPostId));
+        return ApplicationAdmissionResponse.of(createAdmission(jobPostId, workerMemberId, idempotencyKey));
     }
 
     private JobApplicationAdmission createAdmission(Long jobPostId, Long workerMemberId, String idempotencyKey) {

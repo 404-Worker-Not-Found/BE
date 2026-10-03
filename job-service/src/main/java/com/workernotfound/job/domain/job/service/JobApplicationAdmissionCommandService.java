@@ -70,6 +70,13 @@ public class JobApplicationAdmissionCommandService {
                 .workerMemberId(workerMemberId)
                 .idempotencyKey(idempotencyKey)
                 .jobVersion(jobPost.getVersion())
+                .ownerMemberId(jobPost.getOwnerId())
+                .categoryId(jobPost.getCategoryId())
+                .workDate(jobPost.getWorkDate())
+                .startTime(jobPost.getStartTime())
+                .endTime(jobPost.getEndTime())
+                .latitude(jobPost.getLatitude())
+                .longitude(jobPost.getLongitude())
                 .admittedAt(now)
                 .expiresAt(now.plus(applicationAdmissionProperties.ttl()))
                 .build();

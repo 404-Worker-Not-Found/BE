@@ -18,6 +18,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -65,6 +66,24 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
         requestAdmission(jobPost.getId(), key, 100L)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.admissionId").value(firstId));
+    }
+
+    @Test
+    void returnsIssuedSnapshotAfterJobPostChanged() throws Exception {
+        JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now().plusHours(1));
+        String key = newKey();
+        String first = requestAdmission(jobPost.getId(), key, 100L)
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        changeJobPost(jobPost);
+
+        String second = requestAdmission(jobPost.getId(), key, 100L)
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(com.jayway.jsonpath.JsonPath.<Object>read(second, "$.data"))
+                .isEqualTo(com.jayway.jsonpath.JsonPath.<Object>read(first, "$.data"));
     }
 
     @Test
@@ -140,6 +159,15 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
                 .header("Idempotency-Key", key)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"workerMemberId\":" + workerMemberId + "}"));
+    }
+
+    // 공고 수정 API가 아직 없어 직접 값을 바꾼다. 저장 시 @Version이 올라간다.
+    private void changeJobPost(JobPost jobPost) {
+        ReflectionTestUtils.setField(jobPost, "workDate", jobPost.getWorkDate().plusDays(3));
+        ReflectionTestUtils.setField(jobPost, "startTime", LocalTime.of(13, 0));
+        ReflectionTestUtils.setField(jobPost, "latitude", new BigDecimal("35.1000000"));
+        JobPost changed = jobPostRepository.saveAndFlush(jobPost);
+        assertThat(changed.getVersion()).isEqualTo(2L);
     }
 
     private String newKey() {
