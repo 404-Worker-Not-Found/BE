@@ -157,10 +157,10 @@ public class ApplicationApplicationService {
 		}
 		return switch (responseCode) {
 			case "JOB_NOT_FOUND", "JOB-404-001" -> new BusinessException(ApplicationErrorCode.JOB_NOT_FOUND);
-			case "JOB_NOT_OPEN" -> new BusinessException(ApplicationErrorCode.JOB_NOT_OPEN);
-			case "APPLICATION_DEADLINE_PASSED" ->
+			case "JOB_NOT_OPEN", "JOB-409-001" -> new BusinessException(ApplicationErrorCode.JOB_NOT_OPEN);
+			case "APPLICATION_DEADLINE_PASSED", "JOB-409-002" ->
 				new BusinessException(ApplicationErrorCode.APPLICATION_DEADLINE_PASSED);
-			case "ADMISSION_EXPIRED" -> new BusinessException(ApplicationErrorCode.ADMISSION_EXPIRED);
+			case "ADMISSION_EXPIRED", "JOB-409-003" -> new BusinessException(ApplicationErrorCode.ADMISSION_EXPIRED);
 			default -> new BusinessException(ApplicationErrorCode.DEPENDENCY_SERVICE_UNAVAILABLE);
 		};
 	}

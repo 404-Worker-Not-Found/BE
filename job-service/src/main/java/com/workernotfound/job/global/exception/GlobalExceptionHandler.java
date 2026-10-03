@@ -1,9 +1,14 @@
 package com.workernotfound.job.global.exception;
 
+import com.workernotfound.job.domain.job.exception.JobErrorCode;
 import com.workernotfound.job.global.response.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
@@ -18,6 +23,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @lombok.extern.slf4j.Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final String IDEMPOTENCY_KEY_CONSTRAINT = "uk_job_application_admissions_idempotency_key";
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(
@@ -98,6 +105,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(
             Exception exception, HttpServletRequest request) {
+        // 트랜잭션 롤백이 끝난 HTTP 예외 처리 경계에서만 제약 위반을 비즈니스 오류 응답으로 변환한다.
+        if (hasIdempotencyKeyConstraintViolation(exception)) {
+            return error(
+                    JobErrorCode.IDEMPOTENCY_KEY_REUSED,
+                    JobErrorCode.IDEMPOTENCY_KEY_REUSED.getMessage(),
+                    request.getRequestURI(),
+                    null);
+        }
         log.error(
                 "처리하지 못한 서버 오류: type={}, origin={}",
                 exception.getClass().getName(),
@@ -107,6 +122,24 @@ public class GlobalExceptionHandler {
                 GlobalErrorCode.INTERNAL_SERVER_ERROR.getMessage(),
                 request.getRequestURI(),
                 null);
+    }
+
+    private boolean hasIdempotencyKeyConstraintViolation(Throwable exception) {
+        Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable cause = exception; cause != null && visited.add(cause); cause = cause.getCause()) {
+            if (cause instanceof ConstraintViolationException violation
+                    && isIdempotencyKeyConstraint(violation.getConstraintName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isIdempotencyKeyConstraint(String constraintName) {
+        if (constraintName == null) return false;
+        // MySQL이 반환하는 테이블명 접두사를 제거한 뒤 정확한 제약 이름만 비교한다.
+        String name = constraintName.substring(constraintName.lastIndexOf('.') + 1);
+        return IDEMPOTENCY_KEY_CONSTRAINT.equals(name);
     }
 
     private ResponseEntity<ApiResponse<Void>> error(

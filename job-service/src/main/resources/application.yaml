@@ -17,6 +17,8 @@ auth:
     secret: ${AUTH_JWT_SECRET}
 
 job:
+  application-admission:
+    ttl: ${APPLICATION_ADMISSION_TTL:5m}
   internal:
     secret: ${INTERNAL_API_SECRET}
 
