@@ -14,6 +14,7 @@ public enum JobErrorCode implements ErrorCode {
     INVALID_WORK_TIME("JOB-400-001", "종료 시간은 시작 시간보다 이후여야 합니다. 자정을 넘기는 경우 endTimeNextDay를 true로 설정하세요.", HttpStatus.BAD_REQUEST),
     INVALID_APPLICATION_DEADLINE("JOB-400-002", "지원 마감 시간이 올바르지 않습니다.", HttpStatus.BAD_REQUEST),
     INVALID_SEARCH_CONDITION("JOB-400-003", "검색 조건이 올바르지 않습니다.", HttpStatus.BAD_REQUEST),
+    INVALID_WAGE_AMOUNT("JOB-400-004", "급여 계산 금액이 허용 범위를 벗어났습니다.", HttpStatus.BAD_REQUEST),
     JOB_NOT_OPEN("JOB-409-001", "지원을 받지 않는 공고입니다.", HttpStatus.CONFLICT),
     APPLICATION_DEADLINE_PASSED("JOB-409-002", "지원 마감 시간이 지났습니다.", HttpStatus.CONFLICT),
     ADMISSION_EXPIRED("JOB-409-003", "지원 접수 승인이 만료되었습니다. 새 요청으로 다시 시도하세요.", HttpStatus.CONFLICT),
