@@ -24,7 +24,11 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    private static final String IDEMPOTENCY_KEY_CONSTRAINT = "uk_job_application_admissions_idempotency_key";
+    private static final Set<String> IDEMPOTENCY_KEY_CONSTRAINTS = Set.of(
+            "uk_job_application_admissions_idempotency_key",
+            "uk_job_matching_seat_reservations_idempotency_key",
+            "uk_job_matching_seat_reservations_confirm_key",
+            "uk_job_matching_seat_reservations_release_key");
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(
@@ -139,7 +143,7 @@ public class GlobalExceptionHandler {
         if (constraintName == null) return false;
         // MySQL이 반환하는 테이블명 접두사를 제거한 뒤 정확한 제약 이름만 비교한다.
         String name = constraintName.substring(constraintName.lastIndexOf('.') + 1);
-        return IDEMPOTENCY_KEY_CONSTRAINT.equals(name);
+        return IDEMPOTENCY_KEY_CONSTRAINTS.contains(name);
     }
 
     private ResponseEntity<ApiResponse<Void>> error(

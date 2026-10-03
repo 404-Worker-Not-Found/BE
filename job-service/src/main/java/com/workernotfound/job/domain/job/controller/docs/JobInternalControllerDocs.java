@@ -1,7 +1,9 @@
 package com.workernotfound.job.domain.job.controller.docs;
 
 import com.workernotfound.job.domain.job.dto.request.ApplicationAdmissionRequest;
+import com.workernotfound.job.domain.job.dto.request.MatchingSeatReservationRequest;
 import com.workernotfound.job.domain.job.dto.response.ApplicationAdmissionResponse;
+import com.workernotfound.job.domain.job.dto.response.MatchingSeatReservationResponse;
 import com.workernotfound.job.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -42,5 +44,33 @@ public interface JobInternalControllerDocs {
             @Positive Long jobPostId,
             @NotBlank @Size(max = 100) @Pattern(regexp = "[!-~]+") String idempotencyKey,
             @Valid ApplicationAdmissionRequest request
+    );
+
+    @Operation(
+            summary = "매칭 모집 자리 예약",
+            description = "공고가 OPEN 또는 MATCHING이고 근무 시작 전이며 남은 모집 자리가 있을 때 한 자리를 예약합니다. "
+                    + "같은 Idempotency-Key의 동일 요청은 상태와 관계없이 발급 당시 스냅샷을 그대로 반환합니다. "
+                    + "lockedAmount는 1인 예정 급여(정수 KRW)입니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "예약 성공 또는 같은 키의 기존 예약",
+                    content = @Content(schema = @Schema(implementation = MatchingSeatReservationResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청 또는 급여를 계산할 수 없는 공고", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "내부 인증 실패", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "공고 없음 (JOB-404-001)", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "멱등 키 재사용(JOB-409-004), 매칭 불가 상태(JOB-409-005), 근무 시작(JOB-409-006), "
+                            + "남은 자리 없음(JOB-409-007), 같은 매칭·지원 중복 점유(JOB-409-008)",
+                    content = @Content
+            )
+    })
+    ResponseEntity<ApiResponse<MatchingSeatReservationResponse>> reserveMatchingSeat(
+            @Positive Long jobPostId,
+            @NotBlank @Size(max = 100) @Pattern(regexp = "[!-~]+") String idempotencyKey,
+            @Valid MatchingSeatReservationRequest request
     );
 }

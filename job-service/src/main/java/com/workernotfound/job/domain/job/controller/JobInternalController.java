@@ -2,7 +2,9 @@ package com.workernotfound.job.domain.job.controller;
 
 import com.workernotfound.job.domain.job.controller.docs.JobInternalControllerDocs;
 import com.workernotfound.job.domain.job.dto.request.ApplicationAdmissionRequest;
+import com.workernotfound.job.domain.job.dto.request.MatchingSeatReservationRequest;
 import com.workernotfound.job.domain.job.dto.response.ApplicationAdmissionResponse;
+import com.workernotfound.job.domain.job.dto.response.MatchingSeatReservationResponse;
 import com.workernotfound.job.domain.job.service.JobApplicationService;
 import com.workernotfound.job.global.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,18 @@ public class JobInternalController implements JobInternalControllerDocs {
                         request.workerMemberId(),
                         idempotencyKey
                 )
+        ));
+    }
+
+    @Override
+    @PostMapping("/{jobPostId}/matching-seat-reservations")
+    public ResponseEntity<ApiResponse<MatchingSeatReservationResponse>> reserveMatchingSeat(
+            @PathVariable Long jobPostId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody MatchingSeatReservationRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                jobApplicationService.reserveMatchingSeat(jobPostId, request, idempotencyKey)
         ));
     }
 }
