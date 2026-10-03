@@ -146,9 +146,11 @@ class ChatMessageIntegrationTests extends IntegrationTestSupport {
     var empty = room(true);
     assertThat(messages.getMessages(empty.ownerIdentity(), empty.id(), null, 20).content()).isEmpty();
     mvc.perform(get(path(room)).header("Authorization", token(room.worker(), "WORKER"))
-        .param("beforeId", ids.get(1).toString()).param("size", "1"))
-        .andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].messageId").value(ids.get(0)))
-        .andExpect(jsonPath("$.data.hasNext").value(false));
+        .param("beforeId", ids.get(3).toString()).param("size", "1"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].messageId").value(ids.get(2)))
+        .andExpect(jsonPath("$.data.content[1]").doesNotExist())
+        .andExpect(jsonPath("$.data.nextBeforeId").value(ids.get(2)))
+        .andExpect(jsonPath("$.data.hasNext").value(true));
   }
 
   @Test
