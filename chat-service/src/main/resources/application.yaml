@@ -17,6 +17,8 @@ spring:
     hibernate:
       ddl-auto: validate
 chat:
+  websocket:
+    allowed-origins: ${CHAT_WEBSOCKET_ALLOWED_ORIGINS:}
   jwt:
     secret: ${AUTH_JWT_SECRET}
   events:

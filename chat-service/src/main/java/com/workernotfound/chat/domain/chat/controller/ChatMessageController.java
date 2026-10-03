@@ -30,4 +30,12 @@ public class ChatMessageController implements ChatMessageControllerDocs {
       @RequestParam(defaultValue = "20") int size) {
     return ApiResponse.success(service.getMessages(member, chatRoomId, beforeId, size));
   }
+
+  @GetMapping("/sync")
+  public ApiResponse<ChatMessageSyncResponse> getNewMessages(
+      @AuthenticationPrincipal AuthenticatedMember member, @PathVariable Long chatRoomId,
+      @RequestParam(defaultValue = "0") Long afterId,
+      @RequestParam(defaultValue = "100") int size) {
+    return ApiResponse.success(service.getNewMessages(member, chatRoomId, afterId, size));
+  }
 }
