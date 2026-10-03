@@ -56,7 +56,7 @@ class MatchingSeatReservationExpiryServiceTests extends IntegrationTestSupport {
 
         sweepAll();
 
-        LocalDateTime sweptAt = LocalDateTime.now(clock);
+        LocalDateTime sweptAt = JobMatchingSeatReservation.toStoredTime(LocalDateTime.now(clock));
         assertExpiredAt(first, sweptAt);
         assertExpiredAt(second, sweptAt);
         assertThat(reload(consumed).getStatus()).isEqualTo(MatchingSeatReservationStatus.CONSUMED);
@@ -68,7 +68,7 @@ class MatchingSeatReservationExpiryServiceTests extends IntegrationTestSupport {
         clock.fixAtNow();
         JobMatchingSeatReservation reservation = reserve(saveJob());
         clock.advance(Duration.ofMinutes(10));
-        LocalDateTime firstSweep = LocalDateTime.now(clock);
+        LocalDateTime firstSweep = JobMatchingSeatReservation.toStoredTime(LocalDateTime.now(clock));
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {

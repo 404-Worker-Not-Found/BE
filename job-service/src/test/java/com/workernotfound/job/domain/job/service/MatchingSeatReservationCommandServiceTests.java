@@ -68,7 +68,7 @@ class MatchingSeatReservationCommandServiceTests extends IntegrationTestSupport 
         // 4시간 30분 × (10,000 + 2,000)원
         assertThat(reservation.getLockedAmount()).isEqualTo(54_000L);
         assertThat(reservation.getCurrency()).isEqualTo("KRW");
-        assertThat(reservation.getReservedAt()).isEqualTo(LocalDateTime.now(clock));
+        assertThat(reservation.getReservedAt()).isEqualTo(JobMatchingSeatReservation.toStoredTime(LocalDateTime.now(clock)));
         assertThat(reservation.getExpiresAt()).isEqualTo(reservation.getReservedAt().plusMinutes(10));
     }
 
@@ -167,7 +167,7 @@ class MatchingSeatReservationCommandServiceTests extends IntegrationTestSupport 
         assertThat(next.getStatus()).isEqualTo(MatchingSeatReservationStatus.RESERVED);
         JobMatchingSeatReservation reloaded = reservationRepository.findById(expired.getId()).orElseThrow();
         assertThat(reloaded.getStatus()).isEqualTo(MatchingSeatReservationStatus.EXPIRED);
-        assertThat(reloaded.getExpiredAt()).isEqualTo(LocalDateTime.now(clock));
+        assertThat(reloaded.getExpiredAt()).isEqualTo(JobMatchingSeatReservation.toStoredTime(LocalDateTime.now(clock)));
     }
 
     @Test
