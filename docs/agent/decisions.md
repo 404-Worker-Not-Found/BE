@@ -1072,7 +1072,7 @@ Decision:
 - Walk the whole cause chain to find the Hibernate `ConstraintViolationException`, and compare the exact constraint name without its table prefix. Continue past unrelated constraints and stop safely on cycles. Preserve the original exception; unrelated integrity violations remain server errors.
 
 Reason:
-- The admission transaction locks the job post row, so concurrent requests reusing one idempotency key across different job posts are not serialized and only the unique constraint rejects them.
+- The admission transaction locks only the job post row. Concurrent requests that reuse one idempotency key across different job posts lock different rows, so they are not serialized and only the unique constraint rejects them.
 - Sequential reuse already returns `JOB-409-004`, so the concurrent case must not return a 500 for the same contract violation.
 
 Implication for agents:
