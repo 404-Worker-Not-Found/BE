@@ -104,6 +104,9 @@ public class MatchingConfirmationSaga extends BaseEntity {
 	@Column(name = "end_time")
 	private LocalTime endTime;
 
+	@Column(name = "end_time_next_day")
+	private Boolean endTimeNextDay;
+
 	@Column(name = "locked_amount", precision = 15, scale = 2)
 	private BigDecimal lockedAmount;
 
@@ -239,6 +242,7 @@ public class MatchingConfirmationSaga extends BaseEntity {
 		LocalDate workDate,
 		LocalTime startTime,
 		LocalTime endTime,
+		Boolean endTimeNextDay,
 		BigDecimal lockedAmount,
 		String currency
 	) {
@@ -246,6 +250,7 @@ public class MatchingConfirmationSaga extends BaseEntity {
 		this.workDate = workDate;
 		this.startTime = startTime;
 		this.endTime = endTime;
+		this.endTimeNextDay = endTimeNextDay;
 		this.lockedAmount = lockedAmount;
 		this.currency = currency;
 	}
@@ -289,6 +294,7 @@ public class MatchingConfirmationSaga extends BaseEntity {
 		this.workDate = null;
 		this.startTime = null;
 		this.endTime = null;
+		this.endTimeNextDay = null;
 		this.lockedAmount = null;
 		this.currency = null;
 	}

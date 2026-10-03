@@ -31,7 +31,7 @@ class MatchingConfirmationClientTests {
 			.andRespond(withSuccess(
 				"{\"success\":true,\"status\":200,\"code\":\"SUCCESS\",\"message\":\"ok\","
 					+ "\"data\":{\"reservationId\":\"seat-1\",\"jobPostId\":10,\"jobVersion\":1,\"ownerMemberId\":100,"
-					+ "\"workDate\":\"2026-09-20\",\"startTime\":\"09:00:00\",\"endTime\":\"18:00:00\","
+					+ "\"workDate\":\"2026-09-20\",\"startTime\":\"09:00:00\",\"endTime\":\"18:00:00\",\"endTimeNextDay\":false,"
 					+ "\"lockedAmount\":120000.00,\"currency\":\"KRW\","
 					+ "\"reservedAt\":\"2026-09-14T10:00:00\",\"expiresAt\":\"2026-09-14T10:05:00\"}}",
 				MediaType.APPLICATION_JSON
@@ -45,6 +45,7 @@ class MatchingConfirmationClientTests {
 
 		assertThat(response.reservationId()).isEqualTo("seat-1");
 		assertThat(response.jobVersion()).isEqualTo(1L);
+		assertThat(response.endTimeNextDay()).isFalse();
 		jobServer.verify();
 	}
 
