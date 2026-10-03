@@ -4,6 +4,7 @@ import com.workernotfound.job.domain.job.controller.docs.JobInternalControllerDo
 import com.workernotfound.job.domain.job.dto.request.ApplicationAdmissionRequest;
 import com.workernotfound.job.domain.job.dto.request.MatchingSeatReservationRequest;
 import com.workernotfound.job.domain.job.dto.response.ApplicationAdmissionResponse;
+import com.workernotfound.job.domain.job.dto.response.MatchingSeatReservationCommandResponse;
 import com.workernotfound.job.domain.job.dto.response.MatchingSeatReservationResponse;
 import com.workernotfound.job.domain.job.service.JobApplicationService;
 import com.workernotfound.job.global.response.ApiResponse;
@@ -43,6 +44,30 @@ public class JobInternalController implements JobInternalControllerDocs {
     ) {
         return ResponseEntity.ok(ApiResponse.success(
                 jobApplicationService.reserveMatchingSeat(jobPostId, request, idempotencyKey)
+        ));
+    }
+
+    @Override
+    @PostMapping("/{jobPostId}/matching-seat-reservations/{reservationId}/confirm")
+    public ResponseEntity<ApiResponse<MatchingSeatReservationCommandResponse>> confirmMatchingSeat(
+            @PathVariable Long jobPostId,
+            @PathVariable Long reservationId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                jobApplicationService.confirmMatchingSeat(jobPostId, reservationId, idempotencyKey)
+        ));
+    }
+
+    @Override
+    @PostMapping("/{jobPostId}/matching-seat-reservations/{reservationId}/release")
+    public ResponseEntity<ApiResponse<MatchingSeatReservationCommandResponse>> releaseMatchingSeat(
+            @PathVariable Long jobPostId,
+            @PathVariable Long reservationId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                jobApplicationService.releaseMatchingSeat(jobPostId, reservationId, idempotencyKey)
         ));
     }
 }

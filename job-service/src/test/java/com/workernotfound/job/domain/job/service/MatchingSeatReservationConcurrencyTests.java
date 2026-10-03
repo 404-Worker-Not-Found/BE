@@ -82,6 +82,20 @@ class MatchingSeatReservationConcurrencyTests extends IntegrationTestSupport {
                 EnumSet.allOf(MatchingSeatReservationStatus.class))).isOne();
     }
 
+    // 만료 회수를 범위 UPDATE로 하면 빈 공고끼리 같은 gap을 잠가 INSERT가 교착된다. 회귀를 막는다.
+    @Test
+    void concurrentReservationsForDifferentJobsDoNotDeadlock() throws Exception {
+        List<JobPost> jobPosts = new ArrayList<>();
+        for (int index = 0; index < REQUESTS; index++) {
+            jobPosts.add(jobPostRepository.save(JobPostFixture.jobPost().build()));
+        }
+
+        List<Object> results = runConcurrently(index -> () ->
+                service.reserve(jobPosts.get(index).getId(), 90_000L + index, 95_000L + index, 100L, newKey()));
+
+        assertThat(results).allMatch(JobMatchingSeatReservation.class::isInstance);
+    }
+
     private List<Object> runConcurrently(java.util.function.IntFunction<Callable<Object>> task) throws Exception {
         CountDownLatch ready = new CountDownLatch(REQUESTS);
         CountDownLatch start = new CountDownLatch(1);

@@ -11,6 +11,7 @@ import com.workernotfound.job.global.exception.BusinessException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -58,7 +59,7 @@ public class MatchingSeatReservationCommandService {
         LocalDateTime now = LocalDateTime.now(clock);
         validateMatchable(jobPost, now);
         // 스케줄러가 늦어도 만료된 예약이 새 예약을 막지 않도록 같은 잠금 안에서 먼저 회수한다.
-        reservationRepository.expireOverdueByJobPostId(jobPostId, now);
+        expireOverdueReservations(jobPostId, now);
         validateNotHeld(jobPostId, matchingId, applicationId);
         validateSeatAvailable(jobPost);
 
@@ -82,9 +83,55 @@ public class MatchingSeatReservationCommandService {
     }
 
     @Transactional
+    public JobMatchingSeatReservation confirm(Long jobPostId, Long reservationId, String idempotencyKey) {
+        lockJobPost(jobPostId);
+        validateCommandKeyOwner(reservationRepository.findByConfirmIdempotencyKey(idempotencyKey), reservationId);
+        JobMatchingSeatReservation reservation = lockReservation(jobPostId, reservationId);
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        switch (reservation.getStatus()) {
+            // 확정 응답이 유실된 재요청이다. 원래 만료 시각이 지났어도 이미 소비된 자리이므로 거절하지 않는다.
+            case CONSUMED -> requireRecordedKey(reservation.getConfirmIdempotencyKey(), idempotencyKey);
+            case RESERVED -> consumeUnexpired(reservation, idempotencyKey, now);
+            case EXPIRED -> throw new BusinessException(JobErrorCode.SEAT_RESERVATION_EXPIRED);
+            case RELEASED -> throw new BusinessException(
+                    JobErrorCode.SEAT_RESERVATION_STATE_CONFLICT, "반환된 모집 자리 예약은 확정할 수 없습니다.");
+        }
+        return reservation;
+    }
+
+    @Transactional
+    public JobMatchingSeatReservation release(Long jobPostId, Long reservationId, String idempotencyKey) {
+        lockJobPost(jobPostId);
+        validateCommandKeyOwner(reservationRepository.findByReleaseIdempotencyKey(idempotencyKey), reservationId);
+        JobMatchingSeatReservation reservation = lockReservation(jobPostId, reservationId);
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        switch (reservation.getStatus()) {
+            case RESERVED -> releaseReserved(reservation, idempotencyKey, now);
+            case RELEASED -> requireRecordedKey(reservation.getReleaseIdempotencyKey(), idempotencyKey);
+            // 만료로 이미 자리가 회수되었으므로 반환 목적은 달성됐다. 처음 들어온 반환 키만 기록한다.
+            case EXPIRED -> recordReleaseOfExpired(reservation, idempotencyKey);
+            case CONSUMED -> throw new BusinessException(
+                    JobErrorCode.SEAT_RESERVATION_STATE_CONFLICT, "확정된 모집 자리 예약은 반환할 수 없습니다.");
+        }
+        return reservation;
+    }
+
+    @Transactional
     public int expireOverdue(Long jobPostId) {
         lockJobPost(jobPostId);
-        return reservationRepository.expireOverdueByJobPostId(jobPostId, LocalDateTime.now(clock));
+        return expireOverdueReservations(jobPostId, LocalDateTime.now(clock));
+    }
+
+    // 범위 조건 UPDATE는 보조 인덱스 gap 잠금을 잡아 다른 공고의 예약 INSERT와 교착될 수 있다.
+    // 공고 행 잠금 아래에서 대상 ID를 비잠금 조회한 뒤 기본 키로만 갱신한다.
+    private int expireOverdueReservations(Long jobPostId, LocalDateTime now) {
+        List<Long> overdueIds = reservationRepository.findOverdueIdsByJobPostId(jobPostId, now);
+        if (overdueIds.isEmpty()) {
+            return 0;
+        }
+        return reservationRepository.expireByIdIn(overdueIds, now);
     }
 
     // 같은 키의 동일 요청은 상태와 관계없이 저장된 스냅샷을 그대로 돌려준다. 종료된 예약을 되살리거나 새로 발급하지 않는다.
@@ -99,6 +146,51 @@ public class MatchingSeatReservationCommandService {
             throw new BusinessException(JobErrorCode.IDEMPOTENCY_KEY_REUSED);
         }
         return reservation;
+    }
+
+    private void consumeUnexpired(JobMatchingSeatReservation reservation, String idempotencyKey, LocalDateTime now) {
+        if (reservation.isExpiredAt(now)) {
+            throw new BusinessException(JobErrorCode.SEAT_RESERVATION_EXPIRED);
+        }
+        reservation.consume(idempotencyKey, now);
+    }
+
+    private void releaseReserved(JobMatchingSeatReservation reservation, String idempotencyKey, LocalDateTime now) {
+        if (reservation.isExpiredAt(now)) {
+            reservation.expire(now);
+            reservation.recordReleaseOfExpired(idempotencyKey);
+            return;
+        }
+        reservation.release(idempotencyKey, now);
+    }
+
+    private void recordReleaseOfExpired(JobMatchingSeatReservation reservation, String idempotencyKey) {
+        if (reservation.getReleaseIdempotencyKey() == null) {
+            reservation.recordReleaseOfExpired(idempotencyKey);
+            return;
+        }
+        requireRecordedKey(reservation.getReleaseIdempotencyKey(), idempotencyKey);
+    }
+
+    // 같은 키가 다른 예약의 확정·반환에 이미 쓰였으면 멱등 키 재사용이다.
+    private void validateCommandKeyOwner(Optional<JobMatchingSeatReservation> keyOwner, Long reservationId) {
+        if (keyOwner.isPresent() && !keyOwner.get().getId().equals(reservationId)) {
+            throw new BusinessException(JobErrorCode.IDEMPOTENCY_KEY_REUSED);
+        }
+    }
+
+    // 이미 처리된 예약에 다른 키가 오면 저장된 키를 덮어쓰지 않고 거절한다. 원래 명령의 재시도만 성공한다.
+    private void requireRecordedKey(String recordedKey, String idempotencyKey) {
+        if (!idempotencyKey.equals(recordedKey)) {
+            throw new BusinessException(
+                    JobErrorCode.SEAT_RESERVATION_STATE_CONFLICT, "이미 다른 명령으로 처리된 모집 자리 예약입니다.");
+        }
+    }
+
+    private JobMatchingSeatReservation lockReservation(Long jobPostId, Long reservationId) {
+        return reservationRepository.findByIdForUpdate(reservationId)
+                .filter(reservation -> reservation.getJobPostId().equals(jobPostId))
+                .orElseThrow(() -> new BusinessException(JobErrorCode.SEAT_RESERVATION_NOT_FOUND));
     }
 
     private void validateMatchable(JobPost jobPost, LocalDateTime now) {

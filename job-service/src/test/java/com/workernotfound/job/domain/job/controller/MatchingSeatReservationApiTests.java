@@ -77,6 +77,46 @@ class MatchingSeatReservationApiTests extends IntegrationTestSupport {
     }
 
     @Test
+    void confirmsAndReleasesThroughInternalApi() throws Exception {
+        JobPost jobPost = jobPostRepository.save(JobPostFixture.jobPost().recruitCount(2).build());
+        String confirmed = reservationId(reserve(jobPost.getId(), newKey(), body(16L, 26L, 100L)));
+        String released = reservationId(reserve(jobPost.getId(), newKey(), body(17L, 27L, 101L)));
+        String confirmKey = newKey();
+
+        command(jobPost.getId(), confirmed, "confirm", confirmKey)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reservationId").value(confirmed))
+                .andExpect(jsonPath("$.data.status").value("CONSUMED"));
+        command(jobPost.getId(), confirmed, "confirm", confirmKey)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CONSUMED"));
+        command(jobPost.getId(), released, "release", newKey())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("RELEASED"));
+        command(jobPost.getId(), confirmed, "release", newKey())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("JOB-409-010"));
+        command(jobPost.getId(), released, "confirm", confirmKey)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("JOB-409-004"));
+        command(jobPost.getId(), "999999999", "release", newKey())
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("JOB-404-003"));
+    }
+
+    @Test
+    void commandEndpointsRequireSecretAndKey() throws Exception {
+        mockMvc.perform(post("/api/jobs/internal/1/matching-seat-reservations/1/confirm")
+                        .header("Idempotency-Key", newKey()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/jobs/internal/1/matching-seat-reservations/1/release")
+                        .header("X-Internal-Secret", INTERNAL_SECRET))
+                .andExpect(status().isBadRequest());
+        command(1L, "not-a-number", "confirm", newKey())
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void requiresInternalSecret() throws Exception {
         mockMvc.perform(post("/api/jobs/internal/{jobPostId}/matching-seat-reservations", 1L)
                         .header("Idempotency-Key", newKey())
@@ -109,6 +149,18 @@ class MatchingSeatReservationApiTests extends IntegrationTestSupport {
                 .header("Idempotency-Key", key)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body));
+    }
+
+    private ResultActions command(Long jobPostId, String reservationId, String command, String key) throws Exception {
+        return mockMvc.perform(post("/api/jobs/internal/{jobPostId}/matching-seat-reservations/{reservationId}/"
+                        + command, jobPostId, reservationId)
+                .header("X-Internal-Secret", INTERNAL_SECRET)
+                .header("Idempotency-Key", key));
+    }
+
+    private String reservationId(ResultActions result) throws Exception {
+        String content = result.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        return com.jayway.jsonpath.JsonPath.read(content, "$.data.reservationId");
     }
 
     private String body(Long matchingId, Long applicationId, Long workerMemberId) {

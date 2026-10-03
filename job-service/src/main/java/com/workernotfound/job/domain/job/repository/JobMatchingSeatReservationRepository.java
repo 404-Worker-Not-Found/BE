@@ -41,18 +41,27 @@ public interface JobMatchingSeatReservationRepository extends JpaRepository<JobM
             @Param("applicationId") Long applicationId
     );
 
-    // 공고 행 잠금을 잡은 트랜잭션에서만 호출한다. 이미 회수된 예약은 상태 조건으로 제외되어 중복 회수하지 않는다.
+    @Query("""
+            select r.id from JobMatchingSeatReservation r
+            where r.jobPostId = :jobPostId
+              and r.status = com.workernotfound.job.domain.job.entity.enums.MatchingSeatReservationStatus.RESERVED
+              and r.expiresAt <= :now
+            """)
+    List<Long> findOverdueIdsByJobPostId(@Param("jobPostId") Long jobPostId, @Param("now") LocalDateTime now);
+
+    // 공고 행 잠금을 잡은 트랜잭션에서만 호출한다. 기본 키로만 갱신해 보조 인덱스 범위(gap) 잠금을 만들지 않는다.
+    // 상태 조건이 있어 이미 회수·확정된 예약은 다시 바꾸지 않는다.
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             update JobMatchingSeatReservation r
             set r.status = com.workernotfound.job.domain.job.entity.enums.MatchingSeatReservationStatus.EXPIRED,
                 r.expiredAt = :now,
                 r.updatedAt = :now
-            where r.jobPostId = :jobPostId
+            where r.id in :ids
               and r.status = com.workernotfound.job.domain.job.entity.enums.MatchingSeatReservationStatus.RESERVED
               and r.expiresAt <= :now
             """)
-    int expireOverdueByJobPostId(@Param("jobPostId") Long jobPostId, @Param("now") LocalDateTime now);
+    int expireByIdIn(@Param("ids") Collection<Long> ids, @Param("now") LocalDateTime now);
 
     @Query("""
             select distinct r.jobPostId from JobMatchingSeatReservation r
