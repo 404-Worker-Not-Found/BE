@@ -1,6 +1,7 @@
 package com.workernotfound.work.domain.work.service;
 
 import com.workernotfound.work.domain.work.dto.request.CheckInRequest;
+import com.workernotfound.work.domain.outbox.WorkEventRecorder;
 import com.workernotfound.work.domain.work.dto.response.*;
 import com.workernotfound.work.domain.work.entity.Work;
 import com.workernotfound.work.domain.work.exception.WorkErrorCode;
@@ -23,6 +24,7 @@ public class WorkAttendanceService {
   private final AttendancePolicy policy;
   private final AttendanceProperties properties;
   private final Clock clock;
+  private final WorkEventRecorder events;
 
   @Transactional
   public WorkResponse checkIn(AuthenticatedMember member, Long workId, CheckInRequest request) {
@@ -33,6 +35,7 @@ public class WorkAttendanceService {
     String previous = work.getStatus().name();
     work.checkIn(now, decision.distanceMeters(), decision.policy());
     history.record(workId, previous, work.getStatus().name(), member.memberId(), now);
+    events.record(work, member.memberId(), now);
     return WorkResponse.from(work);
   }
 
@@ -45,6 +48,7 @@ public class WorkAttendanceService {
     String previous = work.getStatus().name();
     work.start(now);
     history.record(workId, previous, work.getStatus().name(), member.memberId(), now);
+    events.record(work, member.memberId(), now);
     return WorkResponse.from(work);
   }
 
@@ -57,6 +61,7 @@ public class WorkAttendanceService {
     String previous = work.getStatus().name();
     work.complete(now);
     history.record(workId, previous, work.getStatus().name(), member.memberId(), now);
+    events.record(work, member.memberId(), now);
     return WorkResponse.from(work);
   }
 

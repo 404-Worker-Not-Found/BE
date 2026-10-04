@@ -26,6 +26,7 @@ public abstract class IntegrationTestSupport {
     registry.add("spring.data.redis.host", REDIS::getHost);
     registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
     registry.add("work.jwt.secret", () -> "work-test-jwt-secret-for-integration-only");
+    registry.add("work.outbox.enabled", () -> "false");
     registry.add("work.events.initial-delay-ms", () -> "3600000");
     registry.add("work.internal.secret", () -> "work-test-internal-secret");
   }

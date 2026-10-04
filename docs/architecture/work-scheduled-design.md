@@ -28,7 +28,7 @@
 
 ## 상태와 후속 작업
 
-상태 이름은 `SCHEDULED`, `CHECKED_IN`, `IN_PROGRESS`, `COMPLETED`, `CANCELED`, `FAILED`, `NO_SHOW`다. 근무 상태 전이는 `SCHEDULED -> CHECKED_IN -> IN_PROGRESS -> COMPLETED`와 미확정 근무의 `SCHEDULED -> CANCELED` 보상을 처리한다. 매칭 확정은 상태 전이와 별개로 `confirmed_at`과 `confirmation_revision`에 기록한다. 노쇼 처리, 사용자 취소, 근무 알림 이벤트와 정산은 후속 작업이다. 현재 완료 API는 결제 해제나 정산을 호출하지 않는다.
+상태 이름은 `SCHEDULED`, `CHECKED_IN`, `IN_PROGRESS`, `COMPLETED`, `CANCELED`, `FAILED`, `NO_SHOW`다. 근무 상태 전이는 `SCHEDULED -> CHECKED_IN -> IN_PROGRESS -> COMPLETED`와 미확정 근무의 `SCHEDULED -> CANCELED` 보상을 처리한다. 매칭 확정은 상태 전이와 별개로 `confirmed_at`과 `confirmation_revision`에 기록한다. 노쇼 처리, 사용자 취소, 근무 이벤트의 후속 소비자 연결과 정산은 후속 작업이다. 현재 완료 API는 결제 해제나 정산을 호출하지 않는다.
 
 자정을 넘는 근무도 일정 스냅샷으로 보관한다. 생성 요청의 `endTimeNextDay`는 선택이다. 없거나 null이면 요청 역직렬화 시점에 시각으로 채운다(종료 시각이 시작 시각 이하이면 true). 이 필드가 없던 이전 형식의 재시도가 저장된 명령을 조회하기 전에 400으로 거절되면, matching Saga가 확정적 실패로 보고 보상하면서 이미 만든 근무를 취소하지 못하기 때문이다. 명시적으로 전달한 값은 같은 규칙과 일치해야 하며 어긋나면 400이다. 시작·종료 시각이 없으면 채우지 않고 Bean Validation이 400으로 거절한다. `works.end_time_next_day`(V3)에 저장하고 본인 근무 조회 응답에 포함한다. V3 이전 행은 `end_time <= start_time`으로 채웠다. 익일 여부가 시각으로 결정되므로 생성 명령 지문은 필드 추가 전 형식을 그대로 유지한다. 따라서 이전 형식 요청, 같은 의미의 명시 요청, null 요청은 같은 키에서 같은 `workId`를 반환하고, 이전 버전이 저장한 명령의 재시도도 충돌하지 않는다. `MatchConfirmed` v1 이벤트는 바꾸지 않았으며, 일정 의미가 필요한 소비자는 같은 규칙으로 익일 여부를 판단한다. 과거 날짜를 일괄 거부하면 복구 명령이 실패할 수 있으므로 현재 시각에 따른 만료 조건을 추가하지 않는다.
 
@@ -83,3 +83,28 @@
 | `WORK_ALLOW_EARLY_COMPLETION` | `false` | 예정 종료 전 완료 허용 여부 |
 
 설정은 애플리케이션 시작 때 적용된다. 반경·허용 시간·완료 주체 변경에는 코드 수정이 필요 없다. 판정 방식 자체가 바뀌면 `AttendancePolicy`를 구현한 Bean을 등록하고 `WORK_ATTENDANCE_POLICY_TYPE=custom`으로 기본 GPS Bean을 끈다. 이렇게 명시적으로 선택해 설정 클래스의 로딩 순서에 영향받지 않는다. custom 설정에 대응하는 Bean이 없으면 애플리케이션 시작이 실패하므로 정책이 조용히 기본값으로 돌아가지 않는다. 역할별 본인 근무 검증, 상태 전이, 잠금, 이력 원자성은 서비스에 남기고 정책에는 거리·시간 판정과 완료 역할·공개 설정만 둔다. 클라이언트는 정책 조회 응답을 사용해 화면의 안내를 맞춘다.
+
+
+## 근무 상태 이벤트와 Outbox
+
+출근·시작·완료 시 근무 상태, 참여자 이력, `work_outbox`를 같은 DB 트랜잭션으로 저장한다. 저장 실패는 상태까지 롤백한다. HTTP 성공은 Redis 전송 완료를 의미하지 않는다. 동일 단계 재요청에는 새 이벤트를 만들지 않는다.
+
+| 이벤트 | 상태 | 근무별 revision |
+| --- | --- | --- |
+| `WorkCheckedIn` | `CHECKED_IN` | 1 |
+| `WorkStarted` | `IN_PROGRESS` | 2 |
+| `WorkCompleted` | `COMPLETED` | 3 |
+
+현재 상태 머신은 각 단계를 한 번만 통과하므로 revision을 위처럼 고정하며 `(work_id, revision)`을 유일하게 제한한다. 재개·재출근 같은 역전이가 추가되면 revision 정책도 확장해야 한다. 기존 완료/출근 행을 마이그레이션 시 추정하여 발행하지 않는다.
+
+- Stream 기본값은 `work:domain-events`다. matching 이벤트 Stream과 분리한다.
+- envelope: `eventId`, `aggregateType=WORK`, `aggregateId=workId`, `eventType`, `revision`, `version=1`, `occurredAt`, `payload`.
+- JSON payload: 위 공통 필드 중 aggregateType을 제외한 필드와 `workId`, `matchingId`, `jobPostId`, `ownerMemberId`, `workerMemberId`, `actorMemberId`, `status`, `workDate`, `startTime`, `endTime`, `endTimeNextDay`. payload 안에는 payload 필드 자체가 없다.
+- 시각은 `work.attendance.time-zone`에 따른 ISO 로컬 시각이다. envelope와 payload의 발생 시각은 같은 값이다. 근무 일정과 함께 해석한다.
+- GPS 원본, 결제 ID, 토큰, 인증 정보는 이벤트에 넣지 않는다. `WorkCompleted`는 완료 사실이며 지급 성공이나 정산 명령을 의미하지 않는다.
+
+Relay는 발행 후보를 최대 100개 조회하고 각 이벤트에 30초 임대 토큰을 조건부 갱신해 발행권을 얻는다. DB 임대 트랜잭션을 커밋한 다음 Redis에 발행한다. 성공·실패 갱신에도 같은 토큰을 요구하므로 만료된 작업자가 새 작업자의 결과를 덮어쓰지 않는다. 프로세스 중단 시 임대 만료 후 다시 선택한다. 실패 시 1초부터 지수 증가하여 최대 5분 뒤 재시도한다. DB 장애로 실패 기록도 저장되지 않으면 임대 만료가 복구 경로다.
+
+Redis 전송 뒤 DB 성공 표시 전에 중단되면 동일 이벤트가 두 번 발행될 수 있다. 소비자는 Stream ID 대신 `eventId`로 중복을 제거하고 envelope와 payload의 ID·타입·버전·revision을 검증해야 한다. 여러 relay 인스턴스의 발행 순서는 보장하지 않으므로 상태 프로젝션은 근무별 revision으로 역전을 차단한다. 각 이력이 필요한 소비자는 낮은 revision을 무조건 버리지 말고 eventId별 저장으로 처리한다.
+
+`WORK_OUTBOX_ENABLED=false`는 relay만 멈추고 이벤트 저장은 계속한다. `WORK_OUTBOX_STREAM_KEY`로 발행 Stream을 지정한다. `work.outbox.batch-size`, `lease-duration`, `retry-base-delay`, `retry-max-delay`, `poll-delay-ms`, `initial-delay-ms`는 Spring 설정으로 조정할 수 있다. 실패 로그에는 이벤트 ID와 예외 타입만 남긴다. Outbox와 Stream은 자동 삭제/trim하지 않는다. 후속 알림·이력·정산 소비자는 아직 이 Stream에 연결하지 않았다.
