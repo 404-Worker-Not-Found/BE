@@ -74,6 +74,7 @@
 
 | 환경 변수 | 기본값 | 의미 |
 | --- | --- | --- |
+| `WORK_ATTENDANCE_POLICY_TYPE` | `gps` | 기본 GPS 정책 선택. 별도 Bean을 등록할 때 `custom`으로 설정 |
 | `WORK_CHECK_IN_RADIUS_METERS` | `100` | 유한한 양수 미터 반경 |
 | `WORK_CHECK_IN_EARLY_WINDOW` | `30m` | 시작 전 출근 허용 시간 |
 | `WORK_CHECK_IN_LATE_WINDOW` | `30m` | 시작 후 출근 허용 시간 |
@@ -81,4 +82,4 @@
 | `WORK_COMPLETION_ROLE` | `OWNER` | 완료 확인 역할, `OWNER` 또는 `WORKER` |
 | `WORK_ALLOW_EARLY_COMPLETION` | `false` | 예정 종료 전 완료 허용 여부 |
 
-설정은 애플리케이션 시작 때 적용된다. 반경·허용 시간·완료 주체 변경에는 코드 수정이 필요 없다. 판정 방식 자체가 바뀌면 `AttendancePolicy`를 구현한 Bean으로 기본 GPS 정책을 교체한다. 역할별 본인 근무 검증, 상태 전이, 잠금, 이력 원자성은 서비스에 남기고 정책에는 거리·시간 판정과 완료 역할·공개 설정만 둔다. 클라이언트는 정책 조회 응답을 사용해 화면의 안내를 맞춘다.
+설정은 애플리케이션 시작 때 적용된다. 반경·허용 시간·완료 주체 변경에는 코드 수정이 필요 없다. 판정 방식 자체가 바뀌면 `AttendancePolicy`를 구현한 Bean을 등록하고 `WORK_ATTENDANCE_POLICY_TYPE=custom`으로 기본 GPS Bean을 끈다. 이렇게 명시적으로 선택해 설정 클래스의 로딩 순서에 영향받지 않는다. custom 설정에 대응하는 Bean이 없으면 애플리케이션 시작이 실패하므로 정책이 조용히 기본값으로 돌아가지 않는다. 역할별 본인 근무 검증, 상태 전이, 잠금, 이력 원자성은 서비스에 남기고 정책에는 거리·시간 판정과 완료 역할·공개 설정만 둔다. 클라이언트는 정책 조회 응답을 사용해 화면의 안내를 맞춘다.

@@ -18,6 +18,7 @@ spring:
       ddl-auto: validate
 work:
   attendance:
+    policy-type: ${WORK_ATTENDANCE_POLICY_TYPE:gps}
     radius-meters: ${WORK_CHECK_IN_RADIUS_METERS:100}
     early-window: ${WORK_CHECK_IN_EARLY_WINDOW:30m}
     late-window: ${WORK_CHECK_IN_LATE_WINDOW:30m}

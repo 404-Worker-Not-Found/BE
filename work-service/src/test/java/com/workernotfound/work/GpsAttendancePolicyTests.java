@@ -45,8 +45,10 @@ class GpsAttendancePolicyTests {
 
   @Test
   void customPolicyBeanReplacesGpsPolicy() {
-    new ApplicationContextRunner().withUserConfiguration(CustomPolicy.class, AttendanceConfiguration.class)
-        .withPropertyValues("work.attendance.radius-meters=100", "work.attendance.early-window=30m",
+    for (Class<?>[] configurations : new Class<?>[][] {
+        {AttendanceConfiguration.class, CustomPolicy.class}, {CustomPolicy.class, AttendanceConfiguration.class}}) {
+    new ApplicationContextRunner().withUserConfiguration(configurations)
+        .withPropertyValues("work.attendance.policy-type=custom", "work.attendance.radius-meters=100", "work.attendance.early-window=30m",
             "work.attendance.late-window=30m", "work.attendance.time-zone=Asia/Seoul",
             "work.attendance.completion-role=OWNER")
         .run(context -> {
@@ -54,6 +56,7 @@ class GpsAttendancePolicyTests {
           assertThat(context.getBean(AttendancePolicy.class)).isSameAs(context.getBean("customPolicy"));
           assertThat(context.getBean(Clock.class).getZone()).isEqualTo(ZoneId.of("Asia/Seoul"));
         });
+    }
   }
 
   private GpsAttendancePolicy policy(double radius, int earlyMinutes, int lateMinutes, boolean earlyCompletion) {
