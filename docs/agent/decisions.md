@@ -846,7 +846,7 @@ Implication for agents:
 - Do not infer recruitment completion from local application counts or reject other applicants after every single confirmation.
 - Keep the current REST endpoint as an adapter for the semantic `RecruitmentCompleted` contract; a later broker integration must preserve its idempotency and retry behavior.
 - Include the source `jobVersion` in the completion contract so reopen cycles are distinguishable.
-- Do not implement the producer inside `job-service` unless work in the job domain is explicitly in scope.
+- Superseded by "2026-10-04 - Recruitment Completion Producer": the producer is now implemented in `job-service`. Previously: do not implement the producer inside `job-service` unless work in the job domain is explicitly in scope.
 
 ## 2026-09-14 - Matching Domain Event Transport
 
@@ -1124,7 +1124,8 @@ Reason:
 
 Implication for agents:
 - Keep wage calculation in `JobWageCalculator`; do not duplicate it in payment-service. Record break-time, time-band premium, and urgency premium policies as new decisions before changing the formula.
-- Do not treat seat reservation or confirmation as recruitment completion; job status transition and the completion notification remain separate work.
+- Do not treat a seat reservation as recruitment completion.
+- Superseded by "2026-10-04 - Recruitment Completion Producer": the confirmation that consumes the last seat now closes the job and stores the completion command in the same transaction. Previously: seat confirmation was not recruitment completion, and the job status transition and completion notification were separate work.
 
 Related files:
 - `docs/architecture/job-post-design.md`
