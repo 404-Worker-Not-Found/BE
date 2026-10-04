@@ -27,6 +27,8 @@ import org.springframework.stereotype.Service;
 public class RecruitmentCompletionDispatcher {
 
     private static final int MAX_BACKOFF_EXPONENT = 20;
+    // 제한시간 초과 후 교환 취소와 결과 기록 트랜잭션에 쓰는 최소 여유
+    static final Duration LEASE_MARGIN = Duration.ofSeconds(1);
 
     private final RecruitmentCompletionCommandRepository commandRepository;
     private final RecruitmentCompletionCommandTransactionService transactionService;
@@ -145,14 +147,17 @@ public class RecruitmentCompletionDispatcher {
         return RecruitmentCompletionCommand.toStoredTime(LocalDateTime.now(clock));
     }
 
-    // 실행권이 HTTP 응답 대기 중에 만료되면 다른 실행자가 같은 명령을 동시에 보낼 수 있다. 연결·응답 타임아웃 합보다 길게 둔다.
+    // 실행권은 HTTP 호출 전체 제한시간(초과 시 교환을 취소해 연결을 닫음)에 취소·결과 기록 여유를 더한 값 이상이어야 한다.
+    // 그래야 호출이 진행 중인 동안 실행권이 만료되어 다른 실행자가 같은 명령을 동시에 보내는 일이 없다.
     private static void validateLeaseCoversHttpCall(
             RecruitmentCompletionDispatchProperties properties,
             Duration maxCallDuration
     ) {
-        if (properties.leaseDuration().compareTo(maxCallDuration) <= 0) {
+        Duration required = maxCallDuration.plus(LEASE_MARGIN);
+        if (properties.leaseDuration().compareTo(required) < 0) {
             throw new IllegalArgumentException(
-                    "job.recruitment-completion.lease-duration은 matching-service 연결·응답 타임아웃 합보다 길어야 합니다.");
+                    "job.recruitment-completion.lease-duration은 matching-service 전체 호출 제한시간(call-timeout)보다 "
+                            + LEASE_MARGIN.toMillis() + "ms 이상 길어야 합니다.");
         }
     }
 }

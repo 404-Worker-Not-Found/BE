@@ -191,6 +191,29 @@ class RecruitmentCompletionDispatchTests extends IntegrationTestSupport {
     }
 
     @Test
+    void timesOutSlowBodyWithinCallTimeoutAndRetriesSameCommandOnlyAfterNextAttempt() throws Exception {
+        RecruitmentCompletionCommand command = closeJob();
+        // 200 헤더 뒤 본문이 읽기 간격 제한보다 짧은 간격으로 끝없이 도착한다. 상대가 처리했는지는 알 수 없다.
+        SERVER.enqueue(StubResponse.drippingBody(Duration.ofMillis(50)));
+
+        long start = System.nanoTime();
+        dispatchAndAssertFailure(command, RecruitmentCompletionFailureType.TIMEOUT, null, null);
+        Duration elapsed = Duration.ofNanos(System.nanoTime() - start);
+
+        assertThat(elapsed).isLessThan(CALL_TIMEOUT.plusSeconds(1));
+        awaitDripClosedByClient();
+        RecruitmentCompletionCommand failed = reload(command);
+        assertThat(Duration.between(failed.getLastAttemptedAt(), failed.getNextAttemptAt())).isEqualTo(BASE_DELAY);
+        assertThat(dispatcher.dispatch(command.getId())).isFalse();
+        assertThat(SERVER.requests()).hasSize(1);
+
+        advancePastNextAttempt(command);
+        assertThat(dispatcher.dispatch(command.getId())).isTrue();
+        assertThat(reload(command).getStatus()).isEqualTo(RecruitmentCompletionCommandStatus.SUCCEEDED);
+        assertAllRequestsCarry(command, 2);
+    }
+
+    @Test
     void doesNotCallAgainBeforeNextAttemptTime() {
         RecruitmentCompletionCommand command = closeJob();
         SERVER.enqueue(StubResponse.sagaInProgress());
@@ -364,6 +387,13 @@ class RecruitmentCompletionDispatchTests extends IntegrationTestSupport {
         assertThat(failed.getStatus()).isEqualTo(RecruitmentCompletionCommandStatus.PENDING);
         assertThat(failed.getJobVersion()).isEqualTo(command.getJobVersion());
         assertThat(failed.getCommandId()).isEqualTo(command.getCommandId());
+    }
+
+    private void awaitDripClosedByClient() throws InterruptedException {
+        for (int i = 0; i < 50 && SERVER.clientClosedDrips() == 0; i++) {
+            Thread.sleep(20);
+        }
+        assertThat(SERVER.clientClosedDrips()).isOne();
     }
 
     private void dispatchAndAssertFailure(

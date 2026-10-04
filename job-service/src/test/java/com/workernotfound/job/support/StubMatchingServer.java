@@ -15,6 +15,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /**
@@ -28,7 +29,11 @@ public class StubMatchingServer implements AutoCloseable {
     private final HttpServer server;
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final List<RecordedRequest> requests = new CopyOnWriteArrayList<>();
+    private static final long DRIP_CONTENT_LENGTH = 100_000;
+    private static final Duration MAX_DRIP_DURATION = Duration.ofSeconds(10);
+
     private final Queue<StubResponse> responses = new ConcurrentLinkedQueue<>();
+    private final AtomicInteger clientClosedDrips = new AtomicInteger();
     private volatile StubResponse defaultResponse = StubResponse.success();
     private volatile Consumer<RecordedRequest> onRequest = request -> {
     };
@@ -72,6 +77,7 @@ public class StubMatchingServer implements AutoCloseable {
     public void reset() {
         requests.clear();
         responses.clear();
+        clientClosedDrips.set(0);
         defaultResponse = StubResponse.success();
         onRequest = request -> {
         };
@@ -105,6 +111,10 @@ public class StubMatchingServer implements AutoCloseable {
 
     private void respond(HttpExchange exchange, StubResponse response) throws IOException {
         sleep(response.delay());
+        if (response.dripInterval() != null) {
+            dripBody(exchange, response);
+            return;
+        }
         byte[] body = response.body().getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(response.status(), body.length == 0 ? -1 : body.length);
@@ -113,6 +123,28 @@ public class StubMatchingServer implements AutoCloseable {
                 output.write(body);
             }
         }
+    }
+
+    // 헤더를 보낸 뒤 본문을 한 바이트씩 계속 보낸다. 클라이언트가 연결을 닫으면 쓰기가 실패하며 끝난다.
+    private void dripBody(HttpExchange exchange, StubResponse response) throws IOException {
+        exchange.getResponseHeaders().add("Content-Type", "application/json");
+        exchange.sendResponseHeaders(response.status(), DRIP_CONTENT_LENGTH);
+        OutputStream output = exchange.getResponseBody();
+        long deadline = System.nanoTime() + MAX_DRIP_DURATION.toNanos();
+        try {
+            while (System.nanoTime() < deadline) {
+                output.write(' ');
+                output.flush();
+                sleep(response.dripInterval());
+            }
+        } catch (IOException exception) {
+            clientClosedDrips.incrementAndGet();
+        }
+    }
+
+    // 본문을 보내는 도중 클라이언트가 연결을 닫은 횟수
+    public int clientClosedDrips() {
+        return clientClosedDrips.get();
     }
 
     private static String headerOrEmpty(HttpExchange exchange, String name) {
@@ -138,7 +170,11 @@ public class StubMatchingServer implements AutoCloseable {
         }
     }
 
-    public record StubResponse(int status, String body, Duration delay) {
+    public record StubResponse(int status, String body, Duration delay, Duration dripInterval) {
+
+        public StubResponse(int status, String body, Duration delay) {
+            this(status, body, delay, null);
+        }
 
         public static StubResponse success() {
             return new StubResponse(200, """
@@ -159,7 +195,12 @@ public class StubMatchingServer implements AutoCloseable {
         }
 
         public StubResponse delayedBy(Duration duration) {
-            return new StubResponse(status, body, duration);
+            return new StubResponse(status, body, duration, dripInterval);
+        }
+
+        // 200 헤더 뒤 본문을 간격마다 한 바이트씩 끝없이 보낸다. 읽기 간격 제한으로는 끝나지 않는 응답이다.
+        public static StubResponse drippingBody(Duration interval) {
+            return new StubResponse(200, "", Duration.ZERO, interval);
         }
     }
 }
