@@ -9,6 +9,7 @@ import com.workernotfound.job.support.RawHttpStubServer.Behavior;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -115,6 +116,23 @@ class MatchingRecruitmentCompletionCallTimeoutTests {
         assertExecutorIdle();
         // JVM 전체 스레드 수는 다른 클라이언트의 생성·정리에 영향받으므로 이 클라이언트의 풀만 검사한다.
         assertThat(client.httpExecutor().getLargestPoolSize()).isBetween(1, 2);
+    }
+
+    @Test
+    void destroyTerminatesOwnedWorkersAfterRepeatedTimeouts() throws Exception {
+        server.behave(Behavior.dripBody(DRIP_INTERVAL));
+        for (int i = 0; i < 2; i++) {
+            assertTimedOutAndClosed();
+        }
+        ThreadPoolExecutor executor = client.httpExecutor();
+        assertThat(executor.getPoolSize()).isPositive();
+
+        client.destroy();
+
+        assertThat(executor.awaitTermination(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(executor.getPoolSize()).isZero();
+        assertThat(executor.getQueue()).isEmpty();
+        assertThat(server.openConnections()).isZero();
     }
 
     private void assertTimedOutAndClosed() throws InterruptedException {
