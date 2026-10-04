@@ -1,4 +1,4 @@
-package com.workernotfound.job.external.client.matching;
+package com.workernotfound.job.external.client;
 
 import java.io.ByteArrayOutputStream;
 import java.net.http.HttpResponse;
@@ -15,14 +15,14 @@ import java.util.concurrent.Flow;
  * 끝까지 받은 본문이거나 한도에서 잘린 본문뿐이며, 읽다가 끊긴 본문은 응답으로 만들어지지 않는다.
  * 본문 수신까지가 HTTP 교환의 일부이므로, 전체 호출 제한시간이 지나 교환을 취소하면 이 수신도 함께 멈춘다.
  */
-final class BoundedBodySubscriber implements HttpResponse.BodySubscriber<BoundedBodySubscriber.ReceivedBody> {
+public final class BoundedBodySubscriber implements HttpResponse.BodySubscriber<BoundedBodySubscriber.ReceivedBody> {
 
     private final int maxBytes;
     private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
     private final CompletableFuture<ReceivedBody> body = new CompletableFuture<>();
     private Flow.Subscription subscription;
 
-    BoundedBodySubscriber(int maxBytes) {
+    public BoundedBodySubscriber(int maxBytes) {
         this.maxBytes = maxBytes;
     }
 
@@ -70,6 +70,6 @@ final class BoundedBodySubscriber implements HttpResponse.BodySubscriber<Bounded
      * @param bytes       끝까지 받은 본문. 잘린 경우 비어 있다.
      * @param isTruncated 한도를 넘어 수신을 멈췄으면 true. 불완전한 본문이므로 성공 응답으로 인정하지 않는다.
      */
-    record ReceivedBody(byte[] bytes, boolean isTruncated) {
+    public record ReceivedBody(byte[] bytes, boolean isTruncated) {
     }
 }
