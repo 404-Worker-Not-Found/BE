@@ -1219,3 +1219,18 @@ Related files:
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/ExceptionTypeChain.java`
 - `job-service/src/main/java/com/workernotfound/job/global/security/InternalApiProperties.java`
 - `docs/architecture/job-post-design.md`
+
+## 2026-10-04 - Participant Text Messages
+
+Decision:
+- Permit text message sends and history reads only for JWT-authenticated participants of confirmed OPEN rooms.
+- Scope client message keys to room and sender, compare keys case-sensitively, return the original message for identical retries, and reject changed content with 409.
+- Serialize sends with the room row lock before checking duplicates and inserting. Keep a database unique constraint as a final guard and use message IDs as the descending history cursor.
+- Preserve text exactly; accept nonblank content up to 2000 UTF-16 code units and ASCII letter/digit/underscore/hyphen keys of 1–128 characters.
+
+Reason:
+- A lost response must not duplicate messages. Serializing inserts within each room keeps message-ID order consistent with commit order for pagination and later synchronization.
+
+Related files:
+- `docs/architecture/chat-room-design.md`
+- `chat-service`
