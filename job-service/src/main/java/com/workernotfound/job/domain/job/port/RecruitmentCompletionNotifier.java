@@ -12,6 +12,10 @@ public interface RecruitmentCompletionNotifier {
 
     void notifyRecruitmentCompleted(Long jobPostId, Long jobVersion, String commandId);
 
-    // 한 번의 호출이 응답을 기다릴 수 있는 최대 시간(연결·응답 타임아웃의 합)
+    /**
+     * 한 번의 호출에 실제로 강제되는 전체 제한시간. 연결 시작부터 응답 본문 수신 완료까지를 포함한다.
+     *
+     * <p>이 시간을 넘기면 교환을 취소해 연결을 닫고 {@code TIMEOUT} 실패로 알린다. 리스 길이는 이 값을 기준으로 검증한다.
+     */
     Duration maxCallDuration();
 }
