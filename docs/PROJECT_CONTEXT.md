@@ -161,7 +161,7 @@ Implemented:
 - `job-service`: job posting service
 - `matching-service`: application and matching service
 - `work-service`: scheduled work and Saga compensation service
-- `chat-service`: internal chat room creation and Saga compensation, matching-confirmation consumption, and participant room queries
+- `chat-service`: internal chat room creation and Saga compensation, matching-confirmation consumption, participant room queries, and persistent text message sending/history
 - `payment-service`: deposit-backed payment lock and Saga compensation service with Toss test deposit ingestion
 
 Planned or represented in the ERD:
@@ -291,7 +291,8 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - Durable command records, per-matching locks, and a unique active matching constraint prevent duplicate rooms. Closed rooms remain as history, and late closure cannot affect a replacement room.
 - Business errors use `ChatRoomErrorCode` and `BusinessException`; unexpected runtime failures return a safe 500 rather than being classified as invalid input.
 - OPEN denotes a provisioned internal room, not proof of confirmed matching. The service consumes `MatchConfirmed` v1, records confirmation and event receipts atomically, and exposes only confirmed OPEN rooms to their JWT-authenticated owner or worker through list/detail APIs. Pending Redis events recover after failure or restart; canceled attempts cannot confirm a replacement room.
-- Message persistence, sending, real-time transport, and general user room closure remain future work.
+- Confirmed OPEN room participants can send persisted text messages and query history with an exclusive descending message-ID cursor. Per-room serialization and a room/sender/client-key unique constraint make retries idempotent; changed content for a reused key returns 409.
+- Real-time transport, new-message synchronization, read receipts, system messages, and general user room closure remain future work.
 - Local HTTP/MySQL ports are 8087/3312. `./scripts/local-run.sh chat` runs the service; repository verification includes its MySQL integration tests.
 - See `docs/architecture/chat-room-design.md` and `docs/architecture/error-handling-review.md`.
 

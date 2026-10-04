@@ -26,6 +26,15 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
   Optional<ChatRoom> findConfirmedForMember(
       @Param("id") Long id, @Param("memberId") Long memberId, @Param("role") String role);
 
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      "select r from ChatRoom r where r.id = :id and r.status = 'OPEN' and "
+          + "r.confirmedAt is not null and "
+          + "((:role = 'OWNER' and r.ownerMemberId = :memberId) or "
+          + "(:role = 'WORKER' and r.workerMemberId = :memberId))")
+  Optional<ChatRoom> findConfirmedForMemberForUpdate(
+      @Param("id") Long id, @Param("memberId") Long memberId, @Param("role") String role);
+
   @Query("select w.matchingId from ChatRoom w where w.id = :id")
   Optional<Long> findMatchingIdById(@Param("id") Long id);
 
