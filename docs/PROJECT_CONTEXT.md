@@ -161,7 +161,7 @@ Implemented:
 - `job-service`: job posting service
 - `matching-service`: application and matching service
 - `work-service`: scheduled work and Saga compensation service
-- `chat-service`: internal chat room creation and Saga compensation, matching-confirmation consumption, and participant room queries
+- `chat-service`: internal chat room creation and Saga compensation, matching-confirmation consumption, participant room queries, and persistent text message sending/history
 - `payment-service`: deposit-backed payment lock and Saga compensation service with Toss test deposit ingestion
 
 Planned or represented in the ERD:
