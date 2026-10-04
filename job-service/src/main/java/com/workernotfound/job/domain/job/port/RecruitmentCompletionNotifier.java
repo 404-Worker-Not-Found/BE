@@ -5,8 +5,9 @@ import java.time.Duration;
 /**
  * matching-service에 공고의 모집 완료를 알리는 포트.
  *
- * <p>정상 반환은 상대 서비스가 성공 응답을 준 경우뿐이다. 그 밖의 모든 결과는
- * {@link com.workernotfound.job.domain.job.exception.RecruitmentCompletionNotificationException}으로 알린다.
+ * <p>정상 반환은 상대 서비스가 성공 응답을 준 경우뿐이다. 상대 서비스의 실패 응답과 통신 실패(연결 오류, 제한시간 초과,
+ * 교환 취소·중단)는 {@link com.workernotfound.job.domain.job.exception.RecruitmentCompletionNotificationException}으로
+ * 알린다. 구현 내부의 예상하지 못한 오류는 이 예외로 바꾸지 않고 다른 런타임 예외로 그대로 전파한다.
  */
 public interface RecruitmentCompletionNotifier {
 
