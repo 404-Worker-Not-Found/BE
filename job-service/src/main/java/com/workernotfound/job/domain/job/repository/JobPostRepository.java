@@ -23,10 +23,11 @@ public interface JobPostRepository extends JpaRepository<JobPost, Long> {
     @Query("select j from JobPost j where j.id = :id")
     Optional<JobPost> findByIdForUpdate(@Param("id") Long id);
 
-    // 확정(CONSUMED) 예약 수가 모집 인원에 도달했는데 아직 모집 중인 공고. 잠그지 않고 ID만 조회한다.
+    // 확정(CONSUMED) 예약 수가 모집 인원에 도달했는데 아직 모집 중인 공고 중 afterId 다음 ID. 잠그지 않고 ID만 조회한다.
     @Query("""
             select j.id from JobPost j
             where j.status in :statuses
+              and j.id > :afterId
               and j.recruitCount <= (
                   select count(r) from JobMatchingSeatReservation r
                   where r.jobPostId = j.id
@@ -34,5 +35,9 @@ public interface JobPostRepository extends JpaRepository<JobPost, Long> {
               )
             order by j.id
             """)
-    List<Long> findFilledIdsByStatusIn(@Param("statuses") Collection<JobStatus> statuses, Pageable pageable);
+    List<Long> findFilledIdsByStatusInAfter(
+            @Param("statuses") Collection<JobStatus> statuses,
+            @Param("afterId") Long afterId,
+            Pageable pageable
+    );
 }

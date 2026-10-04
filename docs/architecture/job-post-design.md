@@ -195,7 +195,7 @@
 
 ### 이전 구현의 정원 충족 공고 복구
 
-모집 완료 구현 이전에 마지막 자리가 확정되어 `OPEN`/`MATCHING`으로 남은 공고는 `RecruitmentCompletionReconciler`가 마감한다. `RECRUITMENT_COMPLETION_RECONCILE_INTERVAL`(기본 10분, 첫 실행 `RECRUITMENT_COMPLETION_RECONCILE_INITIAL_DELAY` 30초)마다 `CONSUMED 수 >= recruitCount`인 모집 중 공고 ID를 최대 `RECRUITMENT_COMPLETION_RECONCILE_BATCH_SIZE`(기본 100)개 조회하고, 공고마다 별도 트랜잭션에서 공고 행을 잠근 뒤 같은 기준으로 다시 판단한다. 정원이 차지 않은 공고와 이미 마감된 공고는 바꾸지 않는다. 마감된 공고는 일반 경로와 같은 이력과 알림 명령을 남긴다. 배포 후 첫 실행에서 기존 대상이 처리되며, 대상이 많으면 배치 크기 단위로 다음 실행에 이어서 처리된다.
+모집 완료 구현 이전에 마지막 자리가 확정되어 `OPEN`/`MATCHING`으로 남은 공고는 `RecruitmentCompletionReconciler`가 마감한다. `RECRUITMENT_COMPLETION_RECONCILE_INTERVAL`(기본 10분, 첫 실행 `RECRUITMENT_COMPLETION_RECONCILE_INITIAL_DELAY` 30초)마다 `CONSUMED 수 >= recruitCount`인 모집 중 공고 ID를 최대 `RECRUITMENT_COMPLETION_RECONCILE_BATCH_SIZE`(기본 100)개 조회하고, 공고마다 별도 트랜잭션에서 공고 행을 잠근 뒤 같은 기준으로 다시 판단한다. 정원이 차지 않은 공고와 이미 마감된 공고는 바꾸지 않는다. 마감된 공고는 일반 경로와 같은 이력과 알림 명령을 남긴다. 배포 후 첫 실행에서 기존 대상이 처리되며, 대상이 많으면 배치 크기 단위로 다음 실행에 이어서 처리된다. 실행마다 직전 배치의 마지막 ID 다음부터 조회하고, 배치가 덜 차면 끝에 닿은 것으로 보고 다음 실행은 처음부터 다시 찾는다. 처리에 실패한 공고도 조회 위치를 넘기므로, 계속 실패하는 낮은 ID 공고가 매 배치를 차지해 뒤 공고의 복구를 막지 않는다. 조회 위치는 인스턴스 메모리에만 두며, 재시작하면 처음부터 다시 찾는다.
 
 ### 운영 설정
 
