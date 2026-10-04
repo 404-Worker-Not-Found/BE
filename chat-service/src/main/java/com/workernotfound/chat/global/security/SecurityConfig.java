@@ -45,6 +45,7 @@ public class SecurityConfig {
             auth ->
                 auth.requestMatchers(
                         "/api/chat-rooms/internal/**",
+                        "/api/chat-rooms/ws",
                         "/v3/api-docs/**",
                         "/swagger-ui/**",
                         "/swagger-ui.html",

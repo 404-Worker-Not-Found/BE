@@ -33,6 +33,10 @@ public class JwtTokenParser {
   }
 
   public AuthenticatedMember parseAccessToken(String token) {
+    return parseSession(token).member();
+  }
+
+  public AuthenticatedChatSession parseSession(String token) {
     if (token == null || token.isBlank())
       throw new InvalidAccessTokenException("access token이 없습니다.");
     try {
@@ -41,10 +45,9 @@ public class JwtTokenParser {
       if (Instant.now().getEpochSecond() >= expiresAt) {
         throw new InvalidAccessTokenException("만료된 access token입니다.");
       }
-      return new AuthenticatedMember(
-          readLongClaim(claims, "authAccountId"),
-          readLongClaim(claims, "memberId"),
-          readRoleClaim(claims));
+      var member = new AuthenticatedMember(readLongClaim(claims, "authAccountId"),
+          readLongClaim(claims, "memberId"), readRoleClaim(claims));
+      return new AuthenticatedChatSession(member, expiresAt);
     } catch (IllegalArgumentException exception) {
       throw new InvalidAccessTokenException("JWT claim 형식이 올바르지 않습니다.", exception);
     }

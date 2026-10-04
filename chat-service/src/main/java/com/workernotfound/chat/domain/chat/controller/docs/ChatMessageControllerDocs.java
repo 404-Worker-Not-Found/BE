@@ -24,4 +24,10 @@ public interface ChatMessageControllerDocs {
   ApiResponse<ChatMessagePageResponse> getMessages(
       @Parameter(hidden = true) AuthenticatedMember member,
       @Positive Long chatRoomId, @Positive Long beforeId, @Min(1) @Max(100) int size);
+
+  @Operation(summary = "새 메시지 동기화", description = "afterId 이후 메시지를 ID 오름차순으로 반환합니다. "
+      + "hasNext 동안 nextAfterId로 반복하고, 빈 응답은 입력 커서를 유지합니다. 알림 ID로 커서를 건너뛰지 마세요.")
+  ApiResponse<ChatMessageSyncResponse> getNewMessages(
+      @Parameter(hidden = true) AuthenticatedMember member,
+      @Positive Long chatRoomId, @Min(0) Long afterId, @Min(1) @Max(100) int size);
 }

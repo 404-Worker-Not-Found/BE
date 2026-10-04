@@ -11,6 +11,11 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
       Long chatRoomId, Long senderMemberId, String clientMessageId);
 
   @Query("select m from ChatMessage m where m.chatRoomId = :roomId "
+      + "and m.id > :afterId order by m.id asc")
+  List<ChatMessage> findNewMessages(
+      @Param("roomId") Long roomId, @Param("afterId") Long afterId, Pageable pageable);
+
+  @Query("select m from ChatMessage m where m.chatRoomId = :roomId "
       + "and (:beforeId is null or m.id < :beforeId) order by m.id desc")
   List<ChatMessage> findHistory(
       @Param("roomId") Long roomId, @Param("beforeId") Long beforeId, Pageable pageable);

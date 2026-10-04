@@ -1146,3 +1146,19 @@ Reason:
 Related files:
 - `docs/architecture/chat-room-design.md`
 - `chat-service`
+
+
+## 2026-10-04 - Chat Notifications and Recovery
+
+Decision:
+- Keep REST as the authenticated, idempotent text-message command. Use STOMP over native WebSocket only for room notification subscriptions.
+- Verify the existing access token on CONNECT, authorize exact room destinations, reject client SEND and wildcard subscriptions, and block notification delivery after token expiry.
+- Publish only room/message IDs through Redis Pub/Sub after the message transaction commits. This channel is best-effort and does not replace persisted messages or the matching domain-event Stream.
+- Restore missed messages through an ascending exclusive message-ID REST cursor. Clients reconcile after subscription, reconnect, notifications, and periodically while viewing a room; notification IDs alone must never advance the synchronization cursor.
+
+Reason:
+- Persisted messages already provide the recovery source. Lightweight cross-instance hints avoid adding another durable queue, while cursor synchronization handles drops and reordered notifications.
+
+Related files:
+- `docs/architecture/chat-room-design.md`
+- `chat-service`
