@@ -113,7 +113,9 @@
 
 자리 예약 응답이 정상 형식이지만 `expiresAt`이 이미 지났다면 Saga는 이를 결과 불명이 아니라 확정적 거절로 처리한다. 예약 성공 응답이 유실된 뒤 예약이 만료되면 같은 키 재요청은 원래 스냅샷을 돌려주므로, 같은 키 재시도로는 회복되지 않기 때문이다. 이때 받은 예약 ID를 기록하고 기존 역순 보상 규칙대로 반환(만료된 예약의 반환은 성공)한 뒤 `START_NEW_ATTEMPT`로 남겨, 다음 수락 요청이 새 명령 키로 다시 예약한다. 네트워크 오류·5xx·필수 필드가 빠진 응답은 계속 결과 불명으로 보고 보상하지 않는다. 확정 단계에서 예약 만료(`JOB-409-009`)를 받으면 기존 4xx 거절과 같이 채팅·근무·결제·자리 순으로 보상한다.
 
-자리 예약 응답은 후속 명령에 필요한 `workDate`, `startTime`, `endTime`, `endTimeNextDay`, `lockedAmount`(1인 예정 급여, 정수 KRW), `currency` 공고 스냅샷도 포함한다. Saga는 `endTimeNextDay`를 `matching_confirmation_sagas.end_time_next_day`(V9)에 저장하고 예정 근무 생성 요청에 그대로 전달한다. payment/work/chat 내부 명령은 각각 아래 경계를 사용한다.
+자리 예약 응답은 후속 명령에 필요한 `workDate`, `startTime`, `endTime`, `endTimeNextDay`, `lockedAmount`(1인 예정 급여, 정수 KRW), `currency` 공고 스냅샷도 포함한다. Saga는 `endTimeNextDay`를 `matching_confirmation_sagas.end_time_next_day`(V9)에 저장하고 예정 근무 생성 요청에 그대로 전달한다.
+
+좌표는 위도 ±90·경도 ±180 범위의 소수점 7자리 이내 값이며 반드시 쌍으로 제공한다. matching은 좌표를 Saga에 보관하고 예정 근무 생성에 그대로 전달하므로 재시도 중 공고 위치를 다시 조회하지 않는다. 기존 계약 호환을 위해 두 좌표가 모두 없는 응답은 허용하지만 해당 근무의 GPS 출근은 거부된다. job-service 담당 구현에서는 공고의 신뢰된 위치를 제공해야 하며, 요청자가 출근 기준 위치를 지정하지 않는다. payment/work/chat 내부 명령은 각각 아래 경계를 사용한다.
 
 | 서비스 | 실행 계약 | 보상 계약 |
 | --- | --- | --- |

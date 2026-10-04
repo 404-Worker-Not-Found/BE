@@ -1178,3 +1178,21 @@ Reason:
 Related files:
 - `docs/architecture/notification-design.md`
 - `notification-service`
+
+## 2026-10-04 - Configurable Attendance and Work Completion
+
+Decision:
+- Apply the user-approved recommended default: worker GPS check-in within 100 meters and start ±30 minutes; owner confirms work start and completion. Default completion requires scheduled end; overnight work ends the next day.
+- Configure radius, windows, time zone, completion role (OWNER/WORKER), and early completion through `work.attendance`. Expose active policy settings and select a replacement `AttendancePolicy` Bean with `WORK_ATTENDANCE_POLICY_TYPE=custom` without changing transaction or participant authorization logic. Explicit selection avoids configuration-registration-order dependence.
+- Use job location snapshots carried through the matching Saga. Accept legacy null coordinate pairs for compatibility but reject GPS attendance without a location; never infer or fabricate coordinates.
+- Lock confirmed participant-owned work and atomically persist each lifecycle transition, first timestamp and actor history. Repeated commands preserve the first result and do not regress status.
+- Keep legacy scheduled-work command fingerprints stable when adding coordinates. Do not produce settlement or work lifecycle events in this unit.
+
+Reason:
+- The user asked for recommended policy now and easy replacement later. Defaults must not become hardcoded business constraints, and concurrency/retry protection must survive policy changes.
+
+Related files:
+- `docs/architecture/work-scheduled-design.md`
+- `docs/architecture/matching-application-design.md`
+- `work-service`
+- `matching-service`

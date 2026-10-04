@@ -25,6 +25,13 @@ public interface WorkRepository extends JpaRepository<Work, Long> {
   Optional<Work> findConfirmedByIdAndMember(
       @Param("id") Long id, @Param("memberId") Long memberId, @Param("role") String role);
 
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select w from Work w where w.id = :id and w.confirmedAt is not null and "
+      + "((:role = 'OWNER' and w.ownerMemberId = :memberId) or "
+      + "(:role = 'WORKER' and w.workerMemberId = :memberId))")
+  Optional<Work> findConfirmedForUpdate(@Param("id") Long id,
+      @Param("memberId") Long memberId, @Param("role") String role);
+
   @Query("select w.matchingId from Work w where w.id = :id")
   Optional<Long> findMatchingIdById(@Param("id") Long id);
 

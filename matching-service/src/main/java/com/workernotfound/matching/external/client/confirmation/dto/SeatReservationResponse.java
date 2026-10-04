@@ -17,6 +17,8 @@ public record SeatReservationResponse(
 	BigDecimal lockedAmount,
 	String currency,
 	LocalDateTime reservedAt,
-	LocalDateTime expiresAt
+	LocalDateTime expiresAt,
+	BigDecimal latitude,
+	BigDecimal longitude
 ) {
 }

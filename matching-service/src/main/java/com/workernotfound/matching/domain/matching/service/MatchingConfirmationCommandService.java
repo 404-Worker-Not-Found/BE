@@ -90,7 +90,7 @@ public class MatchingConfirmationCommandService {
 			response.endTime(),
 			response.endTimeNextDay(),
 			response.lockedAmount(),
-			response.currency()
+			response.currency(), response.latitude(), response.longitude()
 		);
 		renewLease(saga);
 	}
@@ -355,7 +355,7 @@ public class MatchingConfirmationCommandService {
 			saga.getSeatReservationId(), saga.getPaymentId(), saga.getWorkId(), saga.getChatRoomId(),
 			saga.getWorkDate(), saga.getStartTime(), saga.getEndTime(), saga.getEndTimeNextDay(),
 			saga.getLockedAmount(),
-			saga.getCurrency(), saga.isSeatConsumed()
+			saga.getCurrency(), saga.isSeatConsumed(), saga.getLatitude(), saga.getLongitude()
 		);
 	}
 

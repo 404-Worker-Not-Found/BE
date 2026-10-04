@@ -102,7 +102,7 @@ public class MatchingConfirmationService {
 		}
 		ScheduledWorkResponse response = client.createScheduledWork(new ScheduledWorkRequest(
 			state.matchingId(), state.jobPostId(), state.ownerMemberId(), state.workerMemberId(),
-			state.paymentId(), state.workDate(), state.startTime(), state.endTime(), state.endTimeNextDay()
+			state.paymentId(), state.workDate(), state.startTime(), state.endTime(), state.endTimeNextDay(), state.latitude(), state.longitude()
 		), state.workCreationCommandId());
 		if (isBlank(response.workId())) {
 			throw invalidResponse(ConfirmationStep.WORK_CREATION);
@@ -225,6 +225,7 @@ public class MatchingConfirmationService {
 		if (isBlank(response.reservationId())
 			|| !state.jobPostId().equals(response.jobPostId())
 			|| !state.ownerMemberId().equals(response.ownerMemberId())
+			|| !isValidLocation(response)
 			|| response.workDate() == null
 			|| response.startTime() == null
 			|| response.endTime() == null
@@ -241,6 +242,14 @@ public class MatchingConfirmationService {
 
 	private boolean isExpired(SeatReservationResponse response) {
 		return !response.expiresAt().isAfter(LocalDateTime.now());
+	}
+
+	private boolean isValidLocation(SeatReservationResponse response) {
+		if (response.latitude() == null || response.longitude() == null)
+			return response.latitude() == null && response.longitude() == null;
+		return response.latitude().abs().compareTo(new java.math.BigDecimal("90")) <= 0
+			&& response.longitude().abs().compareTo(new java.math.BigDecimal("180")) <= 0
+			&& response.latitude().scale() <= 7 && response.longitude().scale() <= 7;
 	}
 
 	private boolean isBlank(String value) {

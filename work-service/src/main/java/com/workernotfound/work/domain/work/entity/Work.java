@@ -5,6 +5,7 @@ import com.workernotfound.work.domain.work.exception.WorkErrorCode;
 import com.workernotfound.work.global.exception.BusinessException;
 import jakarta.persistence.*;
 import java.time.*;
+import java.math.BigDecimal;
 import lombok.*;
 
 @Entity
@@ -56,6 +57,14 @@ public class Work {
   @Column(nullable = false)
   private long confirmationRevision;
 
+  @Column(precision = 10, scale = 7) private BigDecimal latitude;
+  @Column(precision = 10, scale = 7) private BigDecimal longitude;
+  private LocalDateTime checkedInAt;
+  private LocalDateTime startedAt;
+  private LocalDateTime completedAt;
+  private Double checkInDistanceMeters;
+  @Column(length = 64) private String attendancePolicy;
+
   @Version private Long version;
 
   @Builder
@@ -68,7 +77,7 @@ public class Work {
       LocalDate workDate,
       LocalTime startTime,
       LocalTime endTime,
-      boolean endTimeNextDay) {
+      boolean endTimeNextDay, BigDecimal latitude, BigDecimal longitude) {
     this.matchingId = matchingId;
     this.jobPostId = jobPostId;
     this.ownerMemberId = ownerMemberId;
@@ -78,6 +87,8 @@ public class Work {
     this.startTime = startTime;
     this.endTime = endTime;
     this.endTimeNextDay = endTimeNextDay;
+    this.latitude = latitude;
+    this.longitude = longitude;
     this.status = WorkStatus.SCHEDULED;
     this.createdAt = LocalDateTime.now();
   }
@@ -96,4 +107,35 @@ public class Work {
     canceledAt = LocalDateTime.now();
     return true;
   }
+
+  public void checkIn(LocalDateTime now, double distanceMeters, String policy) {
+    requireStatus(WorkStatus.SCHEDULED);
+    status = WorkStatus.CHECKED_IN;
+    checkedInAt = now;
+    checkInDistanceMeters = distanceMeters;
+    attendancePolicy = policy;
+  }
+
+  public void start(LocalDateTime now) {
+    requireStatus(WorkStatus.CHECKED_IN);
+    status = WorkStatus.IN_PROGRESS;
+    startedAt = now;
+  }
+
+  public void complete(LocalDateTime now) {
+    requireStatus(WorkStatus.IN_PROGRESS);
+    status = WorkStatus.COMPLETED;
+    completedAt = now;
+  }
+
+  private void requireStatus(WorkStatus expected) {
+    if (status != expected) throw new BusinessException(WorkErrorCode.WORK_STATE_CONFLICT);
+  }
+
+  public LocalDateTime scheduledStart() { return workDate.atTime(startTime); }
+
+  public LocalDateTime scheduledEnd() {
+    return (endTimeNextDay ? workDate.plusDays(1) : workDate).atTime(endTime);
+  }
+
 }

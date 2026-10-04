@@ -17,6 +17,14 @@ spring:
     hibernate:
       ddl-auto: validate
 work:
+  attendance:
+    policy-type: ${WORK_ATTENDANCE_POLICY_TYPE:gps}
+    radius-meters: ${WORK_CHECK_IN_RADIUS_METERS:100}
+    early-window: ${WORK_CHECK_IN_EARLY_WINDOW:30m}
+    late-window: ${WORK_CHECK_IN_LATE_WINDOW:30m}
+    time-zone: ${WORK_ATTENDANCE_TIME_ZONE:Asia/Seoul}
+    completion-role: ${WORK_COMPLETION_ROLE:OWNER}
+    allow-early-completion: ${WORK_ALLOW_EARLY_COMPLETION:false}
   jwt:
     secret: ${AUTH_JWT_SECRET}
   events:

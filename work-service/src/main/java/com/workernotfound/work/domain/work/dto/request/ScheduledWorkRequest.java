@@ -2,6 +2,7 @@ package com.workernotfound.work.domain.work.dto.request;
 
 import jakarta.validation.constraints.*;
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.time.LocalTime;
 
 public record ScheduledWorkRequest(
@@ -13,7 +14,19 @@ public record ScheduledWorkRequest(
     @NotNull LocalDate workDate,
     @NotNull LocalTime startTime,
     @NotNull LocalTime endTime,
-    @NotNull Boolean endTimeNextDay) {
+    @NotNull Boolean endTimeNextDay,
+    @DecimalMin("-90") @DecimalMax("90") @Digits(integer = 3, fraction = 7) BigDecimal latitude,
+    @DecimalMin("-180") @DecimalMax("180") @Digits(integer = 3, fraction = 7) BigDecimal longitude) {
+  @AssertTrue(message = "위도와 경도는 함께 제공해야 합니다.")
+  public boolean isLocationComplete() { return (latitude == null) == (longitude == null); }
+
+  public String commandPayload() {
+    String legacy = fingerprintPayload();
+    if (latitude == null && longitude == null) return "CREATE:" + legacy;
+    return "CREATE_V2:" + legacy + ":latitude=" + latitude.stripTrailingZeros().toPlainString()
+        + ":longitude=" + longitude.stripTrailingZeros().toPlainString();
+  }
+
 
   // 익일 여부를 보내지 않던 이전 요청도 같은 명령으로 처리되도록 역직렬화 시점에 시각으로 채운다.
   // 시각이 없으면 채우지 않고 Bean Validation이 400으로 거절한다.

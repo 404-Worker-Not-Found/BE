@@ -30,6 +30,8 @@ public record MatchingConfirmationState(
 	Boolean endTimeNextDay,
 	BigDecimal lockedAmount,
 	String currency,
-	boolean seatConsumed
+	boolean seatConsumed,
+	BigDecimal latitude,
+	BigDecimal longitude
 ) {
 }
