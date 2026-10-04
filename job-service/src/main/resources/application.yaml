@@ -26,6 +26,10 @@ job:
     expiry-sweep-batch-size: ${MATCHING_SEAT_RESERVATION_EXPIRY_SWEEP_BATCH_SIZE:100}
   internal:
     secret: ${INTERNAL_API_SECRET}
+  matching-service:
+    base-url: ${MATCHING_SERVICE_BASE_URL:http://localhost:8084}
+    connect-timeout: ${MATCHING_SERVICE_CONNECT_TIMEOUT:3s}
+    read-timeout: ${MATCHING_SERVICE_READ_TIMEOUT:5s}
 
 server:
   port: ${JOB_SERVICE_PORT:8083}
