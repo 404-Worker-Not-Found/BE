@@ -1,5 +1,6 @@
 package com.workernotfound.chat.external.websocket;
 
+import java.util.Arrays;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -26,7 +27,9 @@ public class ChatSocketConfiguration implements WebSocketMessageBrokerConfigurer
   public void registerStompEndpoints(StompEndpointRegistry registry) {
     registry.setErrorHandler(new ChatSocketErrorHandler());
     var endpoint = registry.addEndpoint("/api/chat-rooms/ws");
-    if (allowedOrigins.length > 0) endpoint.setAllowedOrigins(allowedOrigins);
+    var origins = Arrays.stream(allowedOrigins).map(String::trim)
+        .filter(origin -> !origin.isEmpty()).toArray(String[]::new);
+    if (origins.length > 0) endpoint.setAllowedOrigins(origins);
   }
 
   @Override
