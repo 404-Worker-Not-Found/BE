@@ -1,12 +1,17 @@
 package com.workernotfound.job.external.client.matching;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.workernotfound.job.domain.job.entity.enums.RecruitmentCompletionFailureType;
 import com.workernotfound.job.domain.job.exception.RecruitmentCompletionNotificationException;
 import com.workernotfound.job.domain.job.port.RecruitmentCompletionNotifier;
+import com.workernotfound.job.external.client.matching.BoundedBodySubscriber.ReceivedBody;
 import com.workernotfound.job.global.security.InternalApiProperties;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -21,6 +26,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -55,7 +61,7 @@ public class MatchingRecruitmentCompletionClient implements RecruitmentCompletio
     private final String internalSecret;
     private final Duration readTimeout;
     private final Duration callTimeout;
-    private final ObjectMapper objectMapper;
+    private final ObjectReader strictJsonReader;
     private final ThreadPoolExecutor httpExecutor;
     private final HttpClient httpClient;
 
@@ -68,7 +74,7 @@ public class MatchingRecruitmentCompletionClient implements RecruitmentCompletio
         this.internalSecret = internalApiProperties.secret();
         this.readTimeout = properties.readTimeout();
         this.callTimeout = properties.callTimeout();
-        this.objectMapper = objectMapper;
+        this.strictJsonReader = objectMapper.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
         // HTTP 클라이언트의 비동기 작업이 쓰는 스레드 수를 고정해 반복 호출에도 스레드가 늘지 않게 한다.
         this.httpExecutor = new ThreadPoolExecutor(
                 HTTP_WORKER_THREADS, HTTP_WORKER_THREADS, 0L, TimeUnit.MILLISECONDS,
@@ -106,25 +112,45 @@ public class MatchingRecruitmentCompletionClient implements RecruitmentCompletio
     }
 
     private RecruitmentCompletionNotificationException send(Long jobPostId, Long jobVersion, String commandId) {
-        CompletableFuture<HttpResponse<byte[]>> exchange = httpClient.sendAsync(
+        // 응답 헤더를 받으면 상태를 기록해 둔다. 본문 수신이 실패해도 이미 받은 상태를 진단 정보로 남긴다.
+        AtomicReference<Integer> receivedStatus = new AtomicReference<>();
+        CompletableFuture<HttpResponse<ReceivedBody>> exchange = httpClient.sendAsync(
                 request(jobPostId, jobVersion, commandId),
-                responseInfo -> new BoundedBodySubscriber(MAX_BODY_BYTES));
+                responseInfo -> {
+                    receivedStatus.set(responseInfo.statusCode());
+                    return new BoundedBodySubscriber(MAX_BODY_BYTES);
+                });
         try {
-            HttpResponse<byte[]> response = exchange.get(callTimeout.toNanos(), TimeUnit.NANOSECONDS);
-            return classify(response.statusCode(), readBody(response.body()));
+            HttpResponse<ReceivedBody> response = exchange.get(callTimeout.toNanos(), TimeUnit.NANOSECONDS);
+            return classify(response.statusCode(), parseReceivedBody(response.body()));
         } catch (TimeoutException exception) {
             // 기다림만 멈추지 않고 진행 중인 교환을 취소한다. JDK 16 이상에서 HTTP/1.1 연결이 닫힌다.
             exchange.cancel(true);
-            return new RecruitmentCompletionNotificationException(RecruitmentCompletionFailureType.TIMEOUT, exception);
+            return new RecruitmentCompletionNotificationException(
+                    RecruitmentCompletionFailureType.TIMEOUT, receivedStatus.get(), exception);
         } catch (ExecutionException exception) {
-            return new RecruitmentCompletionNotificationException(failureTypeOf(exception.getCause()), exception.getCause());
+            return transportFailure(exception.getCause(), receivedStatus.get());
         } catch (CancellationException exception) {
-            return new RecruitmentCompletionNotificationException(RecruitmentCompletionFailureType.NETWORK, exception);
+            return new RecruitmentCompletionNotificationException(
+                    RecruitmentCompletionFailureType.NETWORK, receivedStatus.get(), exception);
         } catch (InterruptedException exception) {
             exchange.cancel(true);
             Thread.currentThread().interrupt();
-            return new RecruitmentCompletionNotificationException(RecruitmentCompletionFailureType.NETWORK, exception);
+            return new RecruitmentCompletionNotificationException(
+                    RecruitmentCompletionFailureType.NETWORK, receivedStatus.get(), exception);
         }
+    }
+
+    // 연결·헤더·본문 수신 중 전송 오류. 본문을 받다 실패해도 상태가 아니라 전송 실패로 분류한다.
+    private RecruitmentCompletionNotificationException transportFailure(Throwable cause, Integer receivedStatus) {
+        if (!(cause instanceof IOException)) {
+            // 전송 오류가 아닌 예외는 내부 오류다. 통신·계약 실패로 바꾸지 않고 드러내 실행기 경계에서 기록되게 한다.
+            throw new IllegalStateException("모집 완료 알림 교환 중 예상하지 못한 오류가 발생했습니다.", cause);
+        }
+        RecruitmentCompletionFailureType type = isTimeout(cause)
+                ? RecruitmentCompletionFailureType.TIMEOUT
+                : RecruitmentCompletionFailureType.NETWORK;
+        return new RecruitmentCompletionNotificationException(type, receivedStatus, cause);
     }
 
     private HttpRequest request(Long jobPostId, Long jobVersion, String commandId) {
@@ -139,8 +165,9 @@ public class MatchingRecruitmentCompletionClient implements RecruitmentCompletio
                 .build();
     }
 
+    // 본문을 끝까지 받은 응답만 여기에 온다. 2xx이면서 success가 불리언 true일 때만 성공이다.
     private RecruitmentCompletionNotificationException classify(int status, JsonNode body) {
-        if (isSuccessful(status) && body != null && body.path("success").asBoolean(false)) {
+        if (isSuccessful(status) && body != null && body.path("success").booleanValue()) {
             return null;
         }
         return new RecruitmentCompletionNotificationException(failureTypeOf(status), status, safeResponseCode(body));
@@ -166,16 +193,21 @@ public class MatchingRecruitmentCompletionClient implements RecruitmentCompletio
         return RecruitmentCompletionFailureType.CONTRACT;
     }
 
-    private RecruitmentCompletionFailureType failureTypeOf(Throwable cause) {
-        return isTimeout(cause) ? RecruitmentCompletionFailureType.TIMEOUT : RecruitmentCompletionFailureType.NETWORK;
-    }
-
-    private JsonNode readBody(byte[] bytes) {
-        try {
-            return bytes.length == 0 ? null : objectMapper.readTree(bytes);
-        } catch (IOException | RuntimeException exception) {
-            // 형식이 맞지 않는 응답은 오류 코드 없이 상태로만 분류한다.
+    /**
+     * 정상 수신한 본문을 JSON으로 해석한다. 빈 본문, 한도를 넘어 잘린 본문, JSON 형식이 아니거나 뒤에 다른 내용이 붙은
+     * 본문은 null이며, 이때는 HTTP 상태로만 분류하고 상대 오류 코드는 보존하지 않는다.
+     */
+    private JsonNode parseReceivedBody(ReceivedBody body) {
+        if (body.isTruncated() || body.bytes().length == 0) {
             return null;
+        }
+        try {
+            return strictJsonReader.readTree(body.bytes());
+        } catch (JsonProcessingException exception) {
+            return null;
+        } catch (IOException exception) {
+            // 메모리의 바이트 배열을 읽는 중에는 형식 오류 외의 I/O 오류가 생기지 않는다.
+            throw new UncheckedIOException(exception);
         }
     }
 

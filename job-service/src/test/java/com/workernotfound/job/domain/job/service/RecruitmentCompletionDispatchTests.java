@@ -197,7 +197,8 @@ class RecruitmentCompletionDispatchTests extends IntegrationTestSupport {
         SERVER.enqueue(StubResponse.drippingBody(Duration.ofMillis(50)));
 
         long start = System.nanoTime();
-        dispatchAndAssertFailure(command, RecruitmentCompletionFailureType.TIMEOUT, null, null);
+        // 200 헤더는 이미 받았으므로 진단 정보로 남는다. 분류는 본문 수신 실패인 TIMEOUT이다.
+        dispatchAndAssertFailure(command, RecruitmentCompletionFailureType.TIMEOUT, 200, null);
         Duration elapsed = Duration.ofNanos(System.nanoTime() - start);
 
         assertThat(elapsed).isLessThan(CALL_TIMEOUT.plusSeconds(1));
@@ -307,7 +308,7 @@ class RecruitmentCompletionDispatchTests extends IntegrationTestSupport {
         assertThat(dispatcher.dispatch(command.getId())).isTrue();
         // 성공 이후 도착한 이전 실행자의 늦은 실패도 반영되지 않는다.
         assertThat(transactionService.markFailed(command.getId(), staleToken, new RecruitmentCompletionNotificationException(
-                RecruitmentCompletionFailureType.NETWORK, null, null), storedNow(), storedNow())).isFalse();
+                RecruitmentCompletionFailureType.NETWORK, null, (String) null), storedNow(), storedNow())).isFalse();
         assertThat(reload(command).getStatus()).isEqualTo(RecruitmentCompletionCommandStatus.SUCCEEDED);
         assertAllRequestsCarry(command, 2);
     }

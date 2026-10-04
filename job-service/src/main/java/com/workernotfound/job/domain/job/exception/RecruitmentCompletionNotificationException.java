@@ -27,9 +27,18 @@ public class RecruitmentCompletionNotificationException extends RuntimeException
     }
 
     public RecruitmentCompletionNotificationException(RecruitmentCompletionFailureType failureType, Throwable cause) {
-        super(message(failureType, null, null), cause);
+        this(failureType, null, cause);
+    }
+
+    // 전송 실패. 응답 헤더를 이미 받았다면 그 HTTP 상태를 진단 정보로 함께 보존한다.
+    public RecruitmentCompletionNotificationException(
+            RecruitmentCompletionFailureType failureType,
+            Integer receivedHttpStatus,
+            Throwable cause
+    ) {
+        super(message(failureType, receivedHttpStatus, null), cause);
         this.failureType = failureType;
-        this.httpStatus = null;
+        this.httpStatus = receivedHttpStatus;
         this.responseCode = null;
     }
 

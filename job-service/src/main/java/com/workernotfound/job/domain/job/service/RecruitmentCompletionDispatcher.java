@@ -83,8 +83,9 @@ public class RecruitmentCompletionDispatcher {
         try {
             return dispatch(id);
         } catch (RuntimeException exception) {
-            // 결과 기록이 실패해도 실행권이 만료되면 다시 전송된다.
-            log.warn("모집 완료 알림 전송 처리 실패: id={}, type={}", id, exception.getClass().getName());
+            // 분류된 전송 실패가 아닌 예외(DB 기록 실패, 내부 오류)다. 원인을 숨기지 않고 남기며, 실행권이 만료되면 다시 전송된다.
+            // 이 예외에는 요청 헤더나 응답 원문이 담기지 않는다.
+            log.error("모집 완료 알림 전송 처리 실패: id={}", id, exception);
             return false;
         }
     }

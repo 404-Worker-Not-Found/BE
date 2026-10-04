@@ -56,8 +56,7 @@ public class RecruitmentCompletionDispatchTrigger {
         try {
             dispatcher.dispatch(commandId);
         } catch (RuntimeException exception) {
-            log.warn("모집 완료 알림 즉시 전송 실패(스케줄러가 복구): id={}, type={}",
-                    commandId, exception.getClass().getName());
+            log.error("모집 완료 알림 즉시 전송 실패(스케줄러가 복구): id={}", commandId, exception);
         }
     }
 

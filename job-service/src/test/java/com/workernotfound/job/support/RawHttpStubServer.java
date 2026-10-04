@@ -102,6 +102,10 @@ public class RawHttpStubServer implements AutoCloseable {
             readRequestHead(socket.getInputStream());
             OutputStream output = socket.getOutputStream();
             write(output, currentBehavior.immediate());
+            if (currentBehavior.isClosingAfterImmediate()) {
+                // 선언한 본문 길이보다 적게 보낸 뒤 연결을 끊는다. 클라이언트에는 본문 수신 중 전송 오류로 드러난다.
+                return;
+            }
             if (currentBehavior.dripInterval() == null) {
                 awaitClientClose(socket);
             } else {
@@ -169,7 +173,25 @@ public class RawHttpStubServer implements AutoCloseable {
      * @param immediate    요청을 받은 직후 보내는 원문
      * @param dripInterval null이면 이후 아무것도 보내지 않고, 값이 있으면 그 간격으로 한 바이트씩 계속 보낸다
      */
-    public record Behavior(String immediate, Duration dripInterval) {
+    public record Behavior(String immediate, Duration dripInterval, boolean isClosingAfterImmediate) {
+
+        public Behavior(String immediate, Duration dripInterval) {
+            this(immediate, dripInterval, false);
+        }
+
+        // 200 헤더와 선언 길이(100바이트)보다 짧은 본문을 보낸 직후 연결을 끊는다.
+        public static Behavior partialBodyThenDisconnect() {
+            return new Behavior(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{\"success\":tr",
+                    null,
+                    true);
+        }
+
+        // 헤더와 본문 전체를 보낸 뒤 연결을 유지한다.
+        public static Behavior completeResponse(int status, String body) {
+            return new Behavior("HTTP/1.1 " + status + " X\r\nContent-Type: application/json\r\nContent-Length: "
+                    + body.getBytes(StandardCharsets.ISO_8859_1).length + "\r\n\r\n" + body, null);
+        }
 
         // 정상 응답 전체를 바로 보낸 뒤 연결을 유지한다.
         public static Behavior success() {
