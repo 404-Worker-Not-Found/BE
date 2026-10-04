@@ -38,4 +38,4 @@ notification-service는 회원별 인앱 알림과 읽음 상태를 전용 MySQL
 - JWT secret은 공통 AUTH_JWT_SECRET이며 누락·공백·32 UTF-8 바이트 미만은 시작 시 거부한다.
 - 저장소 전체 검증에 새 서비스를 포함한다. MySQL/Redis Testcontainers로 중복·동시 수신·pending 복구·롤백·권한·읽음 멱등성·페이지 조회를 검증한다.
 
-알림 소비자는 envelope의 `occurredAt`도 payload 발생 시각과 비교한다. 누락되거나 다른 시각이면 ACK하지 않고 pending에 남긴다.
+알림 소비자는 envelope의 `occurredAt`도 payload 발생 시각과 비교한다. 매칭 v1 payload는 나노초를 유지하지만 Outbox의 `DATETIME(6)`를 거친 envelope는 마이크로초로 절삭·반올림될 수 있어, 그 두 저장 결과만 같은 시각으로 인정한다. 그 밖의 차이나 누락은 ACK하지 않고 pending에 남긴다. payload와 기존 이벤트 fingerprint는 변경하지 않는다.

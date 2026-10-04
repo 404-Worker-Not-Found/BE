@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workernotfound.notification.domain.notification.event.NotificationEvent;
 import com.workernotfound.notification.domain.notification.service.NotificationEventService;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -113,9 +115,19 @@ public class NotificationEventConsumer {
         || !Objects.equals(fields.get("aggregateId"), String.valueOf(event.aggregateId()))
         || !Objects.equals(fields.get("revision"), String.valueOf(event.revision()))
         || !Objects.equals(fields.get("version"), String.valueOf(event.version()))
-        || !Objects.equals(java.time.LocalDateTime.parse((String) fields.get("occurredAt")), event.occurredAt()))
+        || !matchesPersistedTime((String) fields.get("occurredAt"), event.occurredAt()))
       throw new IllegalArgumentException("이벤트 envelope와 payload가 일치하지 않습니다.");
     return event;
+  }
+
+  private boolean matchesPersistedTime(String value, LocalDateTime payloadTime) {
+    LocalDateTime envelopeTime = LocalDateTime.parse(value);
+    if (envelopeTime.equals(payloadTime)) return true;
+    if (payloadTime == null || envelopeTime.getNano() % 1000 != 0) return false;
+    // Matching v1 JSON retains nanos; its DATETIME(6) outbox envelope may truncate or round them.
+    LocalDateTime micros = payloadTime.truncatedTo(ChronoUnit.MICROS);
+    return envelopeTime.equals(micros)
+        || (!payloadTime.equals(micros) && envelopeTime.equals(micros.plusNanos(1000)));
   }
 
   private static byte[] bytes(String value) {

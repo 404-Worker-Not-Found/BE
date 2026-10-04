@@ -242,6 +242,47 @@ class NotificationIntegrationTests extends IntegrationTestSupport {
   }
 
   @Test
+  void databaseMicrosecondEnvelopeStillAcceptsNanosecondPayload() throws Exception {
+    for (int nanos : List.of(123456100, 123456789, 999999789)) {
+      var original = confirmed();
+      var at = original.occurredAt().withNano(nanos);
+      var event = new NotificationEvent(original.eventId(), original.eventType(), at,
+          original.aggregateId(), original.revision(), original.version(), original.matchingId(),
+          original.applicationId(), original.jobPostId(), original.ownerMemberId(), original.workerMemberId(), null);
+      LocalDateTime stored = jdbc.queryForObject("SELECT CAST(? AS DATETIME(6))", LocalDateTime.class, at);
+      assertThat(stored).isNotEqualTo(at);
+      var micros = at.truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+      for (var persisted : List.of(stored, micros, micros.plusNanos(1000))) {
+        var envelope = new HashMap<>(fields(event));
+        envelope.put("occurredAt", persisted.toString());
+        var id = redis.opsForStream().add(STREAM, envelope);
+        consumer.poll();
+        assertThat(notifications.getUnreadCount(worker(event)).unreadCount()).isEqualTo(1);
+        assertThat(redis.opsForStream().pending(STREAM, "notification-results-v1",
+            org.springframework.data.domain.Range.closed(id.getValue(), id.getValue()), 10)).isEmpty();
+      }
+    }
+  }
+
+  @Test
+  void timestampToleranceDoesNotAcceptAnotherMicrosecondOrNonDatabasePrecision() throws Exception {
+    var original = confirmed();
+    var at = original.occurredAt().withNano(123456000);
+    var event = new NotificationEvent(original.eventId(), original.eventType(), at,
+        original.aggregateId(), original.revision(), original.version(), original.matchingId(),
+        original.applicationId(), original.jobPostId(), original.ownerMemberId(), original.workerMemberId(), null);
+    for (var mismatched : List.of(at.plusNanos(1000), at.minusNanos(1000), at.plusNanos(1))) {
+      var envelope = new HashMap<>(fields(event));
+      envelope.put("occurredAt", mismatched.toString());
+      var id = redis.opsForStream().add(STREAM, envelope);
+      consumer.poll();
+      assertThat(notifications.getUnreadCount(worker(event)).unreadCount()).isZero();
+      assertThat(redis.opsForStream().pending(STREAM, "notification-results-v1",
+          org.springframework.data.domain.Range.closed(id.getValue(), id.getValue()), 10)).hasSize(1);
+    }
+  }
+
+  @Test
   void validationAuthenticationAndOpenApi() throws Exception {
     String auth = token(1, "OWNER");
     mvc.perform(get("/api/notifications/me")).andExpect(status().isUnauthorized());
