@@ -50,7 +50,8 @@ class WorkConfirmationIntegrationTests extends IntegrationTestSupport {
         "payment-" + id,
         LocalDate.of(2026, 9, 23),
         LocalTime.of(23, 0),
-        LocalTime.of(2, 0));
+        LocalTime.of(2, 0),
+        true);
   }
 
   MatchConfirmedEvent event(ScheduledWorkRequest request, String workId, long revision) {
@@ -136,6 +137,8 @@ class WorkConfirmationIntegrationTests extends IntegrationTestSupport {
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.data.workId").value(Long.valueOf(id)))
           .andExpect(jsonPath("$.data.status").value("SCHEDULED"))
+          .andExpect(jsonPath("$.data.endTime").value("02:00:00"))
+          .andExpect(jsonPath("$.data.endTimeNextDay").value(true))
           .andExpect(jsonPath("$.data.paymentId").doesNotExist());
       mvc.perform(get("/api/works/me").param("size", "1").header("Authorization", authorization))
           .andExpect(status().isOk())

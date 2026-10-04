@@ -19,6 +19,11 @@ auth:
 job:
   application-admission:
     ttl: ${APPLICATION_ADMISSION_TTL:5m}
+  matching-seat-reservation:
+    ttl: ${MATCHING_SEAT_RESERVATION_TTL:10m}
+    expiry-sweep-enabled: ${MATCHING_SEAT_RESERVATION_EXPIRY_SWEEP_ENABLED:true}
+    expiry-sweep-interval: ${MATCHING_SEAT_RESERVATION_EXPIRY_SWEEP_INTERVAL:1m}
+    expiry-sweep-batch-size: ${MATCHING_SEAT_RESERVATION_EXPIRY_SWEEP_BATCH_SIZE:100}
   internal:
     secret: ${INTERNAL_API_SECRET}
 

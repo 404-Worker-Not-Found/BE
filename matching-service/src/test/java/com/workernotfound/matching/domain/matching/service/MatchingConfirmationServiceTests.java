@@ -320,6 +320,94 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 		verify(client, times(2)).releasePayment("payment-1", compensationCommandId);
 	}
 
+	@Test
+	void compensatesExpiredSeatReplayAndStartsNewAttemptInsteadOfRetryingSameKey() {
+		Matching matching = saveMatching(20L, 40L);
+		when(client.reserveSeat(anyLong(), any(), anyString()))
+			.thenThrow(new MatchingConfirmationClientException(
+				ConfirmationStep.SEAT_RESERVATION,
+				new RuntimeException("response lost")
+			))
+			// 같은 키 재요청에 job-service가 돌려준 원래 스냅샷. 응답 유실 사이에 만료되었다.
+			.thenReturn(seatResponse(40L, "seat-expired", LocalDateTime.now().minusSeconds(1)))
+			.thenReturn(seatResponse(40L, "seat-new", LocalDateTime.now().plusMinutes(10)));
+		when(client.lockPayment(any(), anyString())).thenReturn(new PaymentLockResponse("payment-1"));
+		when(client.createScheduledWork(any(), anyString())).thenReturn(new ScheduledWorkResponse("work-1"));
+		when(client.createChatRoom(any(), anyString())).thenReturn(new ChatRoomResponse("chat-1"));
+
+		assertThatThrownBy(() -> confirmationService.accept(matching.getId(), 20L))
+			.isInstanceOf(BusinessException.class);
+		MatchingConfirmationSaga unknown = sagaRepository.findByMatchingId(matching.getId()).orElseThrow();
+		String firstSeatCommandId = unknown.getSeatReservationCommandId();
+		String seatCompensationCommandId = unknown.getSeatCompensationCommandId();
+		assertThat(unknown.getRecoveryAction()).isEqualTo(MatchingConfirmationRecoveryAction.RESUME_PROCESSING);
+
+		assertThatThrownBy(() -> confirmationService.accept(matching.getId(), 20L))
+			.isInstanceOfSatisfying(BusinessException.class, exception ->
+				assertThat(exception.getErrorCode()).isEqualTo(MatchingErrorCode.MATCHING_CONFIRMATION_FAILED));
+		MatchingConfirmationSaga expired = sagaRepository.findByMatchingId(matching.getId()).orElseThrow();
+		assertThat(expired.getRecoveryAction()).isEqualTo(MatchingConfirmationRecoveryAction.START_NEW_ATTEMPT);
+		assertThat(expired.getSeatReservationId()).isNull();
+		assertThat(expired.getSeatReservationCommandId()).isEqualTo(firstSeatCommandId);
+		verify(client, times(2)).reserveSeat(40L, new com.workernotfound.matching.external.client.confirmation.dto
+			.SeatReservationRequest(matching.getId(), matching.getApplication().getId(), 20L), firstSeatCommandId);
+		verify(client).releaseSeat(40L, "seat-expired", seatCompensationCommandId);
+		verify(client, never()).lockPayment(any(), anyString());
+
+		Matching confirmed = confirmationService.accept(matching.getId(), 20L);
+
+		MatchingConfirmationSaga completed = sagaRepository.findByMatchingId(matching.getId()).orElseThrow();
+		assertThat(confirmed.getStatus()).isEqualTo(MatchingStatus.CONFIRMED);
+		assertThat(completed.getAttempt()).isEqualTo(2);
+		assertThat(completed.getSeatReservationCommandId()).isNotEqualTo(firstSeatCommandId);
+		assertThat(completed.getSeatReservationId()).isEqualTo("seat-new");
+		verify(client, times(3)).reserveSeat(anyLong(), any(), anyString());
+	}
+
+	@Test
+	void treatsMalformedSeatResponseAsUnknownWithoutCompensation() {
+		Matching matching = saveMatching(20L, 41L);
+		SeatReservationResponse valid = seatResponse(41L);
+		when(client.reserveSeat(anyLong(), any(), anyString())).thenReturn(new SeatReservationResponse(
+			valid.reservationId(), valid.jobPostId(), valid.jobVersion(), valid.ownerMemberId(), valid.workDate(),
+			valid.startTime(), valid.endTime(), null, valid.lockedAmount(), valid.currency(),
+			valid.reservedAt(), valid.expiresAt()
+		));
+
+		assertThatThrownBy(() -> confirmationService.accept(matching.getId(), 20L))
+			.isInstanceOf(BusinessException.class);
+
+		MatchingConfirmationSaga saga = sagaRepository.findByMatchingId(matching.getId()).orElseThrow();
+		assertThat(saga.getRecoveryAction()).isEqualTo(MatchingConfirmationRecoveryAction.RESUME_PROCESSING);
+		assertThat(saga.getSeatReservationId()).isNull();
+		verify(client, never()).releaseSeat(anyLong(), anyString(), anyString());
+	}
+
+	@Test
+	void passesNextDayScheduleFromSeatSnapshotToWorkCreation() {
+		Matching matching = saveMatching(20L, 42L);
+		SeatReservationResponse base = seatResponse(42L);
+		when(client.reserveSeat(anyLong(), any(), anyString())).thenReturn(new SeatReservationResponse(
+			base.reservationId(), base.jobPostId(), base.jobVersion(), base.ownerMemberId(), base.workDate(),
+			LocalTime.of(22, 0), LocalTime.of(2, 0), true, base.lockedAmount(), base.currency(),
+			base.reservedAt(), base.expiresAt()
+		));
+		when(client.lockPayment(any(), anyString())).thenReturn(new PaymentLockResponse("payment-1"));
+		when(client.createScheduledWork(any(), anyString())).thenReturn(new ScheduledWorkResponse("work-1"));
+		when(client.createChatRoom(any(), anyString())).thenReturn(new ChatRoomResponse("chat-1"));
+
+		confirmationService.accept(matching.getId(), 20L);
+
+		org.mockito.ArgumentCaptor<com.workernotfound.matching.external.client.confirmation.dto.ScheduledWorkRequest>
+			request = org.mockito.ArgumentCaptor.forClass(
+				com.workernotfound.matching.external.client.confirmation.dto.ScheduledWorkRequest.class);
+		verify(client).createScheduledWork(request.capture(), anyString());
+		assertThat(request.getValue().startTime()).isEqualTo(LocalTime.of(22, 0));
+		assertThat(request.getValue().endTime()).isEqualTo(LocalTime.of(2, 0));
+		assertThat(request.getValue().endTimeNextDay()).isTrue();
+		assertThat(sagaRepository.findByMatchingId(matching.getId()).orElseThrow().getEndTimeNextDay()).isTrue();
+	}
+
 	private void stubSuccessfulConfirmation() {
 		when(client.reserveSeat(anyLong(), any(), anyString())).thenAnswer(invocation ->
 			seatResponse(invocation.getArgument(0)));
@@ -329,18 +417,23 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 	}
 
 	private SeatReservationResponse seatResponse(Long jobPostId) {
+		return seatResponse(jobPostId, "seat-1", LocalDateTime.now().plusMinutes(5));
+	}
+
+	private SeatReservationResponse seatResponse(Long jobPostId, String reservationId, LocalDateTime expiresAt) {
 		return new SeatReservationResponse(
-			"seat-1",
+			reservationId,
 			jobPostId,
 			1L,
 			100L,
 			LocalDate.of(2026, 9, 20),
 			LocalTime.of(9, 0),
 			LocalTime.of(18, 0),
+			false,
 			new BigDecimal("120000.00"),
 			"KRW",
-			LocalDateTime.now(),
-			LocalDateTime.now().plusMinutes(5)
+			expiresAt.minusMinutes(10),
+			expiresAt
 		);
 	}
 

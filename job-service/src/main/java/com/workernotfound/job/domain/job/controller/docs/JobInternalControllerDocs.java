@@ -1,7 +1,10 @@
 package com.workernotfound.job.domain.job.controller.docs;
 
 import com.workernotfound.job.domain.job.dto.request.ApplicationAdmissionRequest;
+import com.workernotfound.job.domain.job.dto.request.MatchingSeatReservationRequest;
 import com.workernotfound.job.domain.job.dto.response.ApplicationAdmissionResponse;
+import com.workernotfound.job.domain.job.dto.response.MatchingSeatReservationCommandResponse;
+import com.workernotfound.job.domain.job.dto.response.MatchingSeatReservationResponse;
 import com.workernotfound.job.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -42,5 +45,94 @@ public interface JobInternalControllerDocs {
             @Positive Long jobPostId,
             @NotBlank @Size(max = 100) @Pattern(regexp = "[!-~]+") String idempotencyKey,
             @Valid ApplicationAdmissionRequest request
+    );
+
+    @Operation(
+            summary = "매칭 모집 자리 예약",
+            description = "공고가 OPEN 또는 MATCHING이고 근무 시작 전이며 남은 모집 자리가 있을 때 한 자리를 예약합니다. "
+                    + "같은 Idempotency-Key의 동일 요청은 상태와 관계없이 발급 당시 스냅샷을 그대로 반환합니다. "
+                    + "lockedAmount는 1인 예정 급여(정수 KRW)입니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "예약 성공 또는 같은 키의 기존 예약",
+                    content = @Content(schema = @Schema(implementation = MatchingSeatReservationResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청 또는 급여를 계산할 수 없는 공고", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "내부 인증 실패", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "공고 없음 (JOB-404-001)", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "멱등 키 재사용(JOB-409-004), 매칭 불가 상태(JOB-409-005), 근무 시작(JOB-409-006), "
+                            + "남은 자리 없음(JOB-409-007), 같은 매칭·지원 중복 점유(JOB-409-008)",
+                    content = @Content
+            )
+    })
+    ResponseEntity<ApiResponse<MatchingSeatReservationResponse>> reserveMatchingSeat(
+            @Positive Long jobPostId,
+            @NotBlank @Size(max = 100) @Pattern(regexp = "[!-~]+") String idempotencyKey,
+            @Valid MatchingSeatReservationRequest request
+    );
+
+    @Operation(
+            summary = "매칭 모집 자리 확정",
+            description = "만료 전 RESERVED 예약을 CONSUMED로 바꿉니다. 이미 CONSUMED인 예약은 처음 확정한 같은 "
+                    + "Idempotency-Key일 때만 성공하며, 원래 만료 시각이 지났어도 거절하지 않습니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "확정 성공 또는 같은 키의 재요청",
+                    content = @Content(schema = @Schema(implementation = MatchingSeatReservationCommandResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "내부 인증 실패", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "공고 없음(JOB-404-001), 공고에 속한 예약 없음(JOB-404-003)",
+                    content = @Content
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "다른 예약에 키 재사용(JOB-409-004), 예약 만료(JOB-409-009), "
+                            + "반환된 예약 또는 다른 키로 이미 확정됨(JOB-409-010)",
+                    content = @Content
+            )
+    })
+    ResponseEntity<ApiResponse<MatchingSeatReservationCommandResponse>> confirmMatchingSeat(
+            @Positive Long jobPostId,
+            @Positive Long reservationId,
+            @NotBlank @Size(max = 100) @Pattern(regexp = "[!-~]+") String idempotencyKey
+    );
+
+    @Operation(
+            summary = "매칭 모집 자리 반환",
+            description = "RESERVED 예약을 RELEASED로 바꿉니다. 이미 만료로 회수된 예약은 성공으로 처리하고, "
+                    + "이미 반환된 예약은 처음 반환한 같은 Idempotency-Key일 때만 성공합니다. CONSUMED 예약은 반환하지 않습니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "반환 성공, 만료로 회수된 예약, 또는 같은 키의 재요청",
+                    content = @Content(schema = @Schema(implementation = MatchingSeatReservationCommandResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "내부 인증 실패", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "공고 없음(JOB-404-001), 공고에 속한 예약 없음(JOB-404-003)",
+                    content = @Content
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "다른 예약에 키 재사용(JOB-409-004), 확정된 예약 또는 다른 키로 이미 반환됨(JOB-409-010)",
+                    content = @Content
+            )
+    })
+    ResponseEntity<ApiResponse<MatchingSeatReservationCommandResponse>> releaseMatchingSeat(
+            @Positive Long jobPostId,
+            @Positive Long reservationId,
+            @NotBlank @Size(max = 100) @Pattern(regexp = "[!-~]+") String idempotencyKey
     );
 }

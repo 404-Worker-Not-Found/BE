@@ -20,6 +20,7 @@ public class JobCommandService {
     private final JobPostRepository jobPostRepository;
     private final BusinessValidator businessValidator;
     private final CategoryFindService categoryFindService;
+    private final JobWageCalculator jobWageCalculator;
 
     @Transactional
     public Long create(Long ownerId, CreateJobRequest request) {
@@ -51,10 +52,16 @@ public class JobCommandService {
         return jobPostRepository.save(jobPost).getId();
     }
 
+    // 근무 구간과 급여 금액을 계산할 수 없는 공고는 이후 예치·자리 예약도 할 수 없으므로 등록 시 거절한다.
     private void validateWorkTime(CreateJobRequest request) {
-        if (!request.isEndTimeNextDay() && !request.endTime().isAfter(request.startTime())) {
-            throw new BusinessException(JobErrorCode.INVALID_WORK_TIME);
-        }
+        long wagePerWorker = jobWageCalculator.calculateWagePerWorker(
+                request.startTime(),
+                request.endTime(),
+                request.isEndTimeNextDay(),
+                request.baseHourlyWage(),
+                request.extraWage()
+        );
+        jobWageCalculator.calculateTotalExpectedWage(wagePerWorker, request.recruitCount());
     }
 
     private void validateApplicationDeadline(CreateJobRequest request) {

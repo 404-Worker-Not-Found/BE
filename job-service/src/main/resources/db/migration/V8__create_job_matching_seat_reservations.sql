@@ -1,0 +1,36 @@
+CREATE TABLE job_matching_seat_reservations (
+    id                      BIGINT       NOT NULL AUTO_INCREMENT,
+    created_at              DATETIME(6)  NOT NULL,
+    updated_at              DATETIME(6)  NOT NULL,
+    job_post_id             BIGINT       NOT NULL,
+    matching_id             BIGINT       NOT NULL,
+    application_id          BIGINT       NOT NULL,
+    worker_member_id        BIGINT       NOT NULL,
+    idempotency_key         VARCHAR(100) NOT NULL,
+    confirm_idempotency_key VARCHAR(100) NULL,
+    release_idempotency_key VARCHAR(100) NULL,
+    job_version             BIGINT       NOT NULL,
+    owner_member_id         BIGINT       NOT NULL,
+    work_date               DATE         NOT NULL,
+    start_time              TIME         NOT NULL,
+    end_time                TIME         NOT NULL,
+    end_time_next_day       BIT          NOT NULL,
+    locked_amount           BIGINT       NOT NULL,
+    currency                CHAR(3)      NOT NULL,
+    status                  VARCHAR(20)  NOT NULL,
+    reserved_at             DATETIME(6)  NOT NULL,
+    expires_at              DATETIME(6)  NOT NULL,
+    consumed_at             DATETIME(6)  NULL,
+    released_at             DATETIME(6)  NULL,
+    expired_at              DATETIME(6)  NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_job_matching_seat_reservations_idempotency_key UNIQUE (idempotency_key),
+    CONSTRAINT uk_job_matching_seat_reservations_confirm_key UNIQUE (confirm_idempotency_key),
+    CONSTRAINT uk_job_matching_seat_reservations_release_key UNIQUE (release_idempotency_key),
+    CONSTRAINT fk_job_matching_seat_reservations_job_post
+        FOREIGN KEY (job_post_id) REFERENCES job_posts (id),
+    -- 공고별 점유 집계와 같은 매칭·지원 중복 점유 확인, 공고 단위 만료 처리에 사용한다.
+    INDEX idx_job_matching_seat_reservations_job_status (job_post_id, status, expires_at),
+    -- 만료 회수 대상 공고를 찾는 데 사용한다.
+    INDEX idx_job_matching_seat_reservations_status_expires (status, expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

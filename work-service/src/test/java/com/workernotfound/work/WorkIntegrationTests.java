@@ -37,7 +37,8 @@ class WorkIntegrationTests extends com.workernotfound.work.support.IntegrationTe
         "payment",
         LocalDate.of(2026, 9, 20),
         LocalTime.of(23, 0),
-        LocalTime.of(2, 0));
+        LocalTime.of(2, 0),
+        true);
   }
 
   String key() {
@@ -221,11 +222,50 @@ class WorkIntegrationTests extends com.workernotfound.work.support.IntegrationTe
   }
 
   @Test
+  void storesNextDayScheduleWithLegacyCommandFingerprint() {
+    var request = request(IDS.incrementAndGet());
+    long id = Long.parseLong(service.create(key(), request).workId());
+
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT end_time_next_day FROM works WHERE id = ?", Boolean.class, id))
+        .isTrue();
+    // 필드 추가 전 record 문자열과 같아야 이미 저장된 명령의 재시도가 지문 충돌로 거절되지 않는다.
+    assertThat(request.fingerprintPayload())
+        .isEqualTo(
+            "ScheduledWorkRequest[matchingId=%d, jobPostId=10, ownerMemberId=20, workerMemberId=30, "
+                    .formatted(request.matchingId())
+                + "paymentId=payment, workDate=2026-09-20, startTime=23:00, endTime=02:00]");
+  }
+
+  @Test
+  void rejectsExplicitlyInconsistentNextDayFlag() throws Exception {
+    String template =
+        """
+        {"matchingId":%d,"jobPostId":10,"ownerMemberId":20,"workerMemberId":30,
+         "paymentId":"pay-1","workDate":"2026-09-20","startTime":"%s","endTime":"%s"%s}
+        """;
+    for (String body :
+        java.util.List.of(
+            template.formatted(IDS.incrementAndGet(), "22:00:00", "02:00:00", ",\"endTimeNextDay\":false"),
+            template.formatted(IDS.incrementAndGet(), "09:00:00", "18:00:00", ",\"endTimeNextDay\":true"))) {
+      mvc.perform(
+              post("/api/works/internal/scheduled")
+                  .header("X-Internal-Secret", "work-test-internal-secret")
+                  .header("Idempotency-Key", key())
+                  .contentType("application/json")
+                  .content(body))
+          .andExpect(status().isBadRequest());
+    }
+  }
+
+  @Test
   void httpContractAcceptsSagaPayloadAndReturnsStringIdentifier() throws Exception {
     String body =
         """
         {"matchingId":%d,"jobPostId":10,"ownerMemberId":20,"workerMemberId":30,
-         "paymentId":"pay-1","workDate":"2026-09-20","startTime":"09:00:00","endTime":"18:00:00"}
+         "paymentId":"pay-1","workDate":"2026-09-20","startTime":"09:00:00","endTime":"18:00:00",
+         "endTimeNextDay":false}
         """
             .formatted(IDS.incrementAndGet());
     String response =

@@ -11,6 +11,7 @@ public record ScheduledWorkRequest(
 	String paymentId,
 	LocalDate workDate,
 	LocalTime startTime,
-	LocalTime endTime
+	LocalTime endTime,
+	Boolean endTimeNextDay
 ) {
 }

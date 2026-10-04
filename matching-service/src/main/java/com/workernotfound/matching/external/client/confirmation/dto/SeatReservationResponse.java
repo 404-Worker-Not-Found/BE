@@ -13,6 +13,7 @@ public record SeatReservationResponse(
 	LocalDate workDate,
 	LocalTime startTime,
 	LocalTime endTime,
+	Boolean endTimeNextDay,
 	BigDecimal lockedAmount,
 	String currency,
 	LocalDateTime reservedAt,

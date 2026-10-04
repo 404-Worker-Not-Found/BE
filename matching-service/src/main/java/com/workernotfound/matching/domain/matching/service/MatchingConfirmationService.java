@@ -72,6 +72,12 @@ public class MatchingConfirmationService {
 		);
 		validateSeat(response, state);
 		commandService.recordSeat(execution.sagaId(), execution.leaseToken(), response);
+		// 응답 유실 후 같은 키로 재요청하면 job-service는 원래 스냅샷을 그대로 돌려준다. 그 예약이 이미 만료됐다면
+		// 같은 키 재시도로는 영원히 회복되지 않으므로 확정적 거절로 보고, 기록한 예약부터 보상한 뒤 새 시도를 연다.
+		if (isExpired(response)) {
+			throw MatchingConfirmationClientException.rejected(
+				ConfirmationStep.SEAT_RESERVATION, "모집 자리 예약이 만료되었습니다: " + response.reservationId());
+		}
 	}
 
 	private void lockPayment(MatchingConfirmationExecution execution) {
@@ -96,7 +102,7 @@ public class MatchingConfirmationService {
 		}
 		ScheduledWorkResponse response = client.createScheduledWork(new ScheduledWorkRequest(
 			state.matchingId(), state.jobPostId(), state.ownerMemberId(), state.workerMemberId(),
-			state.paymentId(), state.workDate(), state.startTime(), state.endTime()
+			state.paymentId(), state.workDate(), state.startTime(), state.endTime(), state.endTimeNextDay()
 		), state.workCreationCommandId());
 		if (isBlank(response.workId())) {
 			throw invalidResponse(ConfirmationStep.WORK_CREATION);
@@ -222,15 +228,19 @@ public class MatchingConfirmationService {
 			|| response.workDate() == null
 			|| response.startTime() == null
 			|| response.endTime() == null
+			|| response.endTimeNextDay() == null
 			|| response.lockedAmount() == null
 			|| response.lockedAmount().signum() <= 0
 			|| isBlank(response.currency())
 			|| response.currency().length() != 3
 			|| response.reservedAt() == null
-			|| response.expiresAt() == null
-			|| !response.expiresAt().isAfter(LocalDateTime.now())) {
+			|| response.expiresAt() == null) {
 			throw invalidResponse(ConfirmationStep.SEAT_RESERVATION);
 		}
+	}
+
+	private boolean isExpired(SeatReservationResponse response) {
+		return !response.expiresAt().isAfter(LocalDateTime.now());
 	}
 
 	private boolean isBlank(String value) {

@@ -88,6 +88,7 @@ public class MatchingConfirmationCommandService {
 			response.workDate(),
 			response.startTime(),
 			response.endTime(),
+			response.endTimeNextDay(),
 			response.lockedAmount(),
 			response.currency()
 		);
@@ -352,7 +353,8 @@ public class MatchingConfirmationCommandService {
 			saga.getWorkCompensationCommandId(), saga.getChatCreationCommandId(),
 			saga.getChatCompensationCommandId(),
 			saga.getSeatReservationId(), saga.getPaymentId(), saga.getWorkId(), saga.getChatRoomId(),
-			saga.getWorkDate(), saga.getStartTime(), saga.getEndTime(), saga.getLockedAmount(),
+			saga.getWorkDate(), saga.getStartTime(), saga.getEndTime(), saga.getEndTimeNextDay(),
+			saga.getLockedAmount(),
 			saga.getCurrency(), saga.isSeatConsumed()
 		);
 	}

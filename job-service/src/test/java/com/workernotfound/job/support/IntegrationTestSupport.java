@@ -5,6 +5,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -12,6 +13,7 @@ import org.testcontainers.containers.MySQLContainer;
 
 @SpringBootTest
 @ActiveProfiles("test")
+@Import(TestClockConfig.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class IntegrationTestSupport {
 
@@ -36,5 +38,7 @@ public abstract class IntegrationTestSupport {
 		registry.add("spring.datasource.password", MYSQL::getPassword);
 		registry.add("spring.datasource.driver-class-name", MYSQL::getDriverClassName);
 		registry.add("job.internal.secret", () -> "test-internal-secret");
+		// 만료 회수는 테스트에서 직접 호출한다. 백그라운드 실행이 시간 경계 검증에 끼어들지 않게 끈다.
+		registry.add("job.matching-seat-reservation.expiry-sweep-enabled", () -> "false");
 	}
 }

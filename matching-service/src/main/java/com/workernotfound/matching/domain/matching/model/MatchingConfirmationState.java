@@ -27,6 +27,7 @@ public record MatchingConfirmationState(
 	LocalDate workDate,
 	LocalTime startTime,
 	LocalTime endTime,
+	Boolean endTimeNextDay,
 	BigDecimal lockedAmount,
 	String currency,
 	boolean seatConsumed

@@ -226,7 +226,7 @@ class ConcurrentMatchingTests extends IntegrationTestSupport {
 			}
 			return new SeatReservationResponse(
 				"seat-1", 10L, 1L, 100L, LocalDate.now().plusDays(1),
-				LocalTime.of(9, 0), LocalTime.of(18, 0), new BigDecimal("120000"), "KRW",
+				LocalTime.of(9, 0), LocalTime.of(18, 0), false, new BigDecimal("120000"), "KRW",
 				LocalDateTime.now(), LocalDateTime.now().plusMinutes(5)
 			);
 		});
