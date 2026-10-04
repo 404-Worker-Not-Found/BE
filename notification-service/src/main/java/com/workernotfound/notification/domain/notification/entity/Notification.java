@@ -17,14 +17,15 @@ public class Notification {
   @Column(nullable = false, length = 32) private String notificationType;
   @Column(nullable = false) private Long jobPostId;
   private Long matchingId;
-  @Column(nullable = false) private Long applicationId;
+  private Long applicationId;
+  private Long workId;
   @Column(nullable = false) private LocalDateTime occurredAt;
   @Column(nullable = false) private LocalDateTime createdAt;
   private LocalDateTime readAt;
 
   @Builder
   private Notification(String eventId, Long memberId, String memberRole, String notificationType,
-      Long jobPostId, Long matchingId, Long applicationId, LocalDateTime occurredAt) {
+      Long jobPostId, Long matchingId, Long applicationId, Long workId, LocalDateTime occurredAt) {
     this.eventId = eventId;
     this.memberId = memberId;
     this.memberRole = memberRole;
@@ -32,6 +33,7 @@ public class Notification {
     this.jobPostId = jobPostId;
     this.matchingId = matchingId;
     this.applicationId = applicationId;
+    this.workId = workId;
     this.occurredAt = occurredAt;
     this.createdAt = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
   }

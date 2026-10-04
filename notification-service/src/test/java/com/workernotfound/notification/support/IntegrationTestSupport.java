@@ -26,6 +26,7 @@ public abstract class IntegrationTestSupport {
     registry.add("spring.data.redis.host", REDIS::getHost);
     registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
     registry.add("notification.jwt.secret", () -> "notification-test-jwt-secret-for-integration-only");
+    registry.add("notification.work-events.initial-delay-ms", () -> "3600000");
     registry.add("notification.events.initial-delay-ms", () -> "3600000");
   }
 }

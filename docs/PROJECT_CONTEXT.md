@@ -316,6 +316,8 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 
 ## Notification Service Context
 
+- WorkCheckedIn, WorkStarted and WorkCompleted v1 from the dedicated work Stream notify the opposite participant using the declared actor role. Work notifications carry workId instead of applicationId, retain event-id deduplication and pending recovery, and preserve existing matching event fingerprints.
+
 - `notification-service` owns MySQL/Flyway notification storage and consumes matching Redis Stream events using a dedicated group.
 - `MatchConfirmed` v1 creates OWNER and WORKER in-app notifications; `ApplicationRejected` v1 creates a WORKER notification only. Unsupported event types are skipped, while malformed supported events remain pending.
 - Event receipts and recipient notifications commit together before ACK. Stable fingerprints and recipient unique constraints handle concurrent redelivery without resetting read state.
