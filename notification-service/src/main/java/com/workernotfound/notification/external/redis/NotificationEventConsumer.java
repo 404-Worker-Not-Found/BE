@@ -112,7 +112,8 @@ public class NotificationEventConsumer {
         || !Objects.equals(fields.get("eventType"), event.eventType())
         || !Objects.equals(fields.get("aggregateId"), String.valueOf(event.aggregateId()))
         || !Objects.equals(fields.get("revision"), String.valueOf(event.revision()))
-        || !Objects.equals(fields.get("version"), String.valueOf(event.version())))
+        || !Objects.equals(fields.get("version"), String.valueOf(event.version()))
+        || !Objects.equals(java.time.LocalDateTime.parse((String) fields.get("occurredAt")), event.occurredAt()))
       throw new IllegalArgumentException("이벤트 envelope와 payload가 일치하지 않습니다.");
     return event;
   }

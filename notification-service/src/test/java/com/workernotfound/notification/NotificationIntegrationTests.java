@@ -65,7 +65,8 @@ class NotificationIntegrationTests extends IntegrationTestSupport {
     return Map.of("eventId", event.eventId(), "eventType", event.eventType(),
         "aggregateType", event.eventType().equals("MatchConfirmed") ? "MATCHING" : "APPLICATION",
         "aggregateId", event.aggregateId().toString(), "revision", event.revision().toString(),
-        "version", event.version().toString(), "payload", mapper.writeValueAsString(event));
+        "version", event.version().toString(), "occurredAt", event.occurredAt().toString(),
+        "payload", mapper.writeValueAsString(event));
   }
 
   String token(long memberId, String role) throws Exception {
@@ -223,6 +224,21 @@ class NotificationIntegrationTests extends IntegrationTestSupport {
     consumer.poll();
     assertThat(notifications.getUnreadCount(worker(next)).unreadCount()).isEqualTo(2);
     assertThat(notifications.getUnreadCount(owner(next)).unreadCount()).isEqualTo(1);
+  }
+
+  @Test
+  void mismatchedEnvelopeTimeRemainsPendingWithoutCreatingANotice() throws Exception {
+    var event = confirmed();
+    var invalid = new HashMap<>(fields(event));
+    invalid.put("occurredAt", event.occurredAt().minusDays(1).toString());
+    var recordId = redis.opsForStream().add(STREAM, invalid);
+    consumer.poll();
+    assertThat(notifications.getUnreadCount(worker(event)).unreadCount()).isZero();
+    assertThat(redis.opsForStream().pending(STREAM, "notification-results-v1",
+        org.springframework.data.domain.Range.closed(recordId.getValue(), recordId.getValue()), 10)).hasSize(1);
+    redis.opsForStream().add(STREAM, fields(event));
+    consumer.poll();
+    assertThat(notifications.getUnreadCount(worker(event)).unreadCount()).isEqualTo(1);
   }
 
   @Test
