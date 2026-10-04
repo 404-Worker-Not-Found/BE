@@ -38,6 +38,8 @@
 
 `/api/jobs/internal/**`는 `X-Internal-Secret`이 일치해야 하며, 불일치하면 401 `GLOBAL-401-001`이다. 보안 설정의 `permitAll`은 이 필터가 먼저 검증한 뒤 적용된다.
 
+같은 `job.internal.secret`(`INTERNAL_API_SECRET`)을 matching-service로 보내는 요청 헤더에도 쓴다. 비어 있거나 공백·제어 문자·비ASCII 문자가 있는 값, 즉 출력 가능한 ASCII(0x21~0x7E)가 아닌 문자가 들어간 값은 시작 시 거절한다. 줄바꿈 같은 값은 HTTP 헤더로 보낼 수 없고, 앞뒤 공백이나 비ASCII 문자는 받는 쪽 비교와 어긋날 수 있다. 값을 잘라 내거나 보정하지 않으며, 시작 실패 보고와 오류 메시지에 값을 포함하지 않는다.
+
 | 명령 | 경로 | 요청/응답 |
 | --- | --- | --- |
 | 지원 접수 승인 | `POST /api/jobs/internal/{jobPostId}/application-admissions` | `workerMemberId` / `admissionId`, `jobPostId`, `jobVersion`, `ownerMemberId`, `categoryId`, `workDate`, `startTime`, `endTime`, `latitude`, `longitude`, `admittedAt`, `expiresAt` |
@@ -178,7 +180,7 @@
 - 본문 수신은 HTTP 교환의 일부다. 본문을 받다가 시간이 초과되면 `TIMEOUT`, 연결이 끊기거나 선언한 길이보다 적게 받으면 `NETWORK`이며, 이미 받은 HTTP 상태와 관계없이 이 분류가 우선한다. 받은 상태는 `last_failure_http_status`에 진단 정보로 남긴다. 예: 200 헤더 뒤 본문이 멈추면 `TIMEOUT`, 상태 200. 읽다가 중단된 본문은 성공으로 인정하지 않는다.
 - 본문을 끝까지 받은 응답은 HTTP 상태로 분류한다. JSON 형식이 잘못됐거나 뒤에 다른 내용이 붙었으면 오류 코드 없이 상태만 사용한다. 예: 503 + 잘못된 JSON은 `SERVER_ERROR`, 코드 없음.
 - 상대 오류 코드는 본문이 정상 JSON이고 안전한 형식(`[A-Z0-9_-]{1,50}`)일 때만 보존한다.
-- 전송 오류(I/O)도 JSON 형식 오류도 아닌 예외는 내부 오류로 보고 통신·계약 실패로 바꾸지 않는다. 실행기 경계에서 원인과 함께 `ERROR`로 기록되고, 실행권이 만료되면 같은 명령이 다시 전송된다.
+- 전송 오류(I/O)도 JSON 형식 오류도 아닌 예외는 내부 오류로 보고 통신·계약 실패로 바꾸지 않는다. 실행기 경계(스케줄러 전송과 커밋 후 즉시 전송)에서 명령 ID와 예외 타입 사슬만 `ERROR`로 기록하고, 실행권이 만료되면 같은 명령이 다시 전송된다. 예외 메시지·cause·suppressed 예외와 스택 트레이스에는 요청 헤더 값(내부 secret 포함) 같은 검증되지 않은 문자열이 담길 수 있어 기록하지 않는다. 한 명령의 내부 오류는 같은 배치의 다음 명령 처리를 막지 않는다.
 
 - backoff는 `RETRY_BASE_DELAY × 2^(시도-1)`이며 `RETRY_MAX_DELAY`를 넘지 않는다. 인증·계약 오류는 원인 해결 전까지 최대 지연 간격으로만 다시 확인하며 `[운영 확인 필요]` 오류 로그와 `last_failure_type`으로 일시 오류와 구분한다.
 - 재시도 횟수로 명령을 종료·삭제하지 않고 모집 완료도 취소하지 않는다. 원인을 고치면 같은 명령 ID로 자동 재처리된다. 즉시 재처리가 필요하면 해당 명령의 `next_attempt_at`을 현재 시각으로 당긴다. 식별 컬럼과 `job_version`은 바꾸지 않는다.

@@ -1188,7 +1188,7 @@ Related files:
 Decision:
 - Treat failures while receiving the response body as transport failures: a timeout is `TIMEOUT`, and a lost connection or a body shorter than declared is `NETWORK`. They take precedence over an already received HTTP status, which is kept only as diagnostic data.
 - Classify a fully received response by HTTP status as before. An empty, malformed, trailing-content, non-boolean `success`, or over-8KB body is never a success; its remote error code is discarded, but the status classification remains (for example, 503 with invalid JSON is `SERVER_ERROR`).
-- Do not convert unexpected runtime exceptions into communication or contract failures. They surface at the dispatcher boundary, are logged at error level with the cause, and the command is retried after its lease expires.
+- Do not convert unexpected runtime exceptions into communication or contract failures. They surface at the dispatcher boundary, are logged at error level with only the command ID and exception type chain, and the command is retried after its lease expires.
 
 Reason:
 - A body read failure turned into a missing body and was classified as `CONTRACT`, which is non-transient and delayed the first retry from the base delay to the maximum delay.
@@ -1199,3 +1199,22 @@ Implication for agents:
 Related files:
 - `docs/architecture/job-post-design.md`
 - `job-service/src/main/java/com/workernotfound/job/external/client/matching/MatchingRecruitmentCompletionClient.java`
+
+## 2026-10-05 - Safe Recruitment Completion Error Logs and Internal Secret Format
+
+Decision:
+- At the recruitment-completion execution boundaries (scheduler dispatch and after-commit dispatch), log unexpected exceptions with only the command ID and the exception class chain. Do not pass the original exception, its message, causes, suppressed exceptions, or stack trace to the logger.
+- In job-service, require `job.internal.secret` to be non-empty visible ASCII (0x21-0x7E) and reject other values at startup without trimming or including the value in error messages. `InternalApiProperties.toString()` masks the value.
+
+Reason:
+- The JDK HTTP client includes the entire header value in its `IllegalArgumentException` message, so logging the raw exception exposed the internal secret when the configured value contained a newline.
+- The same value is sent as an HTTP header and compared as UTF-8 bytes by receivers, so whitespace, control, and non-ASCII characters either cannot be sent or fail comparison.
+
+Implication for agents:
+- Do not log raw exceptions at boundaries where unvalidated strings such as request headers can appear in exception messages; log identifiers and exception types instead.
+- Keep error messages and failure reports for secret settings free of the rejected value; verify with captured startup output.
+
+Related files:
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/ExceptionTypeChain.java`
+- `job-service/src/main/java/com/workernotfound/job/global/security/InternalApiProperties.java`
+- `docs/architecture/job-post-design.md`
