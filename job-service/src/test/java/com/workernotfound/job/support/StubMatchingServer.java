@@ -115,6 +115,10 @@ public class StubMatchingServer implements AutoCloseable {
             dripBody(exchange, response);
             return;
         }
+        if (response.isStallingAfterPartialBody()) {
+            stallAfterPartialBody(exchange, response);
+            return;
+        }
         byte[] body = response.body().getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(response.status(), body.length == 0 ? -1 : body.length);
@@ -140,6 +144,16 @@ public class StubMatchingServer implements AutoCloseable {
         } catch (IOException exception) {
             clientClosedDrips.incrementAndGet();
         }
+    }
+
+    // 200 헤더와 선언 길이보다 짧은 본문 일부를 보낸 뒤 더 보내지 않는다. 서버 종료 시 인터럽트로 끝난다.
+    private void stallAfterPartialBody(HttpExchange exchange, StubResponse response) throws IOException {
+        exchange.getResponseHeaders().add("Content-Type", "application/json");
+        exchange.sendResponseHeaders(response.status(), DRIP_CONTENT_LENGTH);
+        OutputStream output = exchange.getResponseBody();
+        output.write(response.body().getBytes(StandardCharsets.UTF_8));
+        output.flush();
+        sleep(MAX_DRIP_DURATION);
     }
 
     // 본문을 보내는 도중 클라이언트가 연결을 닫은 횟수
@@ -170,10 +184,21 @@ public class StubMatchingServer implements AutoCloseable {
         }
     }
 
-    public record StubResponse(int status, String body, Duration delay, Duration dripInterval) {
+    public record StubResponse(
+            int status,
+            String body,
+            Duration delay,
+            Duration dripInterval,
+            boolean isStallingAfterPartialBody
+    ) {
 
         public StubResponse(int status, String body, Duration delay) {
-            this(status, body, delay, null);
+            this(status, body, delay, null, false);
+        }
+
+        // 200 헤더와 성공 본문의 앞부분만 보낸 뒤 멈춘다. 본문 수신 중 시간 초과를 재현한다.
+        public static StubResponse partialSuccessBodyThenStall() {
+            return new StubResponse(200, "{\"success\":tr", Duration.ZERO, null, true);
         }
 
         public static StubResponse success() {
@@ -195,12 +220,12 @@ public class StubMatchingServer implements AutoCloseable {
         }
 
         public StubResponse delayedBy(Duration duration) {
-            return new StubResponse(status, body, duration, dripInterval);
+            return new StubResponse(status, body, duration, dripInterval, isStallingAfterPartialBody);
         }
 
         // 200 헤더 뒤 본문을 간격마다 한 바이트씩 끝없이 보낸다. 읽기 간격 제한으로는 끝나지 않는 응답이다.
         public static StubResponse drippingBody(Duration interval) {
-            return new StubResponse(200, "", Duration.ZERO, interval);
+            return new StubResponse(200, "", Duration.ZERO, interval, false);
         }
     }
 }
