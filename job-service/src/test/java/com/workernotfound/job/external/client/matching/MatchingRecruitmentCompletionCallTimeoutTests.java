@@ -8,6 +8,7 @@ import com.workernotfound.job.support.RawHttpStubServer;
 import com.workernotfound.job.support.RawHttpStubServer.Behavior;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.ThreadPoolExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -104,8 +105,6 @@ class MatchingRecruitmentCompletionCallTimeoutTests {
     void repeatedTimeoutsDoNotAccumulateConnectionsTasksOrThreads() throws Exception {
         server.behave(Behavior.dripBody(DRIP_INTERVAL));
         assertTimedOutAndClosed();
-        long httpThreadsBefore = countThreads("matching-http-");
-        long selectorThreadsBefore = countThreads("SelectorManager");
 
         for (int i = 0; i < 5; i++) {
             assertTimedOutAndClosed();
@@ -113,10 +112,9 @@ class MatchingRecruitmentCompletionCallTimeoutTests {
 
         assertThat(server.awaitAllClosed(Duration.ofSeconds(2))).isTrue();
         assertThat(server.clientClosedAtNanos()).hasSize(6);
-        assertThat(client.httpExecutor().getActiveCount()).isZero();
-        assertThat(client.httpExecutor().getQueue()).isEmpty();
-        assertThat(countThreads("matching-http-")).isLessThanOrEqualTo(Math.max(httpThreadsBefore, 2));
-        assertThat(countThreads("SelectorManager")).isEqualTo(selectorThreadsBefore);
+        assertExecutorIdle();
+        // JVM 전체 스레드 수는 다른 클라이언트의 생성·정리에 영향받으므로 이 클라이언트의 풀만 검사한다.
+        assertThat(client.httpExecutor().getLargestPoolSize()).isBetween(1, 2);
     }
 
     private void assertTimedOutAndClosed() throws InterruptedException {
@@ -142,9 +140,15 @@ class MatchingRecruitmentCompletionCallTimeoutTests {
         client.notifyRecruitmentCompleted(1L, 2L, "0f8fad5b-d9cb-469f-a165-70867728950e");
     }
 
-    private static long countThreads(String namePart) {
-        return Thread.getAllStackTraces().keySet().stream()
-                .filter(thread -> thread.isAlive() && thread.getName().contains(namePart))
-                .count();
+    private void assertExecutorIdle() throws InterruptedException {
+        ThreadPoolExecutor executor = client.httpExecutor();
+        long deadline = System.nanoTime() + TOLERANCE.toNanos();
+        // 서버가 연결 종료를 관찰한 직후에도 취소 후속 작업이 남을 수 있어 제한 시간 동안 정리를 기다린다.
+        while (System.nanoTime() < deadline
+                && (executor.getActiveCount() != 0 || !executor.getQueue().isEmpty())) {
+            Thread.sleep(10);
+        }
+        assertThat(executor.getActiveCount()).isZero();
+        assertThat(executor.getQueue()).isEmpty();
     }
 }
