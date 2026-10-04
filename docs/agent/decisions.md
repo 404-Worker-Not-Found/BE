@@ -1176,9 +1176,26 @@ Reason:
 Implication for agents:
 - Do not treat per-read timeouts or `Future.get(timeout)` alone as a total call limit; verify that the connection is actually closed with a real-socket test.
 - Keep the lease validation tied to the enforced deadline when changing the HTTP client.
-- Body read and JSON parse errors are still classified as before; reclassifying them is separate work.
+- Body transfer failures and JSON format errors are classified separately; see "Recruitment Completion Response Classification".
 
 Related files:
 - `docs/architecture/job-post-design.md`
 - `job-service/src/main/java/com/workernotfound/job/external/client/matching/MatchingRecruitmentCompletionClient.java`
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/RecruitmentCompletionDispatcher.java`
+
+## 2026-10-05 - Recruitment Completion Response Classification
+
+Decision:
+- Treat failures while receiving the response body as transport failures: a timeout is `TIMEOUT`, and a lost connection or a body shorter than declared is `NETWORK`. They take precedence over an already received HTTP status, which is kept only as diagnostic data.
+- Classify a fully received response by HTTP status as before. An empty, malformed, trailing-content, non-boolean `success`, or over-8KB body is never a success; its remote error code is discarded, but the status classification remains (for example, 503 with invalid JSON is `SERVER_ERROR`).
+- Do not convert unexpected runtime exceptions into communication or contract failures. They surface at the dispatcher boundary, are logged at error level with the cause, and the command is retried after its lease expires.
+
+Reason:
+- A body read failure turned into a missing body and was classified as `CONTRACT`, which is non-transient and delayed the first retry from the base delay to the maximum delay.
+
+Implication for agents:
+- Do not catch all `IOException` or `RuntimeException` around response parsing; JSON format errors and transport errors have different meanings.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `job-service/src/main/java/com/workernotfound/job/external/client/matching/MatchingRecruitmentCompletionClient.java`

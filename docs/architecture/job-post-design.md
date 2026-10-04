@@ -164,14 +164,21 @@
 
 | 결과 | 분류 | 다음 시도 |
 | --- | --- | --- |
-| 2xx + `success=true` | 성공 | 없음(`SUCCEEDED`) |
+| 2xx + 끝까지 받은 본문이 JSON이고 `success`가 불리언 `true` | 성공 | 없음(`SUCCEEDED`) |
 | 409(예: Saga 미완료 `APPLICATION-409-006`) | `CONFLICT` | backoff |
-| 연결·응답 헤더·전체 호출 제한시간 초과, 408 | `TIMEOUT` | backoff |
-| 연결 실패 등 | `NETWORK` | backoff |
+| 연결·응답 헤더·전체 호출 제한시간 초과(본문 수신 중 포함), 408 | `TIMEOUT` | backoff |
+| 연결 실패, 본문 수신 중 연결 끊김 등 전송 오류 | `NETWORK` | backoff |
 | 429 | `THROTTLED` | backoff |
 | 5xx | `SERVER_ERROR` | backoff |
 | 401·403 | `AUTHENTICATION` | 최대 지연, `ERROR` 로그 |
-| 그 밖의 4xx, 계약과 다른 2xx | `CONTRACT` | 최대 지연, `ERROR` 로그 |
+| 그 밖의 4xx, 끝까지 받았지만 계약과 다른 2xx(빈 본문, 잘못된 JSON, `success`가 `true`가 아님, 8KB 초과) | `CONTRACT` | 최대 지연, `ERROR` 로그 |
+
+본문 수신 실패와 본문 형식 오류는 구분한다.
+
+- 본문 수신은 HTTP 교환의 일부다. 본문을 받다가 시간이 초과되면 `TIMEOUT`, 연결이 끊기거나 선언한 길이보다 적게 받으면 `NETWORK`이며, 이미 받은 HTTP 상태와 관계없이 이 분류가 우선한다. 받은 상태는 `last_failure_http_status`에 진단 정보로 남긴다. 예: 200 헤더 뒤 본문이 멈추면 `TIMEOUT`, 상태 200. 읽다가 중단된 본문은 성공으로 인정하지 않는다.
+- 본문을 끝까지 받은 응답은 HTTP 상태로 분류한다. JSON 형식이 잘못됐거나 뒤에 다른 내용이 붙었으면 오류 코드 없이 상태만 사용한다. 예: 503 + 잘못된 JSON은 `SERVER_ERROR`, 코드 없음.
+- 상대 오류 코드는 본문이 정상 JSON이고 안전한 형식(`[A-Z0-9_-]{1,50}`)일 때만 보존한다.
+- 전송 오류(I/O)도 JSON 형식 오류도 아닌 예외는 내부 오류로 보고 통신·계약 실패로 바꾸지 않는다. 실행기 경계에서 원인과 함께 `ERROR`로 기록되고, 실행권이 만료되면 같은 명령이 다시 전송된다.
 
 - backoff는 `RETRY_BASE_DELAY × 2^(시도-1)`이며 `RETRY_MAX_DELAY`를 넘지 않는다. 인증·계약 오류는 원인 해결 전까지 최대 지연 간격으로만 다시 확인하며 `[운영 확인 필요]` 오류 로그와 `last_failure_type`으로 일시 오류와 구분한다.
 - 재시도 횟수로 명령을 종료·삭제하지 않고 모집 완료도 취소하지 않는다. 원인을 고치면 같은 명령 ID로 자동 재처리된다. 즉시 재처리가 필요하면 해당 명령의 `next_attempt_at`을 현재 시각으로 당긴다. 식별 컬럼과 `job_version`은 바꾸지 않는다.
