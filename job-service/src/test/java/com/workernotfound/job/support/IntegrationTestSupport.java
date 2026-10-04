@@ -37,6 +37,16 @@ public abstract class IntegrationTestSupport {
 		return DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
 	}
 
+	// 애플리케이션을 직접 띄우는 시작 검증 테스트가 같은 컨테이너를 쓰도록 데이터소스 속성을 제공한다.
+	public static String[] dataSourceProperties() {
+		return new String[]{
+			"spring.datasource.url=" + MYSQL.getJdbcUrl(),
+			"spring.datasource.username=" + MYSQL.getUsername(),
+			"spring.datasource.password=" + MYSQL.getPassword(),
+			"spring.datasource.driver-class-name=" + MYSQL.getDriverClassName()
+		};
+	}
+
 	@DynamicPropertySource
 	static void registerDataSourceProperties(DynamicPropertyRegistry registry) {
 		registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
