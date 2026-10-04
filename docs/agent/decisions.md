@@ -1132,3 +1132,31 @@ Related files:
 - `docs/architecture/work-scheduled-design.md`
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/MatchingSeatReservationCommandService.java`
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobWageCalculator.java`
+
+## 2026-10-04 - Recruitment Completion Producer
+
+Decision:
+- job-service completes recruitment when `CONSUMED` seats reach `recruitCount`. Valid `RESERVED` seats only block further reservations and never count toward completion.
+- The last seat confirmation, the `OPEN`/`MATCHING -> CLOSED` transition, the `job_status_histories` row, and the completion command are stored in one local transaction under the existing job-row -> reservation-row lock order. Any failure rolls back the seat confirmation as well.
+- The notification `jobVersion` is the job version after the completion transition. It is obtained by flushing the `@Version` increment inside the same transaction, stored once with a UUID command ID, and never re-read from the current job on retries. `(job_post_id, job_version)` is unique.
+- With no actor column, `job_status_histories.reason` records `actor:reason`, currently `SYSTEM:RECRUITMENT_FILLED`.
+- Delivery uses a database lease: claim in a short transaction, call matching-service outside any transaction, and record the result only when the lease token still matches. An after-commit trigger is an optimization; a scheduler guarantees retries.
+- Commands have no terminal failure state. 409, timeouts, network errors, 429, and 5xx retry with capped exponential backoff. Authentication and contract failures stay `PENDING`, retry at the maximum delay, and log errors for operators.
+- A bounded periodic reconciler closes jobs whose seats were all consumed before this implementation, using the same lock and criteria.
+
+Reason:
+- The matching receiver uses the completion version as its late-application barrier and treats a repeated version as success, so a stable command and version make every retry and lost response converge.
+- The matching Saga that confirmed the last seat may still be finishing locally, so the first notification is expected to receive 409.
+
+Implication for agents:
+- Do not count `RESERVED` seats as completion, and do not commit the job separately to obtain the version.
+- Do not delete commands or mark them successful after retries; do not store response bodies, headers, or secrets.
+- Future close or reopen transitions must increment the job version and write `job_status_histories` in the same way.
+- Make each scheduler bean conditional on its own property, because `@EnableScheduling` from one scheduler enables every `@Scheduled` bean.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `docs/architecture/matching-application-design.md`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobRecruitmentCompletionService.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/RecruitmentCompletionDispatcher.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/RecruitmentCompletionReconciler.java`

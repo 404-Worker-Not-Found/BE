@@ -2,7 +2,7 @@
 
 ## 범위
 
-`job-service`는 공고와 업종 카테고리의 원본을 소유한다. 현재는 점주의 공고 등록, 공고 상세·목록 조회, `matching-service`가 지원 저장 전에 호출하는 지원 접수 승인 내부 API, 매칭 확정 Saga가 호출하는 모집 자리 예약·확정·반환 내부 API와 만료 예약 회수, 1인 예정 급여 계산을 제공한다. 공고 상태 전이와 상태 이력, 모집 완료 알림(`recruitment-completion` 호출 명령 저장과 재시도), 결제 예치 후 공개는 후속 작업이다. 자리 예약·확정만으로 모집 완료 연동이 끝난 것은 아니다.
+`job-service`는 공고와 업종 카테고리의 원본을 소유한다. 현재는 점주의 공고 등록, 공고 상세·목록 조회, `matching-service`가 지원 저장 전에 호출하는 지원 접수 승인 내부 API, 매칭 확정 Saga가 호출하는 모집 자리 예약·확정·반환 내부 API와 만료 예약 회수, 1인 예정 급여 계산, 확정 인원 기준의 모집 완료 전이와 matching-service 모집 완료 알림을 제공한다. 수동 마감, 지원 기한 만료에 따른 자동 마감, 재오픈, 결제 예치 후 공개는 후속 작업이다.
 
 ## 공개 API
 
@@ -85,6 +85,7 @@
 - 유효한 `RESERVED`는 `CONSUMED`로 바꾸고 확정 키와 시각을 기록한다.
 - 이미 `CONSUMED`인 예약에 처음 확정한 키로 다시 요청하면 성공한다. 확정 응답이 유실된 경우의 복구이므로 원래 `expiresAt`이 지났어도 거절하지 않는다. 다른 키는 저장된 키를 덮어쓰지 않고 `JOB-409-010`이다.
 - 기한이 지난 `RESERVED`와 `EXPIRED`는 `JOB-409-009`, `RELEASED`는 `JOB-409-010`이다.
+- 확정으로 `CONSUMED` 수가 `recruitCount`에 도달하면 같은 트랜잭션에서 공고를 모집 완료로 마감한다([모집 완료](#모집-완료)). 공고가 이미 `CLOSED`여도 원래 키의 확정 재요청은 성공하며 예약 스냅샷과 `jobVersion`은 바뀌지 않는다.
 
 ### 반환
 
@@ -115,6 +116,75 @@
 
 예약·확정·반환 키는 각각 `uk_job_matching_seat_reservations_idempotency_key`, `uk_job_matching_seat_reservations_confirm_key`, `uk_job_matching_seat_reservations_release_key` 유일 제약을 갖는다. 지원 접수 승인과 같은 방식으로 `GlobalExceptionHandler`가 롤백 이후 이 제약 이름과 정확히 일치할 때만 `JOB-409-004`로 변환한다.
 
+## 모집 완료
+
+확정 인원이 모집 인원에 도달하면 job-service가 공고를 마감하고 matching-service에 남은 지원·제안의 종료를 요청한다. job-service의 모집 완료(공고 `CLOSED`)와 matching-service의 후속 정리 완료(알림 명령 `SUCCEEDED`)는 별개의 상태다. 알림 실패는 이미 커밋된 자리 확정과 공고 마감을 되돌리지 않는다.
+
+### 판단 기준과 트랜잭션
+
+- 모집 완료 기준은 `CONSUMED 수 >= recruitCount`다. 예약 불변식상 `CONSUMED`는 `recruitCount`를 넘지 않으므로 실제로는 같을 때 완료된다. `CONSUMED + 유효한 RESERVED == recruitCount`는 추가 예약을 막는 조건일 뿐 완료 조건이 아니다.
+- `JobRecruitmentCompletionService`가 자리 확정과 같은 로컬 트랜잭션(`Propagation.MANDATORY`)에서 `RESERVED → CONSUMED`, 공고 `OPEN`/`MATCHING → CLOSED`, `job_status_histories` 저장, 알림 명령 저장을 함께 처리한다. 하나라도 실패하면 자리 확정까지 모두 롤백된다.
+- 잠금 순서는 기존과 같이 공고 행 → 예약 행이다. 같은 공고의 동시 확정은 공고 행 잠금으로 직렬화되고, 이미 `CLOSED`인 공고에는 이력·명령을 다시 만들지 않는다. `uk_job_recruitment_completion_commands_job_version (job_post_id, job_version)`이 같은 전이의 중복 명령을 DB에서도 막는다.
+- 상태 이력은 기존 `job_status_histories` 컬럼을 사용한다. `from_status`(이전 상태), `to_status`(`CLOSED`), `reason`(`주체:사유` 형식의 `SYSTEM:RECRUITMENT_FILLED`), `created_at`(전이 시각)을 기록한다. 확정 재요청과 알림 재시도는 이력을 추가하지 않는다.
+
+### 완료 버전
+
+- 알림의 `X-Job-Version`은 모집 완료 전이가 반영된 공고 버전이다. 예약 발급 당시 버전(`job_matching_seat_reservations.job_version`)과 다르다.
+- JPA `@Version`은 flush 때 증가하므로, 상태를 바꾼 뒤 같은 트랜잭션에서 flush해 증가한 버전을 얻고 그 값으로 명령을 저장한다. 버전 확인을 위해 공고를 따로 커밋하지 않는다.
+- 명령의 `command_id`, `job_post_id`, `job_version`은 `updatable = false`이며 재시도할 때 공고를 다시 읽지 않는다. matching-service는 이 버전 이하의 늦은 지원을 차단하고 더 높은 버전(재오픈)의 지원은 허용하므로, 과거 알림이 재오픈된 공고를 종료시키지 않는다.
+
+### 알림 명령과 전송
+
+`POST {MATCHING_SERVICE_BASE_URL}/api/applications/internal/jobs/{jobPostId}/recruitment-completion`, 본문 없음. 헤더는 `X-Internal-Secret`(`INTERNAL_API_SECRET`), `X-Job-Version`(완료 버전), `Idempotency-Key`(DB에 먼저 저장한 UUID 명령 ID, 36자)다. 성공은 2xx이면서 공통 응답의 `success=true`인 경우뿐이다.
+
+명령 생명주기는 `PENDING → SUCCEEDED`다. 한 번의 시도는 다음 세 단계로 나뉘며 HTTP 대기 중에는 DB 트랜잭션이나 공고 행 잠금을 잡지 않는다.
+
+1. 짧은 트랜잭션에서 실행권 획득: `PENDING`이고 `next_attempt_at <= now`이며 실행권이 없거나 만료된 행만 `lease_token`, `lease_expires_at`을 설정하고 `attempt_count`를 1 올린다. 기본 키 조건의 단일 `UPDATE`라 여러 인스턴스가 동시에 실행해도 한 실행자만 얻는다.
+2. 트랜잭션 밖에서 HTTP 호출(연결 `MATCHING_SERVICE_CONNECT_TIMEOUT` 3초, 응답 `MATCHING_SERVICE_READ_TIMEOUT` 5초).
+3. 별도의 짧은 트랜잭션에서 `lease_token`이 일치할 때만 성공 또는 실패를 기록하고 실행권을 비운다. 실행권이 만료되어 다른 실행자가 넘겨받았다면 이전 실행자의 늦은 결과는 0행 갱신으로 무시된다.
+
+실행권 만료 시간은 연결·응답 타임아웃 합보다 길어야 하며 짧으면 기동 시 거절한다.
+
+| 결과 | 분류 | 다음 시도 |
+| --- | --- | --- |
+| 2xx + `success=true` | 성공 | 없음(`SUCCEEDED`) |
+| 409(예: Saga 미완료 `APPLICATION-409-006`) | `CONFLICT` | backoff |
+| 응답·연결 타임아웃, 408 | `TIMEOUT` | backoff |
+| 연결 실패 등 | `NETWORK` | backoff |
+| 429 | `THROTTLED` | backoff |
+| 5xx | `SERVER_ERROR` | backoff |
+| 401·403 | `AUTHENTICATION` | 최대 지연, `ERROR` 로그 |
+| 그 밖의 4xx, 계약과 다른 2xx | `CONTRACT` | 최대 지연, `ERROR` 로그 |
+
+- backoff는 `RETRY_BASE_DELAY × 2^(시도-1)`이며 `RETRY_MAX_DELAY`를 넘지 않는다. 인증·계약 오류는 원인 해결 전까지 최대 지연 간격으로만 다시 확인하며 `[운영 확인 필요]` 오류 로그와 `last_failure_type`으로 일시 오류와 구분한다.
+- 재시도 횟수로 명령을 종료·삭제하지 않고 모집 완료도 취소하지 않는다. 원인을 고치면 같은 명령 ID로 자동 재처리된다. 즉시 재처리가 필요하면 해당 명령의 `next_attempt_at`을 현재 시각으로 당긴다. 식별 컬럼과 `job_version`은 바꾸지 않는다.
+- 실패 기록에는 분류, HTTP 상태, 형식이 맞는 응답 오류 코드만 저장한다. 응답 원문, 요청 헤더, secret은 저장하거나 로그로 남기지 않는다.
+- 자리 확정 직후에는 matching-service의 확정 Saga가 아직 로컬 확정을 끝내지 않았을 수 있으므로 첫 시도의 409는 정상적인 재시도 대상이다.
+
+### 실행 경로와 복구
+
+- 커밋 후 즉시 전송: `RecruitmentCompletionCommandCreatedEvent`를 `AFTER_COMMIT`에서 받아 별도 단일 스레드에서 한 번 시도한다. 자리 확정 요청 스레드는 응답을 기다리지 않는다. 실행되지 않거나 실패해도 아래 스케줄러가 복구한다.
+- 전송 스케줄러: `RECRUITMENT_COMPLETION_DISPATCH_INTERVAL`(기본 5초)마다 전송 대상을 최대 `RECRUITMENT_COMPLETION_DISPATCH_BATCH_SIZE`(기본 50)개 처리한다.
+- 중단 지점별 복구: 마감 커밋 직후 HTTP 전에 멈추면 `PENDING` 명령을 스케줄러가 찾는다. 실행권 획득 후 멈추면 실행권 만료 뒤 다른 실행자가 넘겨받는다. 상대가 처리한 뒤 응답이 유실되거나 HTTP 성공 후 로컬 기록 전에 멈추면 같은 명령 ID·버전으로 다시 보내며, matching-service는 같은 버전의 완료를 이력·이벤트 추가 없이 성공 처리하므로 수렴한다.
+
+### 이전 구현의 정원 충족 공고 복구
+
+모집 완료 구현 이전에 마지막 자리가 확정되어 `OPEN`/`MATCHING`으로 남은 공고는 `RecruitmentCompletionReconciler`가 마감한다. `RECRUITMENT_COMPLETION_RECONCILE_INTERVAL`(기본 10분, 첫 실행 `RECRUITMENT_COMPLETION_RECONCILE_INITIAL_DELAY` 30초)마다 `CONSUMED 수 >= recruitCount`인 모집 중 공고 ID를 최대 `RECRUITMENT_COMPLETION_RECONCILE_BATCH_SIZE`(기본 100)개 조회하고, 공고마다 별도 트랜잭션에서 공고 행을 잠근 뒤 같은 기준으로 다시 판단한다. 정원이 차지 않은 공고와 이미 마감된 공고는 바꾸지 않는다. 마감된 공고는 일반 경로와 같은 이력과 알림 명령을 남긴다. 배포 후 첫 실행에서 기존 대상이 처리되며, 대상이 많으면 배치 크기 단위로 다음 실행에 이어서 처리된다.
+
+### 운영 설정
+
+| 환경 변수 | 기본값 | 의미 |
+| --- | --- | --- |
+| `MATCHING_SERVICE_BASE_URL` | `http://localhost:8084` | matching-service 주소. HTTPS 또는 루프백 HTTP만 허용 |
+| `MATCHING_SERVICE_CONNECT_TIMEOUT` / `MATCHING_SERVICE_READ_TIMEOUT` | `3s` / `5s` | HTTP 연결·응답 타임아웃 |
+| `RECRUITMENT_COMPLETION_DISPATCH_ENABLED` | `true` | 전송 스케줄러 사용 |
+| `RECRUITMENT_COMPLETION_DISPATCH_AFTER_COMMIT` | `true` | 커밋 후 즉시 전송 사용 |
+| `RECRUITMENT_COMPLETION_DISPATCH_INTERVAL` / `..._BATCH_SIZE` | `5s` / `50` | 스케줄러 주기·배치 |
+| `RECRUITMENT_COMPLETION_LEASE_DURATION` | `30s` | 실행권 만료 시간(타임아웃 합보다 길어야 함) |
+| `RECRUITMENT_COMPLETION_RETRY_BASE_DELAY` / `..._MAX_DELAY` | `2s` / `5m` | backoff 기본·최대 지연 |
+| `RECRUITMENT_COMPLETION_RECONCILE_ENABLED` | `true` | 정원 충족 공고 복구 사용 |
+| `RECRUITMENT_COMPLETION_RECONCILE_INTERVAL` / `..._INITIAL_DELAY` / `..._BATCH_SIZE` | `10m` / `30s` / `100` | 복구 주기·첫 실행·배치 |
+
 ## 예정 급여 계산
 
 `JobWageCalculator`가 공고 도메인의 단일 계산 기준이다. payment-service에 같은 공식을 복제하지 않는다.
@@ -132,21 +202,22 @@
 
 ## 상태와 버전
 
-공고 상태는 `OPEN`, `MATCHING`, `CLOSED`가 정의되어 있다. 현재는 생성 시 `OPEN`만 사용하며 상태 전이 API와 `job_status_histories` 기록은 아직 없다. 전체 전이 규칙은 [MVP 도메인 흐름](./mvp-domain-flow.md)을 따른다.
+공고 상태는 `OPEN`, `MATCHING`, `CLOSED`가 정의되어 있다. 생성 시 `OPEN`이며, 현재 구현된 전이는 확정 인원 충족에 따른 `OPEN`/`MATCHING → CLOSED`뿐이다. 이 전이만 `job_status_histories`에 기록한다. 수동 마감, 지원 기한 만료 마감, 재오픈 API는 없다. 전체 전이 규칙은 [MVP 도메인 흐름](./mvp-domain-flow.md)을 따른다.
 
-`job_posts.version`은 JPA 낙관적 잠금 값이며 1부터 시작한다. 지원 승인에는 발급 당시 버전을 `jobVersion`으로 저장한다. 이후 모집 완료 알림과 재오픈을 구분하는 기준으로 사용한다.
+`job_posts.version`은 JPA 낙관적 잠금 값이며 1부터 시작한다. 지원 승인에는 발급 당시 버전을 `jobVersion`으로 저장한다. 모집 완료 전이로 증가한 버전은 알림 명령의 완료 버전이 되어 늦은 지원 차단과 재오픈 구분의 기준이 된다.
 
 지원 승인 상태는 `RESERVED`, `CONSUMED`, `EXPIRED`다. `ApplicationSubmitted` 수신에 따른 `CONSUMED` 처리와 만료 상태 정리는 아직 구현되지 않았다.
 
-자리 예약에는 발급 당시 공고 버전을 `jobVersion`으로 저장한다. 자리 예약·확정은 공고 상태를 바꾸지 않는다. 모집 인원이 모두 확정됐을 때의 상태 전이와 이력 기록은 후속 작업이다.
+자리 예약에는 발급 당시 공고 버전을 `jobVersion`으로 저장한다. 자리 예약과 마지막이 아닌 자리 확정은 공고 상태를 바꾸지 않는다. 마지막 자리 확정은 [모집 완료](#모집-완료)로 공고를 마감한다.
 
 ## 영속성
 
 - `industry_categories`: 업종 카테고리. 대분류와 하위 분류를 V4 마이그레이션에서 초기 데이터로 넣는다.
 - `job_posts`: 사업장·점주 외부 ID, 카테고리 FK, 근무 일시, 급여, 모집 인원, 위경도, 긴급도, 지원 마감, 상태, 버전.
-- `job_status_histories`: 공고 상태 전이 이력. 테이블과 엔티티만 있고 아직 기록하지 않는다.
+- `job_status_histories`: 공고 상태 전이 이력. 현재 모집 완료 전이만 기록한다. 처리 주체 컬럼이 없어 `reason`에 `주체:사유`로 기록한다.
 - `job_application_admissions`: 공고 FK, 알바생 회원 외부 ID, 멱등 키(유일), 공고 버전, 승인 상태, 승인·만료·사용 시각, 발급 당시 공고 스냅샷(점주 회원 ID, 업종 ID, 근무 일시, 위도·경도). 스냅샷 컬럼은 `updatable = false`로 두어 발급 후 바뀌지 않는다.
 - `job_matching_seat_reservations`(V8): 공고 FK, 매칭·지원·알바생 외부 ID, 예약·확정·반환 멱등 키(각각 유일), 공고 버전, 상태, 예약·확정·반환·만료 처리 시각과 발급 시 확정한 `expires_at`, 발급 당시 스냅샷(점주 ID, 근무 일시, `end_time_next_day`, `locked_amount` 정수 KRW, `currency`). 인덱스는 공고별 점유 집계·중복 점유 확인용 `(job_post_id, status, expires_at)`과 만료 대상 공고 조회용 `(status, expires_at)`이다.
+- `job_recruitment_completion_commands`(V9): 공고 FK, 명령 ID(UUID, 유일), 완료 버전, 전송 상태(`PENDING`/`SUCCEEDED`), 시도 횟수, 다음 시도 시각, 실행권 토큰·만료 시각, 마지막 시도 시각, 마지막 실패 분류·HTTP 상태·응답 코드, 생성·성공 시각. `(job_post_id, job_version)` 유일 제약과 전송 대상 조회용 `(status, next_attempt_at)` 인덱스를 둔다.
 
 사업장·점주·알바생 ID는 다른 서비스의 원본이므로 물리 FK 없이 외부 ID로만 저장한다.
 
@@ -176,13 +247,13 @@
 
 ## 후속 작업
 
-- 모집 완료 판단에 따른 공고 상태 전이와 `job_status_histories` 기록, `recruitment-completion` 호출 명령 저장과 재시도 실행기 ([지원 도메인 설계](./matching-application-design.md))
 - `PAYMENT_PENDING` 비공개 생성, 결제 주문 생성(전체 예치 예정액은 `JobWageCalculator` 사용), 예치 상태 수신 후 공개 ([토스 예치 설계](./toss-deposit-design.md))
-- 공고 상태 전이와 상태 이력 기록
+- 수동 마감, 지원 기한 만료 자동 마감, 재오픈 등 나머지 공고 상태 전이와 그 이력 기록. 재오픈은 버전을 올려 이전 완료 알림과 구분해야 한다.
+- 확정된 자리의 취소·환불 정책
 - 지원 승인 `CONSUMED` 처리
 - member-service 연동을 통한 사업장 소유권 검증
 - DB 기반 검색 조건과 페이지 처리
 
 ## 실행과 검증
 
-`.env.example`의 `JOB_*` 값을 개인 `.env`에 설정하고 공통 `AUTH_JWT_SECRET`, `INTERNAL_API_SECRET`을 맞춘다. `./scripts/local-run.sh infra`, `./scripts/local-run.sh job`으로 실행한다. HTTP 8083, 로컬 MySQL 3309를 사용한다. Swagger UI는 `/swagger-ui.html`이다. 통합 테스트는 MySQL Testcontainers로 지원 승인 발급·멱등·오류 코드, 모집 자리 예약·확정·반환의 멱등·동시성·만료 경계·제약 변환, 만료 회수, 급여 계산, 내부 인증, JWT 오류 경계, Swagger 접근을 확인한다. 시간 경계 테스트는 테스트용 `MutableClock` 빈으로 현재 시각을 고정한다.
+`.env.example`의 `JOB_*` 값을 개인 `.env`에 설정하고 공통 `AUTH_JWT_SECRET`, `INTERNAL_API_SECRET`을 맞춘다. `./scripts/local-run.sh infra`, `./scripts/local-run.sh job`으로 실행한다. HTTP 8083, 로컬 MySQL 3309를 사용한다. Swagger UI는 `/swagger-ui.html`이다. 통합 테스트는 MySQL Testcontainers로 지원 승인 발급·멱등·오류 코드, 모집 자리 예약·확정·반환의 멱등·동시성·만료 경계·제약 변환, 만료 회수, 모집 완료 전이(정원 미충족 시 미마감, 동시 확정 시 1회 기록, 이력·명령 저장 실패 시 함께 롤백, 이전 공고 복구), 알림 전송(실제 소켓의 matching-service 대역으로 경로·헤더·타임아웃·실패 분류, HTTP 대기 중 트랜잭션·잠금 미보유, backoff, 실행권 인계와 늦은 결과 무시, 응답 유실 수렴), 급여 계산, 내부 인증, JWT 오류 경계, Swagger 접근을 확인한다. 시간 경계 테스트는 테스트용 `MutableClock` 빈으로 현재 시각을 고정한다. 테스트에서는 전송·복구 스케줄러와 커밋 후 즉시 전송을 끄고 직접 호출한다. matching-service 수신 처리는 matching-service의 `RecruitmentCompletionContractTests`가 검증한다.
