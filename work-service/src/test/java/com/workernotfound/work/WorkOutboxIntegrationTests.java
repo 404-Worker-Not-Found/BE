@@ -83,6 +83,8 @@ class WorkOutboxIntegrationTests extends IntegrationTestSupport {
       assertThat(payload.get("aggregateId").asLong()).isEqualTo(workId);
       assertThat(payload.get("workId").asLong()).isEqualTo(workId);
       assertThat(payload.get("version").asInt()).isEqualTo(1);
+      assertThat(payload.get("actorRole").asText())
+          .isEqualTo(payload.get("revision").asInt() == 1 ? "WORKER" : "OWNER");
       assertThat(payload.has("paymentId")).isFalse();
       assertThat(payload.has("latitude")).isFalse();
     }

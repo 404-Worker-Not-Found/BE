@@ -6,9 +6,9 @@ import java.util.UUID;
 
 public record WorkLifecycleEvent(String eventId, String eventType, Long aggregateId, long revision,
     int version, LocalDateTime occurredAt, Long workId, Long matchingId, Long jobPostId,
-    Long ownerMemberId, Long workerMemberId, Long actorMemberId, String status,
+    Long ownerMemberId, Long workerMemberId, Long actorMemberId, String actorRole, String status,
     LocalDate workDate, LocalTime startTime, LocalTime endTime, boolean endTimeNextDay) {
-  public static WorkLifecycleEvent from(Work work, Long actor, LocalDateTime at) {
+  public static WorkLifecycleEvent from(Work work, Long actor, String actorRole, LocalDateTime at) {
     long revision = switch (work.getStatus()) {
       case CHECKED_IN -> 1;
       case IN_PROGRESS -> 2;
@@ -23,7 +23,7 @@ public record WorkLifecycleEvent(String eventId, String eventType, Long aggregat
     };
     return new WorkLifecycleEvent(UUID.randomUUID().toString(), type, work.getId(), revision, 1, at,
         work.getId(), work.getMatchingId(), work.getJobPostId(), work.getOwnerMemberId(),
-        work.getWorkerMemberId(), actor, work.getStatus().name(), work.getWorkDate(),
+        work.getWorkerMemberId(), actor, actorRole, work.getStatus().name(), work.getWorkDate(),
         work.getStartTime(), work.getEndTime(), work.isEndTimeNextDay());
   }
 }

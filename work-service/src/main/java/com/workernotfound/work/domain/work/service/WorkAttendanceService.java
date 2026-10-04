@@ -35,7 +35,7 @@ public class WorkAttendanceService {
     String previous = work.getStatus().name();
     work.checkIn(now, decision.distanceMeters(), decision.policy());
     history.record(workId, previous, work.getStatus().name(), member.memberId(), now);
-    events.record(work, member.memberId(), now);
+    events.record(work, member.memberId(), member.role(), now);
     return WorkResponse.from(work);
   }
 
@@ -48,7 +48,7 @@ public class WorkAttendanceService {
     String previous = work.getStatus().name();
     work.start(now);
     history.record(workId, previous, work.getStatus().name(), member.memberId(), now);
-    events.record(work, member.memberId(), now);
+    events.record(work, member.memberId(), member.role(), now);
     return WorkResponse.from(work);
   }
 
@@ -61,7 +61,7 @@ public class WorkAttendanceService {
     String previous = work.getStatus().name();
     work.complete(now);
     history.record(workId, previous, work.getStatus().name(), member.memberId(), now);
-    events.record(work, member.memberId(), now);
+    events.record(work, member.memberId(), member.role(), now);
     return WorkResponse.from(work);
   }
 

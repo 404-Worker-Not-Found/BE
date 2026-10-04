@@ -16,8 +16,8 @@ public class WorkEventRecorder {
   private final ObjectMapper mapper;
 
   @Transactional(propagation = Propagation.MANDATORY)
-  public void record(Work work, Long actor, LocalDateTime at) {
-    var event = WorkLifecycleEvent.from(work, actor, at);
+  public void record(Work work, Long actor, String role, LocalDateTime at) {
+    var event = WorkLifecycleEvent.from(work, actor, role, at);
     try {
       outbox.append(event, mapper.writeValueAsString(event));
     } catch (JsonProcessingException exception) {

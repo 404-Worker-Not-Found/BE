@@ -99,7 +99,7 @@
 
 - Stream 기본값은 `work:domain-events`다. matching 이벤트 Stream과 분리한다.
 - envelope: `eventId`, `aggregateType=WORK`, `aggregateId=workId`, `eventType`, `revision`, `version=1`, `occurredAt`, `payload`.
-- JSON payload: 위 공통 필드 중 aggregateType을 제외한 필드와 `workId`, `matchingId`, `jobPostId`, `ownerMemberId`, `workerMemberId`, `actorMemberId`, `status`, `workDate`, `startTime`, `endTime`, `endTimeNextDay`. payload 안에는 payload 필드 자체가 없다.
+- JSON payload: 위 공통 필드 중 aggregateType을 제외한 필드와 `workId`, `matchingId`, `jobPostId`, `ownerMemberId`, `workerMemberId`, `actorMemberId`, `actorRole`, `status`, `workDate`, `startTime`, `endTime`, `endTimeNextDay`. payload 안에는 payload 필드 자체가 없다.
 - 시각은 `work.attendance.time-zone`에 따른 ISO 로컬 시각이다. envelope와 payload의 발생 시각은 같은 값이다. 근무 일정과 함께 해석한다.
 - GPS 원본, 결제 ID, 토큰, 인증 정보는 이벤트에 넣지 않는다. `WorkCompleted`는 완료 사실이며 지급 성공이나 정산 명령을 의미하지 않는다.
 
