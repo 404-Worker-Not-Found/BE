@@ -56,7 +56,9 @@ public class RecruitmentCompletionDispatchTrigger {
         try {
             dispatcher.dispatch(commandId);
         } catch (RuntimeException exception) {
-            log.error("모집 완료 알림 즉시 전송 실패(스케줄러가 복구): id={}", commandId, exception);
+            // 원본 예외에는 검증되지 않은 문자열이 담길 수 있어 명령 ID와 예외 타입 사슬만 남긴다.
+            log.error("모집 완료 알림 즉시 전송 실패(스케줄러가 복구): id={}, types={}",
+                    commandId, ExceptionTypeChain.describe(exception));
         }
     }
 

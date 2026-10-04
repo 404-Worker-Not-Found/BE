@@ -83,9 +83,10 @@ public class RecruitmentCompletionDispatcher {
         try {
             return dispatch(id);
         } catch (RuntimeException exception) {
-            // 분류된 전송 실패가 아닌 예외(DB 기록 실패, 내부 오류)다. 원인을 숨기지 않고 남기며, 실행권이 만료되면 다시 전송된다.
-            // 이 예외에는 요청 헤더나 응답 원문이 담기지 않는다.
-            log.error("모집 완료 알림 전송 처리 실패: id={}", id, exception);
+            // 분류된 전송 실패가 아닌 예외(DB 기록 실패, 내부 오류)다. 실행권이 만료되면 같은 명령이 다시 전송된다.
+            // 예외 메시지·cause·suppressed에는 요청 헤더 값(내부 secret 포함) 같은 검증되지 않은 문자열이 담길 수 있으므로
+            // 원본 예외를 넘기지 않고 명령 ID와 예외 타입 사슬만 남긴다.
+            log.error("모집 완료 알림 전송 처리 실패: id={}, types={}", id, ExceptionTypeChain.describe(exception));
             return false;
         }
     }
