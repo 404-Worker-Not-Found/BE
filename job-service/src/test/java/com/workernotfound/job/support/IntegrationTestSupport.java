@@ -15,7 +15,8 @@ import org.testcontainers.containers.MySQLContainer;
 // 하위 테스트가 @DynamicPropertySource로 다시 켤 수 있도록 우선순위가 낮은 인라인 속성으로 둔다.
 @SpringBootTest(properties = {
 	"job.recruitment-completion.dispatch-enabled=false",
-	"job.recruitment-completion.dispatch-after-commit=false"
+	"job.recruitment-completion.dispatch-after-commit=false",
+	"job.recruitment-completion.reconcile.enabled=false"
 })
 @ActiveProfiles("test")
 @Import(TestClockConfig.class)

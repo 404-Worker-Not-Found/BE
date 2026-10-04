@@ -34,6 +34,11 @@ job:
     lease-duration: ${RECRUITMENT_COMPLETION_LEASE_DURATION:30s}
     retry-base-delay: ${RECRUITMENT_COMPLETION_RETRY_BASE_DELAY:2s}
     retry-max-delay: ${RECRUITMENT_COMPLETION_RETRY_MAX_DELAY:5m}
+    reconcile:
+      enabled: ${RECRUITMENT_COMPLETION_RECONCILE_ENABLED:true}
+      interval: ${RECRUITMENT_COMPLETION_RECONCILE_INTERVAL:10m}
+      initial-delay: ${RECRUITMENT_COMPLETION_RECONCILE_INITIAL_DELAY:30s}
+      batch-size: ${RECRUITMENT_COMPLETION_RECONCILE_BATCH_SIZE:100}
   matching-service:
     base-url: ${MATCHING_SERVICE_BASE_URL:http://localhost:8084}
     connect-timeout: ${MATCHING_SERVICE_CONNECT_TIMEOUT:3s}
