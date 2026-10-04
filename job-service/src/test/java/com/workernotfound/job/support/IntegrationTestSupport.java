@@ -11,7 +11,12 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MySQLContainer;
 
-@SpringBootTest
+// 모집 완료 알림 전송도 테스트에서 직접 호출한다. 실행되면 명령 상태 검증과 경쟁하므로 끈다.
+// 하위 테스트가 @DynamicPropertySource로 다시 켤 수 있도록 우선순위가 낮은 인라인 속성으로 둔다.
+@SpringBootTest(properties = {
+	"job.recruitment-completion.dispatch-enabled=false",
+	"job.recruitment-completion.dispatch-after-commit=false"
+})
 @ActiveProfiles("test")
 @Import(TestClockConfig.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)

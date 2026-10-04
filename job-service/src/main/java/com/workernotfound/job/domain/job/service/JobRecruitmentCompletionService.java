@@ -5,6 +5,7 @@ import com.workernotfound.job.domain.job.entity.JobStatusHistory;
 import com.workernotfound.job.domain.job.entity.RecruitmentCompletionCommand;
 import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import com.workernotfound.job.domain.job.entity.enums.MatchingSeatReservationStatus;
+import com.workernotfound.job.domain.job.event.RecruitmentCompletionCommandCreatedEvent;
 import com.workernotfound.job.domain.job.repository.JobMatchingSeatReservationRepository;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
 import com.workernotfound.job.domain.job.repository.JobStatusHistoryRepository;
@@ -14,6 +15,7 @@ import java.util.EnumSet;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +36,7 @@ public class JobRecruitmentCompletionService {
     private final JobMatchingSeatReservationRepository reservationRepository;
     private final JobStatusHistoryRepository historyRepository;
     private final RecruitmentCompletionCommandRepository commandRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 호출자는 같은 트랜잭션에서 이 공고 행의 비관적 잠금을 이미 잡고 있어야 한다. 같은 공고의 확정과 완료 판단이
@@ -56,12 +59,14 @@ public class JobRecruitmentCompletionService {
                 .reason(RECRUITMENT_FILLED_REASON)
                 .createdAt(changedAt)
                 .build());
-        return Optional.of(commandRepository.save(RecruitmentCompletionCommand.builder()
+        RecruitmentCompletionCommand command = commandRepository.save(RecruitmentCompletionCommand.builder()
                 .commandId(UUID.randomUUID().toString())
                 .jobPostId(lockedJobPost.getId())
                 .jobVersion(lockedJobPost.getVersion())
                 .nextAttemptAt(changedAt)
-                .build()));
+                .build());
+        eventPublisher.publishEvent(new RecruitmentCompletionCommandCreatedEvent(command.getId()));
+        return Optional.of(command);
     }
 
     private boolean isFilled(JobPost jobPost) {

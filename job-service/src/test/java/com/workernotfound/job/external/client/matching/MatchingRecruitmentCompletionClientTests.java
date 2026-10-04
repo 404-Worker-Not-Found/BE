@@ -177,7 +177,8 @@ class MatchingRecruitmentCompletionClientTests {
         MatchingServiceProperties properties = new MatchingServiceProperties(baseUrl, Duration.ofSeconds(1), READ_TIMEOUT);
         return new MatchingRecruitmentCompletionClient(
                 new RestClientConfig().matchingServiceRestClient(properties, new InternalApiProperties(SECRET)),
-                new ObjectMapper()
+                new ObjectMapper(),
+                properties
         );
     }
 }

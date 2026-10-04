@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketTimeoutException;
 import java.net.http.HttpTimeoutException;
+import java.time.Duration;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
@@ -35,13 +36,21 @@ public class MatchingRecruitmentCompletionClient implements RecruitmentCompletio
 
     private final RestClient matchingServiceRestClient;
     private final ObjectMapper objectMapper;
+    private final Duration maxCallDuration;
 
     public MatchingRecruitmentCompletionClient(
             @Qualifier("matchingServiceRestClient") RestClient matchingServiceRestClient,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            MatchingServiceProperties properties
     ) {
         this.matchingServiceRestClient = matchingServiceRestClient;
         this.objectMapper = objectMapper;
+        this.maxCallDuration = properties.connectTimeout().plus(properties.readTimeout());
+    }
+
+    @Override
+    public Duration maxCallDuration() {
+        return maxCallDuration;
     }
 
     @Override
