@@ -53,6 +53,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RecruitmentCompletionDispatchTests extends IntegrationTestSupport {
 
     private static final Duration READ_TIMEOUT = Duration.ofMillis(500);
+    private static final Duration CALL_TIMEOUT = Duration.ofMillis(1500);
     private static final Duration LEASE = Duration.ofSeconds(3);
     private static final Duration BASE_DELAY = Duration.ofSeconds(2);
     private static final Duration MAX_DELAY = Duration.ofSeconds(5);
@@ -94,6 +95,7 @@ class RecruitmentCompletionDispatchTests extends IntegrationTestSupport {
         registry.add("job.matching-service.base-url", SERVER::baseUrl);
         registry.add("job.matching-service.connect-timeout", () -> "500ms");
         registry.add("job.matching-service.read-timeout", () -> READ_TIMEOUT.toMillis() + "ms");
+        registry.add("job.matching-service.call-timeout", () -> CALL_TIMEOUT.toMillis() + "ms");
         registry.add("job.recruitment-completion.lease-duration", () -> LEASE.toSeconds() + "s");
         registry.add("job.recruitment-completion.retry-base-delay", () -> BASE_DELAY.toSeconds() + "s");
         registry.add("job.recruitment-completion.retry-max-delay", () -> MAX_DELAY.toSeconds() + "s");

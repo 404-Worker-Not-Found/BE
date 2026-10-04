@@ -43,6 +43,7 @@ job:
     base-url: ${MATCHING_SERVICE_BASE_URL:http://localhost:8084}
     connect-timeout: ${MATCHING_SERVICE_CONNECT_TIMEOUT:3s}
     read-timeout: ${MATCHING_SERVICE_READ_TIMEOUT:5s}
+    call-timeout: ${MATCHING_SERVICE_CALL_TIMEOUT:8s}
 
 server:
   port: ${JOB_SERVICE_PORT:8083}

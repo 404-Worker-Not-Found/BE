@@ -3,13 +3,14 @@ package com.workernotfound.job.external.client.matching;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workernotfound.job.domain.job.entity.enums.RecruitmentCompletionFailureType;
 import com.workernotfound.job.domain.job.exception.RecruitmentCompletionNotificationException;
-import com.workernotfound.job.global.config.RestClientConfig;
 import com.workernotfound.job.global.security.InternalApiProperties;
 import com.workernotfound.job.support.StubMatchingServer;
 import com.workernotfound.job.support.StubMatchingServer.StubResponse;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +30,7 @@ class MatchingRecruitmentCompletionClientTests {
     private static final String SECRET = "client-test-secret";
     private static final Duration READ_TIMEOUT = Duration.ofMillis(300);
 
+    private final List<MatchingRecruitmentCompletionClient> clients = new ArrayList<>();
     private StubMatchingServer server;
 
     @BeforeEach
@@ -39,6 +41,7 @@ class MatchingRecruitmentCompletionClientTests {
     @AfterEach
     void tearDown() {
         server.close();
+        clients.forEach(MatchingRecruitmentCompletionClient::destroy);
     }
 
     @Test
@@ -118,7 +121,7 @@ class MatchingRecruitmentCompletionClientTests {
     }
 
     @Test
-    void classifiesReadTimeout() {
+    void classifiesResponseHeaderTimeout() {
         server.enqueue(StubResponse.success().delayedBy(READ_TIMEOUT.multipliedBy(5)));
 
         assertFailure(() -> notifyCompletion(), RecruitmentCompletionFailureType.TIMEOUT, null, null);
@@ -174,11 +177,11 @@ class MatchingRecruitmentCompletionClientTests {
     }
 
     private MatchingRecruitmentCompletionClient client(String baseUrl) {
-        MatchingServiceProperties properties = new MatchingServiceProperties(baseUrl, Duration.ofSeconds(1), READ_TIMEOUT);
-        return new MatchingRecruitmentCompletionClient(
-                new RestClientConfig().matchingServiceRestClient(properties, new InternalApiProperties(SECRET)),
-                new ObjectMapper(),
-                properties
-        );
+        MatchingServiceProperties properties = new MatchingServiceProperties(
+                baseUrl, Duration.ofSeconds(1), READ_TIMEOUT, Duration.ofSeconds(1));
+        MatchingRecruitmentCompletionClient client = new MatchingRecruitmentCompletionClient(
+                properties, new InternalApiProperties(SECRET), new ObjectMapper());
+        clients.add(client);
+        return client;
     }
 }
