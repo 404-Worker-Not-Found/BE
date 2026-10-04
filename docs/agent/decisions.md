@@ -1162,3 +1162,19 @@ Reason:
 Related files:
 - `docs/architecture/chat-room-design.md`
 - `chat-service`
+
+## 2026-10-04 - Matching Result In-app Notifications
+
+Decision:
+- Add the planned notification-service with service-owned MySQL and a dedicated consumer group on the existing matching event Stream.
+- Initially consume MatchConfirmed v1 for OWNER and WORKER, and ApplicationRejected v1 for WORKER. Do not infer missing owner IDs for other application events.
+- Commit a stable event fingerprint and recipient notifications atomically before Redis acknowledgment. Preserve failed deliveries for retry and rotate pending reads so malformed messages do not starve newer events.
+- Scope notification list, unread count and idempotent read commands to both authenticated member ID and role. Keep event/payment identifiers and other participant IDs out of API responses.
+- Treat notifications as event history, not a latest-state projection. Keep source event IDs for deduplication and preserve the first read timestamp.
+
+Reason:
+- Matching outcomes need a durable user-visible record even when the user is offline. Read state and redelivery must remain independent, and user privacy must hold across role boundaries.
+
+Related files:
+- `docs/architecture/notification-design.md`
+- `notification-service`

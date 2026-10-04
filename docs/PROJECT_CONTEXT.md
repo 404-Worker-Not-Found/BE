@@ -15,6 +15,7 @@ The current repository is in an early backend setup stage. Implemented service d
 - `work-service`
 - `chat-service`
 - `payment-service`
+- `notification-service`
 
 The broader domain and service boundaries are currently represented in:
 
@@ -61,7 +62,7 @@ Current state:
 - The repository has a first ERD draft for the MSA design.
 - The matching application domain has a focused ERD and implementation design that supersede the application and scoring tables in the first ERD draft.
 - A repository-wide verification script exists at `docs/scripts/verify.sh`.
-- A local Docker Compose file exists at `compose.local.yml` for auth/member/job/matching/work/chat/payment MySQL instances and auth/matching Redis instances.
+- A local Docker Compose file exists at `compose.local.yml` for auth/member/job/matching/work/chat/payment/notification MySQL instances and auth/matching Redis instances.
 - `.env.example` documents the local runtime environment variables; the real `.env` file is ignored by Git.
 - `scripts/local-run.sh` loads `.env` and runs each service locally.
 - The service package structure is defined in `docs/architecture/service-package-structure.md`.
@@ -163,10 +164,10 @@ Implemented:
 - `work-service`: scheduled work and Saga compensation service
 - `chat-service`: internal chat room creation and Saga compensation, matching-confirmation consumption, participant room queries, and persistent text message sending/history
 - `payment-service`: deposit-backed payment lock and Saga compensation service with Toss test deposit ingestion
+- `notification-service`: matching-result in-app notifications and participant read state
 
 Planned or represented in the ERD:
 
-- `notification-service`
 - `support-service`
 
 This service map is provisional. Use `docs/agent/decisions.md` for confirmed decisions that override this document.
@@ -309,6 +310,15 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - Funding notification remains pending (funded=true, delivered=false). Actual webhook delivery and job publication E2E remain unverified. Production escrow, payouts and refunds are outside this unit.
 - HTTP/MySQL ports are 8085/3313. Local execution and repository verification include payment-service.
 - See `docs/architecture/payment-lock-design.md` for the boundary and follow-up work. See `docs/architecture/toss-deposit-design.md` for the provider and job/frontend contracts. Full matching acceptance still requires product frontend and job-service integration.
+
+## Notification Service Context
+
+- `notification-service` owns MySQL/Flyway notification storage and consumes matching Redis Stream events using a dedicated group.
+- `MatchConfirmed` v1 creates OWNER and WORKER in-app notifications; `ApplicationRejected` v1 creates a WORKER notification only. Unsupported event types are skipped, while malformed supported events remain pending.
+- Event receipts and recipient notifications commit together before ACK. Stable fingerprints and recipient unique constraints handle concurrent redelivery without resetting read state.
+- JWT-authenticated members can list only their own role's notifications, query unread counts and idempotently mark individual notifications read. Responses omit other participants and payment identifiers.
+- Local HTTP/MySQL ports are 8088/3314. Runtime configuration, local-run and repository verification include the new service. Notification delivery currently uses REST queries; push and other event types remain future work.
+- See `docs/architecture/notification-design.md`.
 
 ## Error Handling State
 

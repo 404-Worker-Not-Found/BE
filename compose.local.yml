@@ -132,6 +132,25 @@ services:
       timeout: 5s
       retries: 10
 
+  notification-mysql:
+    image: mysql:8.4
+    container_name: wnf-notification-mysql
+    environment:
+      MYSQL_DATABASE: ${NOTIFICATION_DB_NAME}
+      MYSQL_ROOT_PASSWORD: ${NOTIFICATION_DB_ROOT_PASSWORD}
+      MYSQL_USER: ${NOTIFICATION_DB_USERNAME}
+      MYSQL_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+      TZ: Asia/Seoul
+    ports:
+      - "127.0.0.1:3314:3306"
+    volumes:
+      - notification-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   auth-redis:
     image: redis:7.4
     container_name: wnf-auth-redis
@@ -167,5 +186,6 @@ volumes:
   work-mysql-data:
   chat-mysql-data:
   payment-mysql-data:
+  notification-mysql-data:
   auth-redis-data:
   matching-redis-data:

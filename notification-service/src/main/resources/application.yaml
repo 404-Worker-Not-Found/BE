@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: notification-service
+  datasource:
+    url: ${NOTIFICATION_DATASOURCE_URL}
+    username: ${NOTIFICATION_DATASOURCE_USERNAME}
+    password: ${NOTIFICATION_DATASOURCE_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${MATCHING_REDIS_HOST:localhost}
+      port: ${MATCHING_REDIS_PORT:6381}
+      timeout: 2s
+      connect-timeout: 2s
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+notification:
+  jwt:
+    secret: ${AUTH_JWT_SECRET}
+  events:
+    enabled: ${NOTIFICATION_EVENTS_ENABLED:true}
+    stream: ${MATCHING_OUTBOX_STREAM_KEY:matching:domain-events}
+server:
+  port: ${NOTIFICATION_SERVICE_PORT:8088}
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
