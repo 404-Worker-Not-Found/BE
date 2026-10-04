@@ -1160,3 +1160,25 @@ Related files:
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobRecruitmentCompletionService.java`
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/RecruitmentCompletionDispatcher.java`
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/RecruitmentCompletionReconciler.java`
+
+## 2026-10-04 - Recruitment Completion Call Deadline
+
+Decision:
+- Enforce a total deadline (`MATCHING_SERVICE_CALL_TIMEOUT`, default 8s) on each recruitment-completion call, from connection start through the end of the response body. Connect and read timeouts remain separate limits for connection setup and response headers, and may not exceed the total.
+- Send this call with the JDK `java.net.http.HttpClient` (HTTP/1.1) as one asynchronous exchange including a bounded body subscriber. When the deadline passes, cancel the exchange so the connection is closed, and record `TIMEOUT`.
+- `maxCallDuration()` returns this enforced deadline. The lease must be at least the deadline plus one second; otherwise startup fails.
+- Accept timeouts only from 1ms to 1h; reject null, zero, negative, sub-millisecond, and larger values at startup.
+
+Reason:
+- `HttpURLConnection` read timeouts bound only the gap between reads. A slow body ran for over 10 seconds with a calculated 400ms limit, and on JDK 17 `disconnect()` from another thread did not close the socket during body reads.
+- Cancelling a JDK `HttpClient` exchange closed the connection before headers, during header and body drip, and after a partial body, without accumulating threads. No new dependency is needed.
+
+Implication for agents:
+- Do not treat per-read timeouts or `Future.get(timeout)` alone as a total call limit; verify that the connection is actually closed with a real-socket test.
+- Keep the lease validation tied to the enforced deadline when changing the HTTP client.
+- Body read and JSON parse errors are still classified as before; reclassifying them is separate work.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `job-service/src/main/java/com/workernotfound/job/external/client/matching/MatchingRecruitmentCompletionClient.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/RecruitmentCompletionDispatcher.java`

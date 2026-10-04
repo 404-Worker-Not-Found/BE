@@ -140,16 +140,33 @@
 명령 생명주기는 `PENDING → SUCCEEDED`다. 한 번의 시도는 다음 세 단계로 나뉘며 HTTP 대기 중에는 DB 트랜잭션이나 공고 행 잠금을 잡지 않는다.
 
 1. 짧은 트랜잭션에서 실행권 획득: `PENDING`이고 `next_attempt_at <= now`이며 실행권이 없거나 만료된 행만 `lease_token`, `lease_expires_at`을 설정하고 `attempt_count`를 1 올린다. 기본 키 조건의 단일 `UPDATE`라 여러 인스턴스가 동시에 실행해도 한 실행자만 얻는다.
-2. 트랜잭션 밖에서 HTTP 호출(연결 `MATCHING_SERVICE_CONNECT_TIMEOUT` 3초, 응답 `MATCHING_SERVICE_READ_TIMEOUT` 5초).
+2. 트랜잭션 밖에서 HTTP 호출. 연결 시작부터 응답 헤더와 본문 수신 완료까지 `MATCHING_SERVICE_CALL_TIMEOUT`(기본 8초)을 넘지 않는다.
 3. 별도의 짧은 트랜잭션에서 `lease_token`이 일치할 때만 성공 또는 실패를 기록하고 실행권을 비운다. 실행권이 만료되어 다른 실행자가 넘겨받았다면 이전 실행자의 늦은 결과는 0행 갱신으로 무시된다.
 
-실행권 만료 시간은 연결·응답 타임아웃 합보다 길어야 하며 짧으면 기동 시 거절한다.
+#### 호출 제한시간
+
+이 호출은 JDK `java.net.http.HttpClient`(HTTP/1.1)의 비동기 교환 하나로 보낸다. 교환은 연결, 요청 전송, 응답 헤더, 본문 수신(최대 8KB)을 모두 포함하며, `MATCHING_SERVICE_CALL_TIMEOUT`이 지나면 교환을 취소한다. JDK 17에서 취소는 HTTP/1.1 연결을 닫으므로 상대가 본문을 조금씩 계속 보내도 호출이 연장되지 않고, 백그라운드에 요청이나 본문 읽기가 남지 않는다. 비동기 작업은 전용 고정 스레드 2개에서 실행하고 종료 시 정리한다.
+
+| 설정 | 기본값 | 제한하는 구간 |
+| --- | --- | --- |
+| `MATCHING_SERVICE_CONNECT_TIMEOUT` | `3s` | TCP 연결 수립 |
+| `MATCHING_SERVICE_READ_TIMEOUT` | `5s` | 요청 전송 후 응답 헤더 수신까지. 본문 수신은 포함하지 않는다. |
+| `MATCHING_SERVICE_CALL_TIMEOUT` | `8s` | 연결 시작부터 본문 수신 완료까지 전체. 실제로 강제되는 상한이다. |
+
+- 세 값은 1ms 이상 1h 이하여야 하고, 연결·헤더 제한은 전체 제한을 넘을 수 없다. 밀리초 미만 값은 무제한 대기나 즉시 만료로 해석될 수 있어 거절한다. 위반하면 기동 시 실패한다.
+- 이전 구현의 `HttpURLConnection` 읽기 타임아웃은 읽기 사이 간격만 제한했다. 연결 100ms·읽기 300ms(계산상 400ms) 설정에서 본문을 50ms 간격으로 받는 호출이 10초 넘게 이어졌고, 본문 수신 중에는 다른 스레드의 `disconnect()`로도 소켓이 닫히지 않았다. 그래서 이 호출만 JDK `HttpClient`로 바꿨다.
+- 전체 제한시간 초과는 일시 오류 `TIMEOUT`이다. 상대가 처리했는지 알 수 없으므로 성공으로 기록하지 않고, 같은 명령 ID·버전으로 backoff 재시도한다.
+- DNS 이름 해석 시간은 JDK가 취소할 수 없어 이 제한에 포함되지 않는다. 운영 주소는 해석 지연이 없는 서비스 이름이나 고정 주소를 쓴다.
+
+#### 실행권 여유
+
+실행권 만료 시간은 `MATCHING_SERVICE_CALL_TIMEOUT + 1초` 이상이어야 하며 그보다 짧으면(전체 제한시간 이하 포함) 기동 시 거절한다. 1초는 제한시간 초과 후 교환 취소와 결과 기록 트랜잭션을 위한 최소 여유다. 기본값은 실행권 30초, 전체 제한 8초로 22초의 여유가 있다. HTTP 호출은 전체 제한시간 안에 반드시 끝나므로 호출 도중 실행권이 만료되어 다른 실행자가 같은 명령을 동시에 보내지 않는다. 그래도 실행권 토큰 조건부 갱신은 유지하므로 늦게 끝난 이전 실행자는 결과를 덮어쓰지 못한다.
 
 | 결과 | 분류 | 다음 시도 |
 | --- | --- | --- |
 | 2xx + `success=true` | 성공 | 없음(`SUCCEEDED`) |
 | 409(예: Saga 미완료 `APPLICATION-409-006`) | `CONFLICT` | backoff |
-| 응답·연결 타임아웃, 408 | `TIMEOUT` | backoff |
+| 연결·응답 헤더·전체 호출 제한시간 초과, 408 | `TIMEOUT` | backoff |
 | 연결 실패 등 | `NETWORK` | backoff |
 | 429 | `THROTTLED` | backoff |
 | 5xx | `SERVER_ERROR` | backoff |
@@ -176,11 +193,12 @@
 | 환경 변수 | 기본값 | 의미 |
 | --- | --- | --- |
 | `MATCHING_SERVICE_BASE_URL` | `http://localhost:8084` | matching-service 주소. HTTPS 또는 루프백 HTTP만 허용 |
-| `MATCHING_SERVICE_CONNECT_TIMEOUT` / `MATCHING_SERVICE_READ_TIMEOUT` | `3s` / `5s` | HTTP 연결·응답 타임아웃 |
+| `MATCHING_SERVICE_CONNECT_TIMEOUT` / `MATCHING_SERVICE_READ_TIMEOUT` | `3s` / `5s` | 연결 수립·응답 헤더 수신 제한 |
+| `MATCHING_SERVICE_CALL_TIMEOUT` | `8s` | 본문 수신까지 포함한 한 번의 호출 전체 제한 |
 | `RECRUITMENT_COMPLETION_DISPATCH_ENABLED` | `true` | 전송 스케줄러 사용 |
 | `RECRUITMENT_COMPLETION_DISPATCH_AFTER_COMMIT` | `true` | 커밋 후 즉시 전송 사용 |
 | `RECRUITMENT_COMPLETION_DISPATCH_INTERVAL` / `..._BATCH_SIZE` | `5s` / `50` | 스케줄러 주기·배치 |
-| `RECRUITMENT_COMPLETION_LEASE_DURATION` | `30s` | 실행권 만료 시간(타임아웃 합보다 길어야 함) |
+| `RECRUITMENT_COMPLETION_LEASE_DURATION` | `30s` | 실행권 만료 시간(`MATCHING_SERVICE_CALL_TIMEOUT + 1초` 이상) |
 | `RECRUITMENT_COMPLETION_RETRY_BASE_DELAY` / `..._MAX_DELAY` | `2s` / `5m` | backoff 기본·최대 지연 |
 | `RECRUITMENT_COMPLETION_RECONCILE_ENABLED` | `true` | 정원 충족 공고 복구 사용 |
 | `RECRUITMENT_COMPLETION_RECONCILE_INTERVAL` / `..._INITIAL_DELAY` / `..._BATCH_SIZE` | `10m` / `30s` / `100` | 복구 주기·첫 실행·배치 |
@@ -256,4 +274,4 @@
 
 ## 실행과 검증
 
-`.env.example`의 `JOB_*` 값을 개인 `.env`에 설정하고 공통 `AUTH_JWT_SECRET`, `INTERNAL_API_SECRET`을 맞춘다. `./scripts/local-run.sh infra`, `./scripts/local-run.sh job`으로 실행한다. HTTP 8083, 로컬 MySQL 3309를 사용한다. Swagger UI는 `/swagger-ui.html`이다. 통합 테스트는 MySQL Testcontainers로 지원 승인 발급·멱등·오류 코드, 모집 자리 예약·확정·반환의 멱등·동시성·만료 경계·제약 변환, 만료 회수, 모집 완료 전이(정원 미충족 시 미마감, 동시 확정 시 1회 기록, 이력·명령 저장 실패 시 함께 롤백, 이전 공고 복구), 알림 전송(실제 소켓의 matching-service 대역으로 경로·헤더·타임아웃·실패 분류, HTTP 대기 중 트랜잭션·잠금 미보유, backoff, 실행권 인계와 늦은 결과 무시, 응답 유실 수렴), 급여 계산, 내부 인증, JWT 오류 경계, Swagger 접근을 확인한다. 시간 경계 테스트는 테스트용 `MutableClock` 빈으로 현재 시각을 고정한다. 테스트에서는 전송·복구 스케줄러와 커밋 후 즉시 전송을 끄고 직접 호출한다. matching-service 수신 처리는 matching-service의 `RecruitmentCompletionContractTests`가 검증한다.
+`.env.example`의 `JOB_*` 값을 개인 `.env`에 설정하고 공통 `AUTH_JWT_SECRET`, `INTERNAL_API_SECRET`을 맞춘다. `./scripts/local-run.sh infra`, `./scripts/local-run.sh job`으로 실행한다. HTTP 8083, 로컬 MySQL 3309를 사용한다. Swagger UI는 `/swagger-ui.html`이다. 통합 테스트는 MySQL Testcontainers로 지원 승인 발급·멱등·오류 코드, 모집 자리 예약·확정·반환의 멱등·동시성·만료 경계·제약 변환, 만료 회수, 모집 완료 전이(정원 미충족 시 미마감, 동시 확정 시 1회 기록, 이력·명령 저장 실패 시 함께 롤백, 이전 공고 복구), 알림 전송(실제 소켓의 matching-service 대역으로 경로·헤더·타임아웃·실패 분류, 헤더 전 정지·헤더 지연·본문 일부 후 정지·본문 조금씩 전송에서 전체 제한시간 안의 종료와 실제 연결 닫힘, 반복 초과 시 연결·작업·스레드 미누적, HTTP 대기 중 트랜잭션·잠금 미보유, backoff, 실행권 인계와 늦은 결과 무시, 응답 유실 수렴), 급여 계산, 내부 인증, JWT 오류 경계, Swagger 접근을 확인한다. 시간 경계 테스트는 테스트용 `MutableClock` 빈으로 현재 시각을 고정한다. 테스트에서는 전송·복구 스케줄러와 커밋 후 즉시 전송을 끄고 직접 호출한다. matching-service 수신 처리는 matching-service의 `RecruitmentCompletionContractTests`가 검증한다.
