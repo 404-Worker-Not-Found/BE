@@ -48,7 +48,7 @@ class WorkAttendanceIntegrationTests extends IntegrationTestSupport {
 
   @BeforeEach
   void setClock() {
-    when(clock.getZone()).thenReturn(ZONE);
+    when(clock.getZone()).thenReturn(ZoneOffset.UTC);
     when(clock.instant()).thenAnswer(call -> instant.get());
     at("2026-10-04T09:00:00");
   }
@@ -191,7 +191,7 @@ class WorkAttendanceIntegrationTests extends IntegrationTestSupport {
   }
 
   @Test
-  void overnightScheduleAndWindowBoundariesUseConfiguredTimeZone() {
+  void overnightScheduleAndWindowBoundariesUseConfiguredTimeZoneEvenWithUtcClock() {
     var request = request(true, true);
     Long id = create(request, true);
     at("2026-10-04T22:29:59");

@@ -5,6 +5,7 @@ import com.workernotfound.work.domain.work.dto.response.*;
 import com.workernotfound.work.domain.work.entity.Work;
 import com.workernotfound.work.domain.work.exception.WorkErrorCode;
 import com.workernotfound.work.domain.work.policy.AttendancePolicy;
+import com.workernotfound.work.domain.work.policy.AttendanceProperties;
 import com.workernotfound.work.domain.work.repository.*;
 import com.workernotfound.work.global.exception.BusinessException;
 import com.workernotfound.work.global.security.AuthenticatedMember;
@@ -20,6 +21,7 @@ public class WorkAttendanceService {
   private final WorkRepository works;
   private final WorkAttendanceHistoryRepository history;
   private final AttendancePolicy policy;
+  private final AttendanceProperties properties;
   private final Clock clock;
 
   @Transactional
@@ -66,5 +68,7 @@ public class WorkAttendanceService {
         .orElseThrow(() -> new BusinessException(WorkErrorCode.WORK_NOT_FOUND));
   }
 
-  private LocalDateTime now() { return LocalDateTime.now(clock).truncatedTo(ChronoUnit.MICROS); }
+  private LocalDateTime now() {
+    return LocalDateTime.ofInstant(clock.instant(), properties.timeZone()).truncatedTo(ChronoUnit.MICROS);
+  }
 }
