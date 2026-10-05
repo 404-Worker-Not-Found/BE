@@ -24,12 +24,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
 	private final JwtTokenProvider jwtTokenProvider;
 	private final HandlerExceptionResolver exceptionResolver;
+    private final com.workernotfound.auth.domain.account.repository.AuthAccountRepository accounts;
 
 	public JwtAuthenticationFilter(
 			JwtTokenProvider jwtTokenProvider,
-			@Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver) {
+			@Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver,
+            com.workernotfound.auth.domain.account.repository.AuthAccountRepository accounts) {
 		this.jwtTokenProvider = jwtTokenProvider;
 		this.exceptionResolver = exceptionResolver;
+        this.accounts = accounts;
 	}
 
 	@Override
@@ -64,6 +67,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
 	private void authenticate(String token) {
 		AuthTokenClaims claims = jwtTokenProvider.parseAccessToken(token);
+        if (accounts.findById(claims.authAccountId()).filter(account -> account.getStatus() != com.workernotfound.auth.domain.account.entity.enums.MemberStatus.WITHDRAWN
+                && account.getMemberId().equals(claims.memberId())).isEmpty()) throw new InvalidAccessTokenException("탈퇴한 계정입니다.");
 		List<SimpleGrantedAuthority> authorities =
 				List.of(new SimpleGrantedAuthority("ROLE_" + claims.role().name()));
 		UsernamePasswordAuthenticationToken authentication =

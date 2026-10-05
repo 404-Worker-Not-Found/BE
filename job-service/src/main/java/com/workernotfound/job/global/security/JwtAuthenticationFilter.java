@@ -21,13 +21,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtTokenParser jwtTokenParser;
+    private final com.workernotfound.job.global.account.AccountGateService accountGates;
     private final HandlerExceptionResolver exceptionResolver;
 
     public JwtAuthenticationFilter(
             JwtTokenParser jwtTokenParser,
-            @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver) {
+            @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver,
+            com.workernotfound.job.global.account.AccountGateService accountGates) {
         this.jwtTokenParser = jwtTokenParser;
         this.exceptionResolver = exceptionResolver;
+        this.accountGates = accountGates;
     }
 
     @Override
@@ -38,6 +41,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (token != null) {
             try {
                 MemberClaims claims = jwtTokenParser.parseAccessToken(token);
+        if (!accountGates.isActive(claims.memberId())) throw new InvalidAccessTokenException("탈퇴 처리 중이거나 탈퇴한 회원입니다.");
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(
                                 claims, null, List.of(new SimpleGrantedAuthority("ROLE_" + claims.role())));

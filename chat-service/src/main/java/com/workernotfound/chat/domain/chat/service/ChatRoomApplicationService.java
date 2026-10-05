@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class ChatRoomApplicationService {
+    private final com.workernotfound.chat.global.account.AccountGateService accountGates;
   private final ChatRoomRepository rooms;
   private final ChatRoomCommandRepository commands;
 
@@ -23,6 +24,7 @@ public class ChatRoomApplicationService {
   public ChatRoomResponse create(String key, ChatRoomRequest request) {
     var command = lockCommand(key, "CREATE:" + request.toString());
     if (command.chatRoomId() != null) return ChatRoomResponse.from(command.chatRoomId());
+    accountGates.requireActive(request.ownerMemberId(), request.workerMemberId());
     if (commands.lockMatching(request.matchingId()) != null) {
       throw new BusinessException(ChatRoomErrorCode.ACTIVE_CHAT_EXISTS);
     }

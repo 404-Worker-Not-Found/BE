@@ -43,7 +43,7 @@ public class SecurityConfig {
                                 response, GlobalErrorCode.FORBIDDEN, request, objectMapper)))
         .authorizeHttpRequests(
             auth ->
-                auth.requestMatchers(
+                auth.requestMatchers("/api/notifications/internal/**").permitAll().requestMatchers(
                         "/v3/api-docs/**",
                         "/swagger-ui/**",
                         "/swagger-ui.html",

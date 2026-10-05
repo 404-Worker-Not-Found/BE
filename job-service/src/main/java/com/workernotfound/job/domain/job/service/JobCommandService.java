@@ -18,7 +18,8 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class JobCommandService {
 
-    private final JobPostRepository jobPostRepository;
+      private final com.workernotfound.job.global.account.AccountGateService accountGates;
+  private final JobPostRepository jobPostRepository;
     private final BusinessValidator businessValidator;
     private final CategoryFindService categoryFindService;
     private final JobWageCalculator jobWageCalculator;
@@ -31,6 +32,7 @@ public class JobCommandService {
      */
     @Transactional
     public Long create(Long ownerId, CreateJobRequest request) {
+        accountGates.requireActive(ownerId);
         businessValidator.validateOwnership(request.businessId(), ownerId);
         categoryFindService.findCategory(request.categoryId());
         long totalDeposit = calculateTotalDeposit(request);

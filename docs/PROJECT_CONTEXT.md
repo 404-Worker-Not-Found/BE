@@ -228,6 +228,13 @@ Current implementation state:
 
 Auth-related decisions are recorded in `docs/agent/decisions.md`.
 
+## Account Management Update (2026-10-06)
+
+- ACTIVE members can patch their own name and role-specific profile through `PATCH /api/members/me`.
+- Authenticated contact-change APIs use separate, atomically consumed CONTACT_CHANGE verification codes. Auth stores durable commands, blocks new login/token issuance while UPDATING, revokes all refresh sessions, and synchronizes member-service with stable idempotent results and retry backoff.
+- Member withdrawal is implemented with durable prepare/release/commit coordination, per-service creation barriers, and ongoing job/application/matching/work/payment checks. Successful withdrawal erases member profiles and auth credentials, revokes existing JWT access through local gates, and leaves reference tombstones. Unknown payment completion remains a blocker until refund/settlement contracts exist. Domain history retention expiry automation is not implemented.
+- API contracts and the withdrawal proposal are documented in `docs/architecture/member-account-management.md`.
+
 ## Member Service Context
 
 `member-service` stores member profile data owned by the member domain.

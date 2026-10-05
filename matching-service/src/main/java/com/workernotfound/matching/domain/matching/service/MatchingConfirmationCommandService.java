@@ -40,6 +40,7 @@ public class MatchingConfirmationCommandService {
 	private static final String MATCHING_CONFIRMED_REASON = "MATCHING_CONFIRMED_BY_WORKER";
 	private static final String APPLICATION_SELECTED_REASON = "MATCHING_CONFIRMATION_COMPLETED";
 
+    private final com.workernotfound.matching.global.account.AccountGateService accountGates;
 	private final ApplicationRepository applicationRepository;
 	private final ApplicationStatusHistoryRepository applicationHistoryRepository;
 	private final MatchingRepository matchingRepository;
@@ -54,6 +55,7 @@ public class MatchingConfirmationCommandService {
 		MatchingLockTarget target = findTarget(matchingId, workerMemberId);
 		Application application = lockApplication(target.applicationId());
 		Matching matching = lockMatching(matchingId, workerMemberId);
+        accountGates.requireActive(matching.getOwnerMemberId(), workerMemberId);
 		if (matching.getStatus() == MatchingStatus.CONFIRMED) {
 			return new MatchingConfirmationExecution(null, null, null, true);
 		}

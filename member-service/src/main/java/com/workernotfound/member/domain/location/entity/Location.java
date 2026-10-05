@@ -28,6 +28,13 @@ public class Location extends BaseEntity {
 	@Column(nullable = false, precision = 10, scale = 7)
 	private BigDecimal longitude;
 
+	public void update(String address, String detailAddress, BigDecimal latitude, BigDecimal longitude) {
+		this.address = address;
+		this.detailAddress = detailAddress;
+		this.latitude = latitude;
+		this.longitude = longitude;
+	}
+
 	@Builder
 	private Location(String address, String detailAddress, BigDecimal latitude, BigDecimal longitude) {
 		this.address = address;

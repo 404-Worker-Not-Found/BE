@@ -28,6 +28,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class MemberInternalController implements MemberInternalControllerDocs {
 
 	private final MemberApplicationService memberApplicationService;
+    private final com.workernotfound.member.domain.member.service.MemberContactService memberContactService;
+
+    @Override
+    @org.springframework.web.bind.annotation.PatchMapping("/{memberId}/contact")
+    public ResponseEntity<ApiResponse<com.workernotfound.member.domain.member.dto.response.ContactChangeResult>> changeContact(
+        @PathVariable Long memberId,
+        @org.springframework.web.bind.annotation.RequestHeader("Idempotency-Key") java.util.UUID key,
+        @Valid @RequestBody com.workernotfound.member.domain.member.dto.request.VerifiedContactChangeRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(memberContactService.changeContact(memberId, key.toString(), request)));
+    }
 
 	@Override
 	@PostMapping("/owners")

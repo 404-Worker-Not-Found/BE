@@ -36,7 +36,8 @@ public class MatchingSeatReservationCommandService {
     private static final Set<MatchingSeatReservationStatus> OCCUPYING_STATUSES =
             EnumSet.of(MatchingSeatReservationStatus.RESERVED, MatchingSeatReservationStatus.CONSUMED);
 
-    private final JobPostRepository jobPostRepository;
+      private final com.workernotfound.job.global.account.AccountGateService accountGates;
+  private final JobPostRepository jobPostRepository;
     private final JobMatchingSeatReservationRepository reservationRepository;
     private final JobWageCalculator jobWageCalculator;
     private final JobRecruitmentCompletionService recruitmentCompletionService;
@@ -53,6 +54,7 @@ public class MatchingSeatReservationCommandService {
     ) {
         // 공고 행 잠금을 먼저 잡아야 같은 키의 동시 최초 요청이 앞선 커밋 결과를 조회할 수 있다.
         JobPost jobPost = lockJobPost(jobPostId);
+        accountGates.requireActive(jobPost.getOwnerId(), workerMemberId);
         Optional<JobMatchingSeatReservation> existing = reservationRepository.findByIdempotencyKey(idempotencyKey);
         if (existing.isPresent()) {
             return replayReservation(existing.get(), jobPostId, matchingId, applicationId, workerMemberId);

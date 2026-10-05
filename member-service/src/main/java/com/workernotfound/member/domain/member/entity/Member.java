@@ -35,10 +35,10 @@ public class Member extends BaseEntity {
 	@Column(nullable = false, length = 50)
 	private String name;
 
-	@Column(nullable = false, length = 255)
+	@Column(length = 255)
 	private String email;
 
-	@Column(name = "phone_number", nullable = false, length = 20)
+	@Column(name = "phone_number", length = 20)
 	private String phoneNumber;
 
 	@Enumerated(EnumType.STRING)
@@ -72,6 +72,26 @@ public class Member extends BaseEntity {
 		this.role = role;
 		this.status = MemberStatus.ACTIVE;
 		this.joinedAt = LocalDateTime.now();
+	}
+
+    public void prepareWithdrawal() { status = MemberStatus.WITHDRAWING; }
+    public void releaseWithdrawal() {
+        if (status == MemberStatus.WITHDRAWING) status = MemberStatus.ACTIVE;
+    }
+    public void erasePersonalData() {
+        status = MemberStatus.WITHDRAWN;
+        withdrawnAt = LocalDateTime.now();
+        name = "탈퇴회원"; email = null; phoneNumber = null;
+        ownerProfile = null; workerProfile = null;
+    }
+
+	public void updateContact(boolean isEmail, String target) {
+        if (isEmail) this.email = target;
+        else this.phoneNumber = target;
+    }
+
+	public void updateName(String name) {
+		this.name = name;
 	}
 
 	public void registerOwnerProfile(OwnerProfile ownerProfile) {

@@ -8,6 +8,8 @@ import org.springframework.http.HttpStatus;
 @Getter
 @RequiredArgsConstructor
 public enum AuthErrorCode implements ErrorCode {
+    ACCOUNT_CHANGE_CONFLICT("AUTH-409-003", "계정 변경 요청이 충돌하거나 이미 처리 중입니다.", HttpStatus.CONFLICT),
+    INVALID_CONTACT_CODE("AUTH-400-005", "연락처 인증번호가 올바르지 않거나 만료되었습니다.", HttpStatus.BAD_REQUEST),
 	INVALID_CREDENTIALS("AUTH-401-001", "이메일 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED),
 	ACCOUNT_NOT_ACTIVE("AUTH-401-002", "활성 상태의 계정만 로그인할 수 있습니다.", HttpStatus.UNAUTHORIZED),
 	EMAIL_NOT_VERIFIED("AUTH-400-001", "이메일 인증이 완료되지 않았습니다.", HttpStatus.BAD_REQUEST),

@@ -74,7 +74,7 @@ class MatchingSeatReservationConstraintErrorTests extends IntegrationTestSupport
     @Test
     void mapsConcurrentReservationKeyReuseAcrossJobsToConflict() throws Exception {
         JobPost first = saveJob();
-        JobPost second = saveJob();
+        JobPost second = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().ownerId(9001L).build()));
         String key = newKey();
         doAnswer(awaitBoth(new CountDownLatch(2))).when(reservationRepository).findByIdempotencyKey(key);
 

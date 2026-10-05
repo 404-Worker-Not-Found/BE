@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 @Getter
 @RequiredArgsConstructor
 public enum MemberErrorCode implements ErrorCode {
+    CONTACT_CHANGE_CONFLICT("MEMBER-409-003", "연락처 변경 키가 다른 요청에 사용되었습니다.", HttpStatus.CONFLICT),
 	MEMBER_NOT_FOUND("MEMBER-404-001", "회원을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
 	ACTIVE_MEMBER_NOT_FOUND("MEMBER-404-002", "활성 회원을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
 	EMAIL_ALREADY_EXISTS("MEMBER-409-001", "이미 사용 중인 이메일입니다.", HttpStatus.CONFLICT),

@@ -16,6 +16,12 @@ import org.springframework.http.ResponseEntity;
 @Tag(name = "Member", description = "회원 API")
 public interface MemberControllerDocs {
 
+    @Operation(summary = "내 정보 수정", description = "null/생략은 유지, 목록은 전체 교체합니다. 연락처·역할·사업자등록번호는 변경할 수 없습니다.",
+        security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
+    ResponseEntity<com.workernotfound.member.global.response.ApiResponse<MyMemberResponse>> updateMyMember(
+        @Parameter(hidden = true) AuthenticatedMember authenticatedMember,
+        com.workernotfound.member.domain.member.dto.request.UpdateMyMemberRequest request);
+
 	@Operation(
 		summary = "내 회원 정보 조회",
 		description = "인증된 사용자의 회원 기본 정보와 역할별 프로필을 조회합니다.",

@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class WorkApplicationService {
+    private final com.workernotfound.work.global.account.AccountGateService accountGates;
   private final WorkRepository works;
   private final WorkCommandRepository commands;
 
@@ -23,6 +24,7 @@ public class WorkApplicationService {
   public ScheduledWorkResponse create(String key, ScheduledWorkRequest request) {
     var command = lockCommand(key, request.commandPayload());
     if (command.workId() != null) return ScheduledWorkResponse.from(command.workId());
+    accountGates.requireActive(request.ownerMemberId(), request.workerMemberId());
     if (commands.lockMatching(request.matchingId()) != null) {
       throw new BusinessException(WorkErrorCode.ACTIVE_WORK_EXISTS);
     }

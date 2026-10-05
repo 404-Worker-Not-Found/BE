@@ -18,6 +18,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class MemberController implements MemberControllerDocs {
 
 	private final MemberApplicationService memberApplicationService;
+    private final com.workernotfound.member.domain.member.service.MemberProfileService memberProfileService;
+
+    @Override
+    @org.springframework.web.bind.annotation.PatchMapping("/me")
+    public ResponseEntity<ApiResponse<MyMemberResponse>> updateMyMember(
+        @AuthenticationPrincipal AuthenticatedMember authenticatedMember,
+        @jakarta.validation.Valid @org.springframework.web.bind.annotation.RequestBody
+        com.workernotfound.member.domain.member.dto.request.UpdateMyMemberRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(memberProfileService.updateProfile(authenticatedMember.memberId(), request)));
+    }
 
 	@Override
 	@GetMapping("/me")

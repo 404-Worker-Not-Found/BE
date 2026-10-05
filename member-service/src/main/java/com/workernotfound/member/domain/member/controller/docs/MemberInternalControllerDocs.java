@@ -19,6 +19,10 @@ import org.springframework.http.ResponseEntity;
 
 @Tag(name = "Member Internal", description = "서비스 간 회원 내부 API")
 public interface MemberInternalControllerDocs {
+    @io.swagger.v3.oas.annotations.Operation(summary = "재인증된 연락처 변경", description = "auth-service 전용 내부 계약. 동일 값 재시도는 멱등입니다.")
+    org.springframework.http.ResponseEntity<com.workernotfound.member.global.response.ApiResponse<com.workernotfound.member.domain.member.dto.response.ContactChangeResult>> changeContact(
+        Long memberId, java.util.UUID key, com.workernotfound.member.domain.member.dto.request.VerifiedContactChangeRequest request);
+
 
 	@Operation(summary = "OWNER 회원 생성", description = "auth-service에서 OWNER 회원과 사업자 프로필 생성을 요청합니다.")
 	@ApiResponses({

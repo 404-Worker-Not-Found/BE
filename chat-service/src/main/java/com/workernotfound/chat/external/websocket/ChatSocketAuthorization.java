@@ -18,6 +18,7 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 @RequiredArgsConstructor
 public class ChatSocketAuthorization implements ChannelInterceptor {
   private static final Pattern DESTINATION = Pattern.compile("/topic/chat-rooms/([1-9][0-9]{0,18})");
+    private final com.workernotfound.chat.global.account.AccountGateService accountGates;
   private final JwtTokenParser tokens;
   private final ChatRoomQueryService rooms;
   private final Map<String, AuthenticatedChatSession> sessions = new ConcurrentHashMap<>();
@@ -31,7 +32,7 @@ public class ChatSocketAuthorization implements ChannelInterceptor {
     if (command != StompCommand.CONNECT && headers.isMutable()) headers.removeNativeHeader("Authorization");
     if (command == StompCommand.CONNECT) return connect(message, headers);
     var session = sessions.get(headers.getSessionId());
-    if (session == null || session.isExpired()) throw denied();
+    if (session == null || session.isExpired() || !accountGates.isActive(session.member().memberId())) throw denied();
     if (command == StompCommand.SUBSCRIBE) authorizeSubscription(headers, session);
     else if (command != StompCommand.UNSUBSCRIBE && command != null) throw denied();
     return message;
@@ -45,6 +46,7 @@ public class ChatSocketAuthorization implements ChannelInterceptor {
     AuthenticatedChatSession session;
     try { session = tokens.parseSession(values.get(0).substring(7)); }
     catch (InvalidAccessTokenException exception) { throw denied(); }
+    if (!accountGates.isActive(session.member().memberId())) throw denied();
     headers.setUser(session);
     sessions.put(headers.getSessionId(), session);
     return message;
@@ -63,7 +65,7 @@ public class ChatSocketAuthorization implements ChannelInterceptor {
 
   public boolean canReceive(String sessionId) {
     var session = sessionId == null ? null : sessions.get(sessionId);
-    return session != null && !session.isExpired();
+    return session != null && !session.isExpired() && accountGates.isActive(session.member().memberId());
   }
 
   @EventListener

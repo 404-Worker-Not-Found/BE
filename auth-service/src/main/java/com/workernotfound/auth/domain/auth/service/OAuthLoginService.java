@@ -27,6 +27,7 @@ public class OAuthLoginService {
 	private final AuthAccountRepository authAccountRepository;
 	private final OAuthSignupTicketService oAuthSignupTicketService;
 	private final TokenService tokenService;
+    private final jakarta.persistence.EntityManager entityManager;
 
 	@Transactional
 	public OAuthLoginResponse login(OAuthProvider provider, OAuthLoginRequest request) {
@@ -42,6 +43,7 @@ public class OAuthLoginService {
 
 	private OAuthLoginResponse loginConnectedAccount(OAuthConnection connection, String deviceId) {
 		AuthAccount authAccount = connection.getAuthAccount();
+        entityManager.refresh(authAccount, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
 		validateActiveAccount(authAccount);
 		authAccount.recordLogin(LocalDateTime.now());
 		TokenResponse tokenResponse = tokenService.issue(authAccount, deviceId);
@@ -62,6 +64,7 @@ public class OAuthLoginService {
 			OAuthProviderProfile profile,
 			AuthAccount authAccount,
 			String deviceId) {
+        entityManager.refresh(authAccount, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
 		validateActiveAccount(authAccount);
 		oAuthConnectionRepository.save(
 				OAuthConnection.builder()

@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class OrderTransactionService {
+    private final com.workernotfound.payment.global.account.AccountGateService accountGates;
   private final PaymentOrderRepository orders;
 
   public record Claim(Order order, String token, boolean firstAttempt) {}
@@ -23,6 +24,7 @@ public class OrderTransactionService {
     var command = orders.lockCommand(key, request.fingerprint());
     if (!command.fingerprint().equals(request.fingerprint())) throw conflict();
     if (command.orderId() != null) return OrderResponse.from(require(command.orderId()));
+    accountGates.requireActive(request.ownerMemberId());
     String activeId = orders.lockJob(request.jobPostId());
     if (activeId != null) supersede(activeId, request);
     String id = UUID.randomUUID().toString();
@@ -52,6 +54,7 @@ public class OrderTransactionService {
 
   @Transactional
   public Claim prepare(String id, Long ownerId, ConfirmOrderRequest request) {
+    accountGates.requireActive(ownerId);
     Order order = require(id);
     if (!order.ownerId().equals(ownerId)) throw notFound();
     if (order.amount().compareTo(request.amount()) != 0) throw conflict();

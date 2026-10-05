@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class ChatMessageService {
+    private final com.workernotfound.chat.global.account.AccountGateService accountGates;
   private final ChatRoomRepository rooms;
   private final ChatMessageRepository messages;
   private final ApplicationEventPublisher events;
@@ -24,6 +25,7 @@ public class ChatMessageService {
   @Transactional
   public ChatMessageResponse send(
       AuthenticatedMember member, Long roomId, ChatMessageRequest request) {
+    accountGates.requireActive(member.memberId());
     rooms.findConfirmedForMemberForUpdate(roomId, member.memberId(), member.role())
         .orElseThrow(() -> new BusinessException(ChatRoomErrorCode.CHAT_NOT_FOUND));
     var existing = messages.findByChatRoomIdAndSenderMemberIdAndClientMessageId(

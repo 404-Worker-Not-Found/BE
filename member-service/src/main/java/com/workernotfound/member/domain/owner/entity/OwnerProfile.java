@@ -49,6 +49,11 @@ public class OwnerProfile extends BaseEntity {
 	@JoinColumn(name = "store_location_id", nullable = false)
 	private Location storeLocation;
 
+	public void updateStore(String storeName, String businessType) {
+		if (storeName != null) this.storeName = storeName;
+		if (businessType != null) this.businessType = businessType;
+	}
+
 	@Builder
 	private OwnerProfile(
 		Member member,

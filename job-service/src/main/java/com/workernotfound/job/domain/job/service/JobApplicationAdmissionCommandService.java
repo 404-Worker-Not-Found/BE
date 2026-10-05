@@ -20,7 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 @EnableConfigurationProperties(ApplicationAdmissionProperties.class)
 public class JobApplicationAdmissionCommandService {
 
-    private final JobApplicationAdmissionRepository jobApplicationAdmissionRepository;
+      private final com.workernotfound.job.global.account.AccountGateService accountGates;
+  private final JobApplicationAdmissionRepository jobApplicationAdmissionRepository;
     private final JobPostRepository jobPostRepository;
     private final ApplicationAdmissionProperties applicationAdmissionProperties;
 
@@ -29,6 +30,7 @@ public class JobApplicationAdmissionCommandService {
         // 공고 행 잠금을 먼저 잡아야 같은 키의 동시 요청이 앞선 커밋 결과를 조회할 수 있다.
         JobPost jobPost = jobPostRepository.findByIdForUpdate(jobPostId)
                 .orElseThrow(() -> new BusinessException(JobErrorCode.JOB_NOT_FOUND));
+        accountGates.requireActive(jobPost.getOwnerId(), workerMemberId);
 
         Optional<JobApplicationAdmission> existing =
                 jobApplicationAdmissionRepository.findByIdempotencyKey(idempotencyKey);
