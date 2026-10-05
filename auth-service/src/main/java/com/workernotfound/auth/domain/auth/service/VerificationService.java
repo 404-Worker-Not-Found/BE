@@ -36,6 +36,19 @@ public class VerificationService {
 		return 1
 		""", Long.class);
 
+	private static final DefaultRedisScript<Long> CONSUME_RESET_CODE_SCRIPT = new DefaultRedisScript<>("""
+		local code = redis.call('GET', KEYS[1])
+		if not code then return 0 end
+		if code == ARGV[1] then
+		  redis.call('DEL', KEYS[1], KEYS[2])
+		  return 1
+		end
+		local attempts = redis.call('INCR', KEYS[2])
+		if attempts == 1 then redis.call('PEXPIRE', KEYS[2], redis.call('PTTL', KEYS[1])) end
+		if attempts >= tonumber(ARGV[2]) then redis.call('DEL', KEYS[1], KEYS[2]) end
+		return 0
+		""", Long.class);
+
 	private final StringRedisTemplate redisTemplate;
 	private final VerificationCodeGenerator verificationCodeGenerator;
 	private final VerificationCodeHasher verificationCodeHasher;
@@ -100,6 +113,14 @@ public class VerificationService {
 			saveVerifiedFlag(smsVerifiedKey(purpose, phoneNumber));
 		}
 		return verified;
+	}
+
+	public boolean consumePasswordResetCode(String email, String verificationCode) {
+		Long result = redisTemplate.execute(CONSUME_RESET_CODE_SCRIPT,
+				List.of(emailCodeKey(VerificationPurpose.PASSWORD_RESET, email),
+						emailAttemptKey(VerificationPurpose.PASSWORD_RESET, email)),
+				verificationCodeHasher.hash(verificationCode), Integer.toString(MAX_VERIFY_ATTEMPTS));
+		return Long.valueOf(1).equals(result);
 	}
 
 	public boolean isEmailVerified(VerificationPurpose purpose, String email) {

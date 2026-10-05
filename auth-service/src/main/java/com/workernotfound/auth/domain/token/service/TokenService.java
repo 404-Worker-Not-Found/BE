@@ -2,6 +2,7 @@ package com.workernotfound.auth.domain.token.service;
 
 import com.workernotfound.auth.domain.account.entity.AuthAccount;
 import com.workernotfound.auth.domain.account.entity.enums.MemberStatus;
+import com.workernotfound.auth.domain.account.repository.AuthAccountRepository;
 import com.workernotfound.auth.domain.token.dto.request.TokenReissueRequest;
 import com.workernotfound.auth.domain.token.dto.response.TokenResponse;
 import com.workernotfound.auth.domain.token.entity.RefreshToken;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TokenService {
 
 	private final RefreshTokenRepository refreshTokenRepository;
+	private final AuthAccountRepository authAccountRepository;
 	private final JwtTokenProvider jwtTokenProvider;
 	private final TokenHasher tokenHasher;
 
@@ -43,6 +45,7 @@ public class TokenService {
 
 	@Transactional
 	public TokenResponse issue(AuthAccount authAccount, String deviceId) {
+		authAccountRepository.findByIdForUpdate(authAccount.getId()).orElseThrow();
 		LocalDateTime now = LocalDateTime.now();
 		String accessToken =
 				jwtTokenProvider.createAccessToken(
@@ -54,6 +57,9 @@ public class TokenService {
 
 	private RefreshToken findUsableRefreshToken(String rawRefreshToken, LocalDateTime now) {
 		String tokenHash = tokenHasher.hash(rawRefreshToken);
+		Long accountId = refreshTokenRepository.findAccountIdByTokenHash(tokenHash)
+				.orElseThrow(() -> new RefreshTokenException(TokenErrorCode.REFRESH_TOKEN_NOT_FOUND));
+		authAccountRepository.findByIdForUpdate(accountId).orElseThrow();
 		RefreshToken refreshToken =
 				refreshTokenRepository
 						.findByTokenHashForUpdate(tokenHash)
