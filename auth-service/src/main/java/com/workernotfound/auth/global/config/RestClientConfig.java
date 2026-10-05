@@ -3,9 +3,11 @@ package com.workernotfound.auth.global.config;
 import com.workernotfound.auth.external.client.member.MemberServiceProperties;
 import com.workernotfound.auth.external.client.oauth.OAuth2ClientProperties;
 import com.workernotfound.auth.domain.auth.service.VerificationDeliveryProperties;
+import java.net.http.HttpClient;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
@@ -15,8 +17,10 @@ public class RestClientConfig {
 
 	@Bean
 	public RestClient memberServiceRestClient(MemberServiceProperties memberServiceProperties) {
-		SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-		requestFactory.setConnectTimeout(memberServiceProperties.connectTimeout());
+		HttpClient httpClient = HttpClient.newBuilder()
+			.connectTimeout(memberServiceProperties.connectTimeout())
+			.build();
+		JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
 		requestFactory.setReadTimeout(memberServiceProperties.readTimeout());
 
 		return RestClient.builder()
