@@ -29,7 +29,7 @@ notification-service는 회원별 인앱 알림과 읽음 상태를 전용 MySQL
 | `GET /api/notifications/me/unread-count` | 본인 역할의 미읽음 unreadCount 반환 |
 | `PATCH /api/notifications/me/{notificationId}/read` | 최초 읽음 시각을 기록. 재시도해도 같은 시각 유지 |
 
-알림 응답은 notificationId, type, jobPostId, matchingId, applicationId, occurredAt, createdAt, readAt이다. 미선정 알림의 matchingId는 null이다. 타인·다른 역할·없는 알림의 읽음 요청은 `NOTIFICATION-404-001`이다. 인증되지 않은 요청은 401이다. 삭제와 보관 만료 정책은 아직 구현하지 않는다.
+알림 응답은 notificationId, type, jobPostId, matchingId, applicationId, workId, occurredAt, createdAt, readAt이다. 미선정 알림의 matchingId는 null이다. 기존 매칭·지원 알림의 workId는 null이다. 타인·다른 역할·없는 알림의 읽음 요청은 `NOTIFICATION-404-001`이다. 인증되지 않은 요청은 401이다. 삭제와 보관 만료 정책은 아직 구현하지 않는다.
 
 ## 실행과 검증
 
@@ -39,3 +39,23 @@ notification-service는 회원별 인앱 알림과 읽음 상태를 전용 MySQL
 - 저장소 전체 검증에 새 서비스를 포함한다. MySQL/Redis Testcontainers로 중복·동시 수신·pending 복구·롤백·권한·읽음 멱등성·페이지 조회를 검증한다.
 
 알림 소비자는 envelope의 `occurredAt`도 payload 발생 시각과 비교한다. 매칭 v1 payload는 나노초를 유지하지만 Outbox의 `DATETIME(6)`를 거친 envelope는 마이크로초로 절삭·반올림될 수 있어, 그 두 저장 결과만 같은 시각으로 인정한다. 그 밖의 차이나 누락은 ACK하지 않고 pending에 남긴다. payload와 기존 이벤트 fingerprint는 변경하지 않는다.
+
+## 근무 상태 변경 알림
+
+`WorkCheckedIn`, `WorkStarted`, `WorkCompleted` v1은 별도 `work:domain-events` Stream에서 소비한다. 그룹은 `notification-work-v1`, 공유 논리 consumer는 `notification-work`다. 기존 matching 그룹과 pending 커서는 분리되어 한쪽의 실패가 다른 이벤트를 막지 않는다.
+
+| 이벤트 | 처리자 역할 | 수신자 |
+| --- | --- | --- |
+| WorkCheckedIn | WORKER | 해당 근무 OWNER |
+| WorkStarted | OWNER | 해당 근무 WORKER |
+| WorkCompleted | OWNER 또는 WORKER | 처리자의 상대 역할 참여자 |
+
+- 생산자의 `actorRole`과 `actorMemberId`를 함께 검증한다. 완료 주체 설정이 바뀌거나 같은 회원 ID가 여러 역할을 가질 수 있어도 ID만으로 역할을 추정하지 않는다.
+- envelope의 aggregateType=WORK, eventId, eventType, aggregateId, revision, version, occurredAt이 payload와 같아야 한다. payload는 workId·매칭·공고·참여자·일정·처리자와 상태를 포함한다. 근무별 revision은 출근 1, 시작 2, 완료 3이며 상태·역할과 함께 검증한다.
+- eventId별 고정 v1 필드 fingerprint, receipt, 상대방 알림을 한 트랜잭션으로 저장하고 커밋 후 ACK한다. 같은 ID의 다른 내용은 거부한다. 기존 매칭 이벤트의 fingerprint 계산은 바꾸지 않는다.
+- 늦게 도착한 과거 단계도 별도의 알림 이력으로 보관한다. 알림 목록은 수신 ID 순서이며 발생 시각은 `occurredAt`으로 표시한다. 근무의 현재 상태를 이 알림 순서로 추정하지 않고 work-service에서 조회한다.
+- 근무 알림 응답에는 `workId`와 `matchingId`가 있고 `applicationId`는 null이다. 기존 매칭·지원 알림은 기존 식별자를 유지하며 `workId`가 null이다. 이벤트·처리자·상대방 회원 ID나 결제 식별자는 응답에 노출하지 않는다.
+- 기존 본인·역할별 조회와 읽음 처리를 그대로 사용한다. 잘못된 이벤트는 pending에 남기고 순회 커서를 진행시켜 후속 이벤트 처리를 계속한다. Stream을 자동 trim하거나 실패 이벤트를 자동 삭제하지 않는다.
+- `WORK_OUTBOX_STREAM_KEY`를 근무 생산자와 동일하게 맞춘다. `NOTIFICATION_WORK_EVENTS_ENABLED=false`는 근무 알림 소비만 중단하며 기존 매칭 알림 소비 설정과 독립적이다.
+
+이 구현은 인앱 보관함만 제공한다. 푸시·문자·이메일 발송이나 금융 처리는 수행하지 않는다.

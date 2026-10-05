@@ -283,7 +283,7 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - JWT-authenticated owners and workers can list and read only their own confirmed work through `/api/works/me`. Unconfirmed and unrelated work returns no list entry or 404 detail. Confirmation is separate from `SCHEDULED` and blocks Saga compensation.
 - Confirmed workers can GPS check in; owners confirm work start and, by default, completion. Each transition locks the work row and writes actor history atomically; retries retain the first timestamp. Default attendance policy is 100 meters and start ±30 minutes in Asia/Seoul. Completion is allowed after scheduled end. Radius, windows, time zone, completion role and early completion are configurable; `AttendancePolicy` is replaceable.
 - Matching persists and forwards optional job latitude/longitude into scheduled work. Legacy work remains queryable but cannot GPS check in without a trusted location snapshot. job-service seat reservations are implemented but still must add location snapshot fields.
-- WorkCheckedIn, WorkStarted and WorkCompleted v1 are written to a transactional Outbox with work status/history, then relayed to a dedicated Redis Stream using fenced leases and retries. Duplicate deliveries retain the event ID; consumers must deduplicate and use work revision to handle reordering. Notification/settlement consumers are not yet connected.
+- WorkCheckedIn, WorkStarted and WorkCompleted v1 are written to a transactional Outbox with work status/history, then relayed to a dedicated Redis Stream using fenced leases and retries. Duplicate deliveries retain the event ID; consumers must deduplicate and use work revision to handle reordering. The notification consumer is connected; settlement consumers are not yet connected.
 - User cancellation, no-show handling and settlement remain future work. MySQL and Redis integration tests cover confirmation, pending recovery, query authorization and attendance transitions.
 - MySQL integration tests cover command retries, conflicts, concurrent creation/cancellation, internal authentication, and Swagger access.
 - Local execution is available through `./scripts/local-run.sh work`; the service uses port 8086 and its local MySQL uses port 3311.
@@ -315,6 +315,8 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - See `docs/architecture/payment-lock-design.md` for the boundary and follow-up work. See `docs/architecture/toss-deposit-design.md` for the provider and job/frontend contracts. Full matching acceptance still requires product frontend and job-service integration.
 
 ## Notification Service Context
+
+- WorkCheckedIn, WorkStarted and WorkCompleted v1 from the dedicated work Stream notify the opposite participant using the declared actor role. Work notifications carry workId instead of applicationId, retain event-id deduplication and pending recovery, and preserve existing matching event fingerprints.
 
 - `notification-service` owns MySQL/Flyway notification storage and consumes matching Redis Stream events using a dedicated group.
 - `MatchConfirmed` v1 creates OWNER and WORKER in-app notifications; `ApplicationRejected` v1 creates a WORKER notification only. Unsupported event types are skipped, while malformed supported events remain pending.

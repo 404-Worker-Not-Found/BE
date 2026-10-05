@@ -1213,3 +1213,18 @@ Reason:
 Related files:
 - `docs/architecture/work-scheduled-design.md`
 - `work-service`
+
+## 2026-10-04 - Participant Work Notifications
+
+Decision:
+- Consume work lifecycle v1 from a separate Redis Stream/group and notify the opposite role: check-in to owner, start to worker, completion to the participant other than the declared actor role.
+- Require actor role and member ID together, validate the full envelope and state/revision contract, and commit event receipt plus notification before ACK.
+- Preserve each distinct event as notification history even when delivery is out of order. Keep the current work state owned by work-service.
+- Add nullable workId to inbox responses and allow applicationId to be absent for work notices. Preserve the existing matching-event v1 fingerprints and member/role access checks.
+
+Reason:
+- Users need to see the other participant's work actions, and configurable completion authority must not depend on guessing a role from a member ID.
+
+Related files:
+- `docs/architecture/notification-design.md`
+- `notification-service`
