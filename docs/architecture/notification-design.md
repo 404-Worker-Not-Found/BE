@@ -29,7 +29,7 @@ notification-service는 회원별 인앱 알림과 읽음 상태를 전용 MySQL
 | `GET /api/notifications/me/unread-count` | 본인 역할의 미읽음 unreadCount 반환 |
 | `PATCH /api/notifications/me/{notificationId}/read` | 최초 읽음 시각을 기록. 재시도해도 같은 시각 유지 |
 
-알림 응답은 notificationId, type, jobPostId, matchingId, applicationId, occurredAt, createdAt, readAt이다. 미선정 알림의 matchingId는 null이다. 타인·다른 역할·없는 알림의 읽음 요청은 `NOTIFICATION-404-001`이다. 인증되지 않은 요청은 401이다. 삭제와 보관 만료 정책은 아직 구현하지 않는다.
+알림 응답은 notificationId, type, jobPostId, matchingId, applicationId, workId, occurredAt, createdAt, readAt이다. 미선정 알림의 matchingId는 null이다. 기존 매칭·지원 알림의 workId는 null이다. 타인·다른 역할·없는 알림의 읽음 요청은 `NOTIFICATION-404-001`이다. 인증되지 않은 요청은 401이다. 삭제와 보관 만료 정책은 아직 구현하지 않는다.
 
 ## 실행과 검증
 
