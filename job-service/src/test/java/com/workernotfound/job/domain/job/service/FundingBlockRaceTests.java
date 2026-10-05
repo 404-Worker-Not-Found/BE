@@ -47,6 +47,8 @@ import static org.awaitility.Awaitility.await;
  */
 class FundingBlockRaceTests extends IntegrationTestSupport {
 
+    // MySQL은 잠금이 걸린 레코드의 페이지를 바로 읽을 수 없으면 LOCK_DATA를 NULL로 보고한다. 첫 트랜잭션은 이 공고 행 하나만
+    // job_posts에서 잠그므로, 대기자·차단자 연결과 테이블·인덱스·모드가 맞으면 NULL도 이 공고 행의 대기로 인정한다.
     private static final String JOB_LOCK_WAIT_QUERY = """
             SELECT 1
             FROM performance_schema.data_lock_waits waits
@@ -65,7 +67,7 @@ class FundingBlockRaceTests extends IntegrationTestSupport {
               AND requested.LOCK_TYPE = 'RECORD'
               AND requested.LOCK_MODE LIKE 'X%'
               AND requested.LOCK_STATUS = 'WAITING'
-              AND requested.LOCK_DATA = ?
+              AND (requested.LOCK_DATA = ? OR requested.LOCK_DATA IS NULL)
             """;
     private static final AtomicLong EXTERNAL_ID_SEQUENCE = new AtomicLong(970_000);
     private static final long AMOUNT = 90_000L;
