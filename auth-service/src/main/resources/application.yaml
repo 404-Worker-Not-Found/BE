@@ -13,6 +13,21 @@ spring:
   jpa:
     hibernate:
       ddl-auto: ${AUTH_JPA_DDL_AUTO:none}
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${AUTH_MAIL_USERNAME:}
+    password: ${AUTH_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 3000
+          timeout: 5000
+          writetimeout: 5000
 
 server:
   port: ${AUTH_SERVICE_PORT:8081}
@@ -20,8 +35,8 @@ server:
 auth:
   verification:
     delivery:
-      resend-api-key: ${AUTH_RESEND_API_KEY:}
-      email-from: ${AUTH_VERIFICATION_EMAIL_FROM:}
+      email-username: ${AUTH_MAIL_USERNAME:}
+      email-password: ${AUTH_MAIL_PASSWORD:}
       solapi-api-key: ${AUTH_SOLAPI_API_KEY:}
       solapi-api-secret: ${AUTH_SOLAPI_API_SECRET:}
       sms-from: ${AUTH_VERIFICATION_SMS_FROM:}

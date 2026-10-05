@@ -1,6 +1,10 @@
 package com.workernotfound.auth.domain.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -12,40 +16,57 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.MediaType;
+import org.springframework.mail.MailAuthenticationException;
+import org.springframework.mail.MailSendException;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
+import org.mockito.ArgumentCaptor;
 
 @ExtendWith(OutputCaptureExtension.class)
 class VerificationDeliveryTests {
 	private final VerificationDeliveryProperties properties = new VerificationDeliveryProperties(
-		"resend-key", "verify@example.com", "solapi-key", "solapi-secret", "0212345678");
+		"verify@gmail.com", "app-password", "solapi-key", "solapi-secret", "0212345678");
 
 	@Test
-	void resendAcceptsEmail(CapturedOutput output) {
-		RestClient.Builder builder = RestClient.builder();
-		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-		server.expect(requestTo("https://api.resend.com/emails"))
-			.andExpect(header("Authorization", "Bearer resend-key"))
-			.andExpect(jsonPath("$.text").value(org.hamcrest.Matchers.containsString("123456")))
-			.andRespond(withSuccess("{\"id\":\"email-id\"}", MediaType.APPLICATION_JSON));
-		new EmailVerificationSender(builder.build(), properties).send("person@example.com", "123456");
-		server.verify();
+	void gmailSendsVerificationCode(CapturedOutput output) {
+		JavaMailSender mailSender = mock(JavaMailSender.class);
+		new EmailVerificationSender(mailSender, properties).send("person@example.com", "123456");
+		ArgumentCaptor<SimpleMailMessage> message = ArgumentCaptor.forClass(SimpleMailMessage.class);
+		verify(mailSender).send(message.capture());
+		org.assertj.core.api.Assertions.assertThat(message.getValue().getFrom()).isEqualTo("verify@gmail.com");
+		org.assertj.core.api.Assertions.assertThat(message.getValue().getTo()).containsExactly("person@example.com");
+		org.assertj.core.api.Assertions.assertThat(message.getValue().getText()).contains("123456");
 		org.assertj.core.api.Assertions.assertThat(output.getAll()).doesNotContain("123456");
 	}
 
 	@Test
-	void resendErrorHidesCode() {
-		RestClient.Builder builder = RestClient.builder();
-		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-		server.expect(requestTo("https://api.resend.com/emails"))
-			.andRespond(withServerError().body("123456 provider details"));
-		assertThatThrownBy(() -> new EmailVerificationSender(builder.build(), properties)
+	void gmailAuthenticationFailureClearsPendingCode(CapturedOutput output) {
+		JavaMailSender mailSender = mock(JavaMailSender.class);
+		doThrow(new MailAuthenticationException("123456 provider details"))
+			.when(mailSender).send(any(SimpleMailMessage.class));
+		assertThatThrownBy(() -> new EmailVerificationSender(mailSender, properties)
+			.send("person@example.com", "123456"))
+			.isInstanceOf(VerificationDeliveryException.class)
+			.satisfies(exception -> org.assertj.core.api.Assertions.assertThat(
+				((VerificationDeliveryException) exception).isDeliveryUncertain()).isFalse())
+			.hasMessageNotContaining("123456");
+		org.assertj.core.api.Assertions.assertThat(output.getAll()).doesNotContain("123456");
+	}
+
+	@Test
+	void gmailTransportFailureRetainsPendingCode(CapturedOutput output) {
+		JavaMailSender mailSender = mock(JavaMailSender.class);
+		doThrow(new MailSendException("123456 provider details"))
+			.when(mailSender).send(any(SimpleMailMessage.class));
+		assertThatThrownBy(() -> new EmailVerificationSender(mailSender, properties)
 			.send("person@example.com", "123456"))
 			.isInstanceOf(VerificationDeliveryException.class)
 			.satisfies(exception -> org.assertj.core.api.Assertions.assertThat(
 				((VerificationDeliveryException) exception).isDeliveryUncertain()).isTrue())
 			.hasMessageNotContaining("123456");
-		server.verify();
+		org.assertj.core.api.Assertions.assertThat(output.getAll()).doesNotContain("123456");
 	}
 
 	@Test
@@ -78,7 +99,7 @@ class VerificationDeliveryTests {
 	@Test
 	void missingConfigurationFailsClosed() {
 		VerificationDeliveryProperties empty = new VerificationDeliveryProperties("", "", "", "", "");
-		assertThatThrownBy(() -> new EmailVerificationSender(RestClient.create(), empty)
+		assertThatThrownBy(() -> new EmailVerificationSender(mock(JavaMailSender.class), empty)
 			.send("person@example.com", "123456")).isInstanceOf(VerificationDeliveryException.class);
 		assertThatThrownBy(() -> new SmsVerificationSender(RestClient.create(), empty)
 			.send("01012345678", "123456")).isInstanceOf(VerificationDeliveryException.class);

@@ -588,7 +588,7 @@ Reason:
 Implication for agents:
 - Preserve account status validation and row locking when changing refresh token rotation.
 - Do not remove verification rate/attempt limits without replacing them with equivalent protection.
-- Never add verification-code logging. Use Resend for email and SOLAPI for SMS; provider acceptance must be confirmed before returning send success. Configure credentials and registered sender identities in the runtime environment.
+- Never add verification-code logging. Use Gmail SMTP for email and SOLAPI for SMS; SMTP send completion or provider acceptance must be confirmed before returning send success. Configure credentials and registered sender identities in the runtime environment.
 - Keep signup compensation behavior or replace it with a stronger consistency mechanism such as idempotency, pending state, or outbox-based cleanup.
 
 Related files:
