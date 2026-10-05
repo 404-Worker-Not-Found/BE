@@ -342,7 +342,7 @@ Related files:
 
 Decision:
 - CodeRabbit reviews each PR. Assess its findings against the code and the project contracts, apply valid fixes, and verify them before merging.
-- After the CodeRabbit review is complete and valid findings are addressed, squash-and-merge the PR. A separate teammate approval is not required.
+- After the initial CodeRabbit review and valid fixes, apply the risk-based follow-up review rule recorded on 2026-10-05 before squash-and-merge. A separate teammate approval is not required.
 - Use squash-and-merge.
 - Delete the branch after the PR is merged.
 - For a new unit of work, recreate a fresh branch from the appropriate base branch.
@@ -352,13 +352,12 @@ Reason:
 
 Implication for agents:
 - Do not merge before CodeRabbit review completion and resolution of valid findings.
-- Require completed CodeRabbit coverage of the current PR head, including documentation-only commits. An earlier reviewed commit is not sufficient.
-- A rate limit, skipped review, pending review, or successful status check without actual review coverage is not review completion.
-- When rate-limited, keep the PR open, wait until the stated reset time, and request review again. Never substitute the agent's own review or a documentation-only exception.
+- Require an actual initial CodeRabbit review. Apply the 2026-10-05 risk-based rule to later changes instead of requiring coverage of every commit.
+- When a follow-up review is required, a rate limit, skipped review, pending review, or successful status check without actual review coverage is not review completion. Wait until the stated reset time before retrying.
 - Keep `.coderabbit.yaml` path filters inclusive so changed paths are not excluded by repository configuration.
-- Keep the initial PR review automatic, but disable automatic incremental reviews. Batch fixes and verification locally, push once when ready, then request `@coderabbitai review` manually after checking review availability.
+- Keep the initial PR review automatic, but disable automatic incremental reviews. Batch fixes and verification locally; request `@coderabbitai review` manually when the follow-up changes meet the risk-based criteria.
 - Do not request another review while one is in progress or push partial follow-up changes that would supersede it.
-- Treat automatic review pause separately from a rate limit. When `auto_pause_after_reviewed_commits` pauses reviews, request `@coderabbitai review` and confirm actual coverage of the latest head; if the request is rate-limited, wait for its reset time before retrying.
+- Treat automatic review pause separately from a rate limit. Request a manual review after a pause when an initial or risk-based follow-up review is required.
 - Prefer squash-and-merge when completing PRs.
 - After merge, expect the work branch to be deleted before starting new work.
 
@@ -901,7 +900,7 @@ Related files:
 Decision:
 - Use CodeRabbit review instead of requiring a teammate review.
 - Read review findings, check their validity against code and project contracts, fix valid issues, and run relevant verification.
-- Complete CodeRabbit review of every change in the latest PR head, including documentation, and resolve valid findings before squash-and-merge. Delete the work branch after merge.
+- Complete the initial CodeRabbit review, resolve valid findings, and apply the 2026-10-05 risk-based follow-up review rule before squash-and-merge. Delete the work branch after merge.
 
 Reason:
 - The user explicitly clarified the repository's intended GitHub workflow.
@@ -1316,3 +1315,24 @@ Reason:
 Related files:
 - `docs/architecture/notification-design.md`
 - `notification-service`
+
+## 2026-10-05 - Risk-Based CodeRabbit Follow-Up Reviews
+
+Decision:
+- Keep one completed CodeRabbit review for every PR. A review of every subsequent commit is not required.
+- Request a follow-up review when post-review changes introduce nontrivial behavior or invariants in security, payments, concurrency, data integrity, transaction boundaries, or external integrations, or when their impact is unclear. The commit containing those high-risk changes must then be actually reviewed before merge.
+- Do not require another review for documentation, tests, formatting, or a narrow implementation of an already reviewed suggestion that adds no independent behavior. Review those changes directly and run relevant verification.
+- Batch related fixes before requesting any follow-up review. A later low-risk change alone does not invalidate a completed high-risk follow-up review.
+
+Reason:
+- Automatic incremental reviews are disabled and included reviews are rate-limited. Requiring a new review after every small fix delays delivery without proportionate benefit.
+- Changes such as atomic verification-code replacement and expiry restoration can introduce new failure or concurrency behavior, so they warrant another review.
+
+Implication for agents:
+- Inspect the actual post-review diff, state the risk assessment and verification in the final report, and request a manual review only when the criteria above apply.
+- When a follow-up review is required, do not treat a green check with a skipped, rate-limited, or pending review as coverage. Wait for capacity and confirm the reviewed commit includes the high-risk changes.
+- Resolve valid findings and repeat a follow-up review only if another high-risk change is made.
+
+Related files:
+- `docs/agent/checklists.md`
+- `.coderabbit.yaml`
