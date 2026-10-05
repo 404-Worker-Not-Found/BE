@@ -189,7 +189,7 @@ class RecruitmentCompletionContractTests extends IntegrationTestSupport {
 			.startedAt(LocalDateTime.now().minusMinutes(1))
 			.build();
 		saga.recordSeat("seat-1", LocalDate.now().plusDays(1), LocalTime.of(9, 0), LocalTime.of(18, 0), false,
-			new BigDecimal("90000"), "KRW");
+			new BigDecimal("90000"), "KRW", null, null);
 		saga.recordPayment("payment-1");
 		saga.recordWork("work-1");
 		saga.recordChatRoom("chat-1");
