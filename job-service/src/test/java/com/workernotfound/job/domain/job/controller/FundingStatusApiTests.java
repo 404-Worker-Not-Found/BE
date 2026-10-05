@@ -6,6 +6,8 @@ import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.JobStatusHistory;
 import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import com.workernotfound.job.domain.job.entity.enums.PaymentOrderCommandStatus;
+import com.workernotfound.job.domain.job.entity.enums.RefundReviewReason;
+import com.workernotfound.job.domain.job.repository.JobPaymentRefundReviewRepository;
 import com.workernotfound.job.domain.job.service.JobPaymentOrderCommandIssuer;
 import com.workernotfound.job.support.FundingStatusApiTestSupport;
 import com.workernotfound.job.support.JobPostFixture;
@@ -44,6 +46,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @ExtendWith(OutputCaptureExtension.class)
 class FundingStatusApiTests extends FundingStatusApiTestSupport {
+
+    @Autowired
+    private JobPaymentRefundReviewRepository refundReviewRepository;
 
     @Autowired
     private JobPaymentOrderCommandIssuer paymentOrderCommandIssuer;
@@ -359,6 +364,16 @@ class FundingStatusApiTests extends FundingStatusApiTestSupport {
                 .isRefundReviewRequired()).isFalse();
         assertThat(receiptRepository.findByOrderIdAndFundingRevision(earlier.orderId(), 6L).orElseThrow()
                 .isRefundReviewRequired()).isTrue();
+        // 환불 검토 대상은 주문당 한 건이며 처음 검토 대상이 된 수신 기록에 연결한다.
+        sendFunding(earlier.jobPostId(), fundingKey(earlier, 7), notice(earlier, 7, true))
+                .andExpect(jsonPath("$.data.result").value("STALE_ORDER"));
+        assertThat(refundReviewRepository.findByJobPostIdOrderByIdAsc(job.getId())).singleElement()
+                .satisfies(review -> {
+                    assertThat(review.getOrderId()).isEqualTo(earlier.orderId());
+                    assertThat(review.getReason()).isEqualTo(RefundReviewReason.STALE_ORDER);
+                    assertThat(review.getReceiptId()).isEqualTo(receiptRepository
+                            .findByOrderIdAndFundingRevision(earlier.orderId(), 6L).orElseThrow().getId());
+                });
     }
 
     @Test
@@ -594,6 +609,45 @@ class FundingStatusApiTests extends FundingStatusApiTestSupport {
         assertThat(jobPost(job.jobPostId()).isFundingBlocked()).isFalse();
         assertThat(fundingRepository.findByOrderId(job.orderId()).orElseThrow().getFundingRevision()).isEqualTo(1L);
         assertThat(receiptRepository.findByJobPostIdOrderByIdAsc(job.jobPostId())).hasSize(1);
+    }
+
+    @Test
+    void recordsUnpublishedFundingForRefundReviewOnceAndRollsBackWithReceipt() throws Exception {
+        LinkedJob job = createLinkedJob(1);
+        fixClockAt(jobPost(job.jobPostId()).getApplicationDeadline());
+        String trigger = "fail_refund_review_" + job.jobPostId();
+        executeAsRoot("""
+                CREATE TRIGGER %s BEFORE INSERT ON job_payment_refund_reviews FOR EACH ROW
+                BEGIN
+                    IF NEW.job_post_id = %d THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'refund review insert blocked by test';
+                    END IF;
+                END
+                """.formatted(trigger, job.jobPostId()));
+        try {
+            sendFunding(job.jobPostId(), fundingKey(job, 1), notice(job, 1, true))
+                    .andExpect(status().isInternalServerError());
+        } finally {
+            executeAsRoot("DROP TRIGGER " + trigger);
+        }
+        // 검토 기록 저장이 실패하면 수신 기록과 revision도 남지 않아 같은 명령이 다시 처리된다.
+        assertUntouched(job);
+
+        sendFunding(job.jobPostId(), fundingKey(job, 1), notice(job, 1, true))
+                .andExpect(jsonPath("$.data.result").value("PUBLICATION_SKIPPED"));
+        sendFunding(job.jobPostId(), fundingKey(job, 1), notice(job, 1, true))
+                .andExpect(jsonPath("$.data.result").value("PUBLICATION_SKIPPED"));
+        sendFunding(job.jobPostId(), fundingKey(job, 2), notice(job, 2, false)).andExpect(status().isOk());
+        sendFunding(job.jobPostId(), fundingKey(job, 3), notice(job, 3, true))
+                .andExpect(jsonPath("$.data.result").value("PUBLICATION_SKIPPED"));
+
+        assertThat(refundReviewRepository.findByJobPostIdOrderByIdAsc(job.jobPostId())).singleElement()
+                .satisfies(review -> {
+                    assertThat(review.getOrderId()).isEqualTo(job.orderId());
+                    assertThat(review.getReason()).isEqualTo(RefundReviewReason.APPLICATION_DEADLINE_PASSED);
+                    assertThat(review.getReceiptId()).isEqualTo(receiptRepository
+                            .findByOrderIdAndFundingRevision(job.orderId(), 1L).orElseThrow().getId());
+                });
     }
 
     @Test

@@ -4,16 +4,19 @@ import com.workernotfound.job.domain.job.entity.FundingStatusNotification;
 import com.workernotfound.job.domain.job.entity.JobFundingStatusReceipt;
 import com.workernotfound.job.domain.job.entity.JobPaymentFunding;
 import com.workernotfound.job.domain.job.entity.JobPaymentOrderCommand;
+import com.workernotfound.job.domain.job.entity.JobPaymentRefundReview;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.JobStatusHistory;
 import com.workernotfound.job.domain.job.entity.enums.FundingSkipReason;
 import com.workernotfound.job.domain.job.entity.enums.FundingStatusResult;
 import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import com.workernotfound.job.domain.job.entity.enums.PaymentOrderCommandStatus;
+import com.workernotfound.job.domain.job.entity.enums.RefundReviewReason;
 import com.workernotfound.job.domain.job.exception.JobErrorCode;
 import com.workernotfound.job.domain.job.repository.JobFundingStatusReceiptRepository;
 import com.workernotfound.job.domain.job.repository.JobPaymentFundingRepository;
 import com.workernotfound.job.domain.job.repository.JobPaymentOrderCommandRepository;
+import com.workernotfound.job.domain.job.repository.JobPaymentRefundReviewRepository;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
 import com.workernotfound.job.domain.job.repository.JobStatusHistoryRepository;
 import com.workernotfound.job.global.exception.BusinessException;
@@ -45,6 +48,7 @@ public class JobFundingStatusCommandService {
     private final JobPaymentFundingRepository fundingRepository;
     private final JobPaymentOrderCommandRepository commandRepository;
     private final JobStatusHistoryRepository historyRepository;
+    private final JobPaymentRefundReviewRepository refundReviewRepository;
     private final Clock clock;
 
     @Transactional
@@ -62,7 +66,7 @@ public class JobFundingStatusCommandService {
         }
         LocalDateTime now = LocalDateTime.now(clock);
         Outcome outcome = process(jobPost, notification, now);
-        return receiptRepository.save(JobFundingStatusReceipt.builder()
+        JobFundingStatusReceipt receipt = receiptRepository.save(JobFundingStatusReceipt.builder()
                 .idempotencyKey(idempotencyKey)
                 .jobPostId(jobPostId)
                 .notification(notification)
@@ -72,6 +76,23 @@ public class JobFundingStatusCommandService {
                 .fundingBlocked(jobPost.isFundingBlocked())
                 .refundReviewRequired(outcome.isRefundReviewRequired())
                 .receivedAt(now)
+                .build());
+        if (outcome.isRefundReviewRequired()) {
+            recordRefundReview(receipt);
+        }
+        return receipt;
+    }
+
+    // 주문당 한 건만 남긴다. 같은 주문의 이후 예치 확인은 처음 검토 기록에 포함되며, 공고 상태는 바꾸지 않는다.
+    private void recordRefundReview(JobFundingStatusReceipt receipt) {
+        if (refundReviewRepository.existsByOrderId(receipt.getOrderId())) {
+            return;
+        }
+        refundReviewRepository.save(JobPaymentRefundReview.builder()
+                .jobPostId(receipt.getJobPostId())
+                .orderId(receipt.getOrderId())
+                .receiptId(receipt.getId())
+                .reason(RefundReviewReason.of(receipt.getResult(), receipt.getSkipReason()))
                 .build());
     }
 
