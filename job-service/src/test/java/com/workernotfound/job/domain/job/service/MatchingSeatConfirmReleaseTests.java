@@ -301,7 +301,7 @@ class MatchingSeatConfirmReleaseTests extends IntegrationTestSupport {
     }
 
     private JobPost saveJob(int recruitCount) {
-        return jobPostRepository.save(JobPostFixture.jobPost().recruitCount(recruitCount).build());
+        return jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().recruitCount(recruitCount).build()));
     }
 
     private void assertError(ThrowingCallable callable, JobErrorCode errorCode) {

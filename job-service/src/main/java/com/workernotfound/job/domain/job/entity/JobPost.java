@@ -121,7 +121,8 @@ public class JobPost extends BaseEntity {
         this.longitude = longitude;
         this.urgencyLevel = urgencyLevel;
         this.applicationDeadline = applicationDeadline;
-        this.status = JobStatus.OPEN;
+        // 검증된 예치가 반영되기 전까지 비공개로 저장한다. 공개(OPEN) 전환은 예치 상태 수신 후속 작업이 맡는다.
+        this.status = JobStatus.PAYMENT_PENDING;
     }
 
     // 모집 완료로 마감할 수 있는 상태다. 이미 CLOSED인 공고는 다시 마감하지 않는다.

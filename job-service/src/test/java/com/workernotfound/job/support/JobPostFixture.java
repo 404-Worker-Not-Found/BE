@@ -36,6 +36,11 @@ public final class JobPostFixture {
                 .applicationDeadline(LocalDateTime.now().plusHours(1));
     }
 
+    // 신규 공고는 결제 대기(PAYMENT_PENDING)로 생성된다. 공개 이후의 동작을 검증하는 테스트는 공개 상태를 명시한다.
+    public static JobPost open(JobPost jobPost) {
+        return withStatus(jobPost, JobStatus.OPEN);
+    }
+
     public static JobPost withStatus(JobPost jobPost, JobStatus status) {
         ReflectionTestUtils.setField(jobPost, "status", status);
         return jobPost;

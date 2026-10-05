@@ -7,6 +7,7 @@ import com.workernotfound.job.domain.job.repository.JobApplicationAdmissionRepos
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
 import com.workernotfound.job.global.exception.GlobalExceptionHandler;
 import com.workernotfound.job.support.IntegrationTestSupport;
+import com.workernotfound.job.support.JobPostFixture;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -154,7 +155,7 @@ class JobApplicationAdmissionConstraintErrorTests extends IntegrationTestSupport
     }
 
     private JobPost newJobPost() {
-        return JobPost.builder()
+        return JobPostFixture.open(JobPost.builder()
                 .businessId(1L)
                 .ownerId(7L)
                 .categoryId(1L)
@@ -172,6 +173,6 @@ class JobApplicationAdmissionConstraintErrorTests extends IntegrationTestSupport
                 .longitude(new BigDecimal("126.9780000"))
                 .urgencyLevel(UrgencyLevel.MEDIUM)
                 .applicationDeadline(LocalDateTime.now().plusHours(1))
-                .build();
+                .build());
     }
 }

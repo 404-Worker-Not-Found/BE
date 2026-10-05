@@ -1,6 +1,7 @@
 package com.workernotfound.job.domain.job.controller;
 
 import com.workernotfound.job.domain.job.entity.JobPost;
+import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
 import com.workernotfound.job.support.IntegrationTestSupport;
 import com.workernotfound.job.support.JobPostFixture;
@@ -13,6 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.isA;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -32,11 +34,11 @@ class MatchingSeatReservationApiTests extends IntegrationTestSupport {
 
     @Test
     void reservesSeatWithContractFields() throws Exception {
-        JobPost jobPost = jobPostRepository.save(JobPostFixture.jobPost()
+        JobPost jobPost = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost()
                 .startTime(LocalTime.of(23, 0))
                 .endTime(LocalTime.of(1, 15))
                 .endTimeNextDay(true)
-                .build());
+                .build()));
 
         reserve(jobPost.getId(), newKey(), body(11L, 21L, 100L))
                 .andExpect(status().isOk())
@@ -57,7 +59,7 @@ class MatchingSeatReservationApiTests extends IntegrationTestSupport {
 
     @Test
     void rejectsSameKeyForDifferentMatchingWithConflict() throws Exception {
-        JobPost jobPost = jobPostRepository.save(JobPostFixture.jobPost().recruitCount(3).build());
+        JobPost jobPost = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().recruitCount(3).build()));
         String key = newKey();
         reserve(jobPost.getId(), key, body(12L, 22L, 100L)).andExpect(status().isOk());
 
@@ -68,7 +70,7 @@ class MatchingSeatReservationApiTests extends IntegrationTestSupport {
 
     @Test
     void returnsDomainCodeWhenNoSeatRemains() throws Exception {
-        JobPost jobPost = jobPostRepository.save(JobPostFixture.jobPost().build());
+        JobPost jobPost = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().build()));
         reserve(jobPost.getId(), newKey(), body(14L, 24L, 100L)).andExpect(status().isOk());
 
         reserve(jobPost.getId(), newKey(), body(15L, 25L, 101L))
@@ -78,7 +80,7 @@ class MatchingSeatReservationApiTests extends IntegrationTestSupport {
 
     @Test
     void confirmsAndReleasesThroughInternalApi() throws Exception {
-        JobPost jobPost = jobPostRepository.save(JobPostFixture.jobPost().recruitCount(2).build());
+        JobPost jobPost = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().recruitCount(2).build()));
         String confirmed = reservationId(reserve(jobPost.getId(), newKey(), body(16L, 26L, 100L)));
         String released = reservationId(reserve(jobPost.getId(), newKey(), body(17L, 27L, 101L)));
         String confirmKey = newKey();
@@ -127,8 +129,19 @@ class MatchingSeatReservationApiTests extends IntegrationTestSupport {
     }
 
     @Test
-    void validatesRequest() throws Exception {
+    void rejectsSeatReservationForPaymentPendingJob() throws Exception {
+        // 신규 생성 기본 상태(결제 대기) 그대로 저장한다.
         JobPost jobPost = jobPostRepository.save(JobPostFixture.jobPost().build());
+        assertThat(jobPost.getStatus()).isEqualTo(JobStatus.PAYMENT_PENDING);
+
+        reserve(jobPost.getId(), newKey(), body(11L, 21L, 100L))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("JOB-409-005"));
+    }
+
+    @Test
+    void validatesRequest() throws Exception {
+        JobPost jobPost = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().build()));
 
         reserve(jobPost.getId(), newKey(), "{\"matchingId\":1,\"workerMemberId\":1}")
                 .andExpect(status().isBadRequest());

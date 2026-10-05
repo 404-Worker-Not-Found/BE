@@ -236,7 +236,7 @@ class MatchingSeatReservationCommandServiceTests extends IntegrationTestSupport 
     }
 
     private JobPost save(JobPost.JobPostBuilder builder) {
-        return jobPostRepository.save(builder.build());
+        return jobPostRepository.save(JobPostFixture.open(builder.build()));
     }
 
     private JobPost save(JobPost jobPost) {
