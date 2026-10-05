@@ -1,15 +1,16 @@
 package com.workernotfound.auth.domain.account.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workernotfound.auth.domain.account.repository.ContactChangeRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.*;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.*;
-import static org.mockito.Mockito.*;
-import org.springframework.http.MediaType;
 
 class ContactChangeDispatcherTests {
     ContactChangeRepository commands = mock(ContactChangeRepository.class);
@@ -22,7 +23,7 @@ class ContactChangeDispatcherTests {
     void setUp() {
         RestClient.Builder builder = RestClient.builder().baseUrl("http://member.test");
         server = MockRestServiceServer.bindTo(builder).build();
-        dispatcher = new ContactChangeDispatcher(commands, new com.fasterxml.jackson.databind.ObjectMapper(), transactions, builder.build());
+        dispatcher = new ContactChangeDispatcher(commands, new ObjectMapper(), transactions, builder.build());
         when(transactions.claim(id)).thenReturn(Optional.of(new ContactChangeTransactionService.DispatchCommand(
                 id, 91L, "EMAIL", "new@example.com")));
     }

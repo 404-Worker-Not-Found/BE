@@ -1,18 +1,22 @@
 package com.workernotfound.member.domain.member.service;
-import com.workernotfound.member.domain.member.repository.MemberRepository;
+
+import com.workernotfound.member.domain.member.entity.Member;
+import com.workernotfound.member.domain.member.entity.enums.MemberStatus;
 import com.workernotfound.member.domain.member.exception.MemberErrorCode;
+import com.workernotfound.member.domain.member.repository.MemberRepository;
 import com.workernotfound.member.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.*;
+
 @Service
 @RequiredArgsConstructor
 public class MemberWithdrawalService {
-    private final MemberRepository members;
-    private final JdbcTemplate jdbc;
+	private final MemberRepository members;
+	private final JdbcTemplate jdbc;
     @Transactional(propagation = Propagation.MANDATORY)
-    public boolean isActive(Long id) { return require(id).getStatus() == com.workernotfound.member.domain.member.entity.enums.MemberStatus.ACTIVE; }
+    public boolean isActive(Long id) { return require(id).getStatus() == MemberStatus.ACTIVE; }
     @Transactional(propagation = Propagation.MANDATORY)
     public void prepare(Long id) { require(id).prepareWithdrawal(); }
     @Transactional(propagation = Propagation.MANDATORY)
@@ -30,7 +34,7 @@ public class MemberWithdrawalService {
         jdbc.update("delete from contact_change_receipts where member_id=?", id);
         members.flush();
     }
-    private com.workernotfound.member.domain.member.entity.Member require(Long id) {
+    private Member require(Long id) {
         return members.findByIdForUpdate(id).orElseThrow(() -> new BusinessException(MemberErrorCode.MEMBER_NOT_FOUND));
     }
 }

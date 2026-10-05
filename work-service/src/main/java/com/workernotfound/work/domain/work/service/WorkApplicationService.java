@@ -5,6 +5,7 @@ import com.workernotfound.work.domain.work.dto.response.ScheduledWorkResponse;
 import com.workernotfound.work.domain.work.entity.Work;
 import com.workernotfound.work.domain.work.exception.WorkErrorCode;
 import com.workernotfound.work.domain.work.repository.*;
+import com.workernotfound.work.global.account.AccountGateService;
 import com.workernotfound.work.global.exception.BusinessException;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
@@ -16,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class WorkApplicationService {
-    private final com.workernotfound.work.global.account.AccountGateService accountGates;
+  private final AccountGateService accountGates;
   private final WorkRepository works;
   private final WorkCommandRepository commands;
 

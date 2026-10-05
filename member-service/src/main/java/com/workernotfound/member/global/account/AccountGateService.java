@@ -1,5 +1,6 @@
 package com.workernotfound.member.global.account;
 
+import com.workernotfound.member.domain.member.service.MemberWithdrawalService;
 import com.workernotfound.member.global.exception.BusinessException;
 import com.workernotfound.member.global.exception.GlobalErrorCode;
 import java.util.*;
@@ -11,8 +12,8 @@ import org.springframework.transaction.annotation.*;
 @Service
 @RequiredArgsConstructor
 public class AccountGateService {
-    private final JdbcTemplate jdbc;
-    private final com.workernotfound.member.domain.member.service.MemberWithdrawalService profiles;
+	private final JdbcTemplate jdbc;
+	private final MemberWithdrawalService profiles;
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void requireActive(Long... memberIds) {

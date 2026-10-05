@@ -1,22 +1,24 @@
 package com.workernotfound.auth.domain.account.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Duration;
+import java.util.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import java.time.Duration;
-import java.util.*;
+import org.springframework.web.client.RestClientException;
 
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class WithdrawalDispatcher {
-    private final WithdrawalTransactionService transactions;
-    private final ObjectMapper mapper;
+	private final WithdrawalTransactionService transactions;
+	private final ObjectMapper mapper;
     @Value("${auth.member-service.internal-secret}") private String secret;
     @Value("${auth.member-service.base-url}") private String memberUrl;
     @Value("${auth.withdrawal.job-url:http://localhost:8083}") private String jobUrl;
@@ -48,7 +50,7 @@ public class WithdrawalDispatcher {
                 if (!expected.equals(call(participant, claim.command(), action))) throw new IllegalStateException("탈퇴 응답 상태가 올바르지 않습니다.");
             }
             transactions.finish(claim, phase.equals("RELEASING"));
-        } catch (org.springframework.web.client.RestClientException | IllegalStateException | org.springframework.dao.DataAccessException exception) {
+        } catch (RestClientException | IllegalStateException | DataAccessException exception) {
             log.warn("회원 탈퇴 처리를 다음 주기에 재시도합니다: phase={}", phase);
         } finally { transactions.releaseLease(claim); }
     }

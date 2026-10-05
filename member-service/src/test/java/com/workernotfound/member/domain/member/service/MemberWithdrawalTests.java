@@ -1,24 +1,27 @@
 package com.workernotfound.member.domain.member.service;
-import com.workernotfound.member.support.IntegrationTestSupport;
+
 import com.workernotfound.member.domain.member.dto.request.*;
 import com.workernotfound.member.domain.member.entity.enums.*;
 import com.workernotfound.member.domain.member.repository.MemberRepository;
 import com.workernotfound.member.global.account.AccountGateService;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.transaction.annotation.Transactional;
+import com.workernotfound.member.support.IntegrationTestSupport;
 import jakarta.persistence.EntityManager;
-import java.util.*;
 import java.math.BigDecimal;
 import java.time.*;
+import java.util.*;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.*;
+
 @Transactional
 class MemberWithdrawalTests extends IntegrationTestSupport {
     @Autowired MemberApplicationService application;
     @Autowired MemberRepository members;
     @Autowired AccountGateService gates;
     @Autowired EntityManager entityManager;
-    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired JdbcTemplate jdbc;
     @Test
     void committedWithdrawalErasesWorkerGraphAndKeepsATombstone() {
         long id = worker("erase");

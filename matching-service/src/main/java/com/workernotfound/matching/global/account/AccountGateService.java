@@ -11,7 +11,7 @@ import org.springframework.transaction.annotation.*;
 @Service
 @RequiredArgsConstructor
 public class AccountGateService {
-    private final JdbcTemplate jdbc;
+	private final JdbcTemplate jdbc;
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void requireActive(Long... memberIds) {

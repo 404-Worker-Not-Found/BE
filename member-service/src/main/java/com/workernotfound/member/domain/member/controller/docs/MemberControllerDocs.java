@@ -1,5 +1,6 @@
 package com.workernotfound.member.domain.member.controller.docs;
 
+import com.workernotfound.member.domain.member.dto.request.UpdateMyMemberRequest;
 import com.workernotfound.member.domain.member.dto.response.MyMemberResponse;
 import com.workernotfound.member.global.config.OpenApiConfig;
 import com.workernotfound.member.global.security.AuthenticatedMember;
@@ -20,7 +21,7 @@ public interface MemberControllerDocs {
         security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
     ResponseEntity<com.workernotfound.member.global.response.ApiResponse<MyMemberResponse>> updateMyMember(
         @Parameter(hidden = true) AuthenticatedMember authenticatedMember,
-        com.workernotfound.member.domain.member.dto.request.UpdateMyMemberRequest request);
+        UpdateMyMemberRequest request);
 
 	@Operation(
 		summary = "내 회원 정보 조회",

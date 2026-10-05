@@ -1,5 +1,6 @@
 package com.workernotfound.work.global.security;
 
+import com.workernotfound.work.global.account.AccountGateService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -7,6 +8,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.dao.DataAccessException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,15 +21,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
   private static final String AUTHORIZATION_HEADER = "Authorization";
   private static final String BEARER_PREFIX = "Bearer ";
-
   private final JwtTokenParser jwtTokenParser;
-    private final com.workernotfound.work.global.account.AccountGateService accountGates;
+  private final AccountGateService accountGates;
   private final HandlerExceptionResolver exceptionResolver;
 
   public JwtAuthenticationFilter(
       JwtTokenParser jwtTokenParser,
       @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver,
-            com.workernotfound.work.global.account.AccountGateService accountGates) {
+            AccountGateService accountGates) {
     this.jwtTokenParser = jwtTokenParser;
     this.exceptionResolver = exceptionResolver;
         this.accountGates = accountGates;
@@ -43,7 +44,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         authenticate(token);
       } catch (InvalidAccessTokenException exception) {
         SecurityContextHolder.clearContext();
-      } catch (JwtProcessingException exception) {
+      } catch (JwtProcessingException | DataAccessException exception) {
         SecurityContextHolder.clearContext();
         if (exceptionResolver.resolveException(request, response, null, exception) == null) {
           throw exception;

@@ -11,6 +11,7 @@ import com.workernotfound.matching.domain.application.repository.ApplicationStat
 import com.workernotfound.matching.domain.application.repository.RecruitmentStateRepository;
 import com.workernotfound.matching.domain.matching.service.MatchingCancellationService;
 import com.workernotfound.matching.domain.outbox.service.OutboxEventCommandService;
+import com.workernotfound.matching.global.account.AccountGateService;
 import com.workernotfound.matching.global.exception.BusinessException;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -24,8 +25,7 @@ public class ApplicationCommandService {
 
 	private static final String SUBMITTED_REASON = "APPLICATION_SUBMITTED";
 	private static final String CANCELED_REASON = "APPLICATION_CANCELED_BY_WORKER";
-
-    private final com.workernotfound.matching.global.account.AccountGateService accountGates;
+	private final AccountGateService accountGates;
 	private final ApplicationRepository applicationRepository;
 	private final ApplicationStatusHistoryRepository historyRepository;
 	private final RecruitmentStateRepository recruitmentStateRepository;

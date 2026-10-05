@@ -1,9 +1,11 @@
 package com.workernotfound.chat.global.account;
+
 import com.workernotfound.chat.global.exception.*;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+
 @Component
 public class AccountInternalAuthorization {
     @Value("${chat.internal.secret:}") private String secret;

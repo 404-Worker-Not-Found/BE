@@ -1,9 +1,11 @@
 package com.workernotfound.matching.global.account;
+
 import com.workernotfound.matching.global.exception.*;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+
 @Component
 public class AccountInternalAuthorization {
     @Value("${matching.internal.secret:}") private String secret;

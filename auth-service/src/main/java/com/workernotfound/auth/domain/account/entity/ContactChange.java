@@ -1,8 +1,8 @@
 package com.workernotfound.auth.domain.account.entity;
 
 import jakarta.persistence.*;
-import lombok.*;
 import java.time.LocalDateTime;
+import lombok.*;
 
 @Entity
 @Table(name = "contact_changes")

@@ -1,5 +1,7 @@
 package com.workernotfound.member.domain.member.dto.request;
+
 import jakarta.validation.constraints.*;
+
 public record VerifiedContactChangeRequest(
     @NotNull Channel channel, @NotBlank @Size(max = 255) String target
 ) {

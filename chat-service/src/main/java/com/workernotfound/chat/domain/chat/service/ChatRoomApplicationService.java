@@ -5,6 +5,7 @@ import com.workernotfound.chat.domain.chat.dto.response.ChatRoomResponse;
 import com.workernotfound.chat.domain.chat.entity.ChatRoom;
 import com.workernotfound.chat.domain.chat.exception.ChatRoomErrorCode;
 import com.workernotfound.chat.domain.chat.repository.*;
+import com.workernotfound.chat.global.account.AccountGateService;
 import com.workernotfound.chat.global.exception.BusinessException;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
@@ -16,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class ChatRoomApplicationService {
-    private final com.workernotfound.chat.global.account.AccountGateService accountGates;
+  private final AccountGateService accountGates;
   private final ChatRoomRepository rooms;
   private final ChatRoomCommandRepository commands;
 

@@ -4,16 +4,18 @@ import com.workernotfound.auth.domain.account.dto.*;
 import com.workernotfound.auth.domain.account.entity.*;
 import com.workernotfound.auth.domain.account.entity.enums.*;
 import com.workernotfound.auth.domain.account.repository.*;
-import com.workernotfound.auth.domain.auth.service.VerificationService;
 import com.workernotfound.auth.domain.auth.entity.enums.VerificationPurpose;
-import com.workernotfound.auth.domain.token.service.*;
+import com.workernotfound.auth.domain.auth.service.VerificationService;
 import com.workernotfound.auth.domain.token.repository.RefreshTokenRepository;
+import com.workernotfound.auth.domain.token.service.*;
+import com.workernotfound.auth.global.exception.BusinessException;
 import com.workernotfound.auth.support.IntegrationTestSupport;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -33,7 +35,7 @@ class ContactChangeTests extends IntegrationTestSupport {
         tokenService.issue(account, "device-a"); tokenService.issue(account, "device-b");
         doNothing().when(emailVerificationSender).send(anyString(), anyString());
         verification.sendEmailVerificationCode(VerificationPurpose.CONTACT_CHANGE, "new@example.com");
-        var captor = org.mockito.ArgumentCaptor.forClass(String.class);
+        var captor = ArgumentCaptor.forClass(String.class);
         verify(emailVerificationSender).send(eq("new@example.com"), captor.capture());
         String key = UUID.randomUUID().toString();
         var request = new ContactChangeRequest(ContactChangeRequest.Channel.EMAIL, "new@example.com", captor.getValue());
@@ -52,11 +54,11 @@ class ContactChangeTests extends IntegrationTestSupport {
     void signupProofCannotAuthorizeAContactChange() {
         var account = account("separate");
         verification.sendEmailVerificationCode(VerificationPurpose.SIGNUP, "separate-new@example.com");
-        var captor = org.mockito.ArgumentCaptor.forClass(String.class);
+        var captor = ArgumentCaptor.forClass(String.class);
         verify(emailVerificationSender).send(eq("separate-new@example.com"), captor.capture());
         assertThatThrownBy(() -> transactions.submit(claims(account), UUID.randomUUID().toString(),
                 new ContactChangeRequest(ContactChangeRequest.Channel.EMAIL, "separate-new@example.com", captor.getValue())))
-                .isInstanceOf(com.workernotfound.auth.global.exception.BusinessException.class);
+                .isInstanceOf(BusinessException.class);
         assertThat(account.getStatus()).isEqualTo(MemberStatus.ACTIVE);
     }
     @Test

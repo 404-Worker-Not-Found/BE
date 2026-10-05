@@ -1,18 +1,21 @@
 package com.workernotfound.auth.domain.account.controller;
+
+import com.workernotfound.auth.domain.account.controller.docs.AccountWithdrawalControllerDocs;
 import com.workernotfound.auth.domain.account.service.*;
 import com.workernotfound.auth.domain.token.service.AuthTokenClaims;
 import com.workernotfound.auth.global.response.ApiResponse;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import java.util.UUID;
+
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/auth/account/withdrawals")
-public class AccountWithdrawalController implements com.workernotfound.auth.domain.account.controller.docs.AccountWithdrawalControllerDocs {
-    private final WithdrawalTransactionService transactions;
-    private final WithdrawalDispatcher dispatcher;
+public class AccountWithdrawalController implements AccountWithdrawalControllerDocs {
+	private final WithdrawalTransactionService transactions;
+	private final WithdrawalDispatcher dispatcher;
     @Override @PostMapping
     public ResponseEntity<ApiResponse<WithdrawalTransactionService.State>> withdraw(@AuthenticationPrincipal AuthTokenClaims claims,
             @RequestHeader("Idempotency-Key") UUID key) {

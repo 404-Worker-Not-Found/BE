@@ -48,7 +48,6 @@ public class VerificationService {
 		if attempts >= tonumber(ARGV[2]) then redis.call('DEL', KEYS[1], KEYS[2]) end
 		return 0
 		""", Long.class);
-
 	private final StringRedisTemplate redisTemplate;
 	private final VerificationCodeGenerator verificationCodeGenerator;
 	private final VerificationCodeHasher verificationCodeHasher;

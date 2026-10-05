@@ -1,20 +1,23 @@
 package com.workernotfound.work.global.account;
 
+import com.workernotfound.work.global.exception.BusinessException;
 import com.workernotfound.work.support.IntegrationTestSupport;
 import java.util.UUID;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import static org.assertj.core.api.Assertions.*;
 
 class AccountGateTests extends IntegrationTestSupport {
     @Autowired AccountGateService gates;
-    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactionManager;
     @Test
-    @org.springframework.transaction.annotation.Transactional
+    @Transactional
     void ongoingRecordsRejectWithdrawalWithoutInstallingABarrier() {
         jdbc.update("insert into works(matching_id,job_post_id,owner_member_id,worker_member_id,payment_id,work_date,start_time,end_time,end_time_next_day,status,created_at,version) values(919205,919205,919203,919204,919205,CURRENT_DATE(),'09:00:00','18:00:00',false,'SCHEDULED',CURRENT_TIMESTAMP(6),0)");
         String key=UUID.randomUUID().toString();
@@ -52,7 +55,7 @@ class AccountGateTests extends IntegrationTestSupport {
             release.countDown(); creation.get(5,TimeUnit.SECONDS);
             assertThat(withdrawal.get(5,TimeUnit.SECONDS).state()).isEqualTo("PREPARED");
             assertThatThrownBy(() -> transactions.executeWithoutResult(status -> gates.requireActive(member)))
-                .isInstanceOf(com.workernotfound.work.global.exception.BusinessException.class);
+                .isInstanceOf(BusinessException.class);
         } finally { release.countDown(); executor.shutdownNow(); }
     }
 }

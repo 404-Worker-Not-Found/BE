@@ -1,15 +1,17 @@
 package com.workernotfound.member.domain.member.service;
 
+import com.workernotfound.member.domain.location.entity.Location;
 import com.workernotfound.member.domain.member.dto.request.*;
+import com.workernotfound.member.domain.member.dto.response.MyMemberResponse;
 import com.workernotfound.member.domain.member.entity.Member;
 import com.workernotfound.member.domain.member.entity.enums.MemberStatus;
 import com.workernotfound.member.domain.member.exception.MemberErrorCode;
 import com.workernotfound.member.domain.member.repository.MemberRepository;
-import com.workernotfound.member.domain.location.entity.Location;
 import com.workernotfound.member.domain.worker.entity.WorkerAvailableTime;
 import com.workernotfound.member.domain.worker.entity.WorkerProfile;
-import com.workernotfound.member.domain.worker.service.WorkerCommandService;
 import com.workernotfound.member.domain.worker.exception.WorkerErrorCode;
+import com.workernotfound.member.domain.worker.service.WorkerCommandService;
+import com.workernotfound.member.global.account.AccountGateService;
 import com.workernotfound.member.global.exception.BusinessException;
 import java.util.HashSet;
 import lombok.RequiredArgsConstructor;
@@ -19,13 +21,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class MemberProfileService {
-      private final com.workernotfound.member.global.account.AccountGateService accountGates;
-  private final MemberRepository members;
-    private final WorkerCommandService workers;
-    private final MemberApplicationService queries;
+	private final AccountGateService accountGates;
+	private final MemberRepository members;
+	private final WorkerCommandService workers;
+	private final MemberApplicationService queries;
 
     @Transactional
-    public com.workernotfound.member.domain.member.dto.response.MyMemberResponse updateProfile(
+    public MyMemberResponse updateProfile(
             Long memberId, UpdateMyMemberRequest request) {
         accountGates.requireActive(memberId);
         Member member = members.findByIdForUpdate(memberId)

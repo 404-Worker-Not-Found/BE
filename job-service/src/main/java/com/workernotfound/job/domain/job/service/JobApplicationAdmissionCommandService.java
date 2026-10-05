@@ -7,6 +7,7 @@ import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import com.workernotfound.job.domain.job.exception.JobErrorCode;
 import com.workernotfound.job.domain.job.repository.JobApplicationAdmissionRepository;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
+import com.workernotfound.job.global.account.AccountGateService;
 import com.workernotfound.job.global.exception.BusinessException;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -19,9 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @EnableConfigurationProperties(ApplicationAdmissionProperties.class)
 public class JobApplicationAdmissionCommandService {
-
-      private final com.workernotfound.job.global.account.AccountGateService accountGates;
-  private final JobApplicationAdmissionRepository jobApplicationAdmissionRepository;
+    private final AccountGateService accountGates;
+    private final JobApplicationAdmissionRepository jobApplicationAdmissionRepository;
     private final JobPostRepository jobPostRepository;
     private final ApplicationAdmissionProperties applicationAdmissionProperties;
 

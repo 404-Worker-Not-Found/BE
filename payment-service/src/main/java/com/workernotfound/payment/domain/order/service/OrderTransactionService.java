@@ -2,10 +2,12 @@ package com.workernotfound.payment.domain.order.service;
 
 import com.workernotfound.payment.domain.order.dto.*;
 import com.workernotfound.payment.domain.order.exception.OrderErrorCode;
-import com.workernotfound.payment.domain.order.repository.PaymentOrderRepository;
 import com.workernotfound.payment.domain.order.repository.PaymentOrderRepository.Order;
+import com.workernotfound.payment.domain.order.repository.PaymentOrderRepository;
 import com.workernotfound.payment.external.toss.TossPayment;
+import com.workernotfound.payment.global.account.AccountGateService;
 import com.workernotfound.payment.global.exception.BusinessException;
+import java.time.ZoneOffset;
 import java.util.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -14,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class OrderTransactionService {
-    private final com.workernotfound.payment.global.account.AccountGateService accountGates;
+  private final AccountGateService accountGates;
   private final PaymentOrderRepository orders;
 
   public record Claim(Order order, String token, boolean firstAttempt) {}
@@ -103,7 +105,7 @@ public class OrderTransactionService {
       } else if (!"DEPOSITED".equals(order.status())) {
         orders.credit(
             order,
-            payment.approvedAt().withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalDateTime());
+            payment.approvedAt().withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime());
       }
       return false;
     }

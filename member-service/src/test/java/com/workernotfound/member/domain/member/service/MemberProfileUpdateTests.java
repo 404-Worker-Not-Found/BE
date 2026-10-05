@@ -3,6 +3,7 @@ package com.workernotfound.member.domain.member.service;
 import com.workernotfound.member.domain.member.dto.request.*;
 import com.workernotfound.member.domain.member.entity.enums.MemberRole;
 import com.workernotfound.member.domain.member.repository.MemberRepository;
+import com.workernotfound.member.global.exception.BusinessException;
 import com.workernotfound.member.support.IntegrationTestSupport;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
@@ -52,7 +53,7 @@ class MemberProfileUpdateTests extends IntegrationTestSupport {
         long id = create("wrongrole");
         assertThatThrownBy(() -> profiles.updateProfile(id, new UpdateMyMemberRequest("변경 금지", null,
                 new UpdateOwnerProfileRequest("가게", null, null))))
-                .isInstanceOf(com.workernotfound.member.global.exception.BusinessException.class);
+                .isInstanceOf(BusinessException.class);
         assertThat(repository.findById(id).orElseThrow().getName()).isEqualTo("워커");
     }
     @Test
@@ -61,7 +62,7 @@ class MemberProfileUpdateTests extends IntegrationTestSupport {
         var time = new WorkerAvailableTimeRequest(DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(18, 0));
         assertThatThrownBy(() -> profiles.updateProfile(id, new UpdateMyMemberRequest(null,
                 new UpdateWorkerProfileRequest(null, null, null, null, null, List.of(time, time)), null)))
-                .isInstanceOf(com.workernotfound.member.global.exception.BusinessException.class);
+                .isInstanceOf(BusinessException.class);
     }
     private long create(String prefix) {
         return members.createWorkerMember(new CreateWorkerMemberRequest("워커", prefix + "@example.com",

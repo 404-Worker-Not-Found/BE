@@ -3,9 +3,10 @@ package com.workernotfound.member.domain.member.service;
 import com.workernotfound.member.domain.member.dto.request.VerifiedContactChangeRequest;
 import com.workernotfound.member.domain.member.dto.response.ContactChangeResult;
 import com.workernotfound.member.domain.member.entity.ContactChangeReceipt;
-import com.workernotfound.member.domain.member.repository.*;
 import com.workernotfound.member.domain.member.entity.enums.MemberStatus;
 import com.workernotfound.member.domain.member.exception.MemberErrorCode;
+import com.workernotfound.member.domain.member.repository.*;
+import com.workernotfound.member.global.account.AccountGateService;
 import com.workernotfound.member.global.exception.BusinessException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -18,9 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class MemberContactService {
-      private final com.workernotfound.member.global.account.AccountGateService accountGates;
-  private final MemberRepository members;
-    private final ContactChangeReceiptRepository receipts;
+	private final AccountGateService accountGates;
+	private final MemberRepository members;
+	private final ContactChangeReceiptRepository receipts;
 
     @Transactional
     public ContactChangeResult changeContact(Long memberId, String id, VerifiedContactChangeRequest request) {

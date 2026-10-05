@@ -1,7 +1,11 @@
 package com.workernotfound.auth.domain.account.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workernotfound.auth.domain.account.repository.ContactChangeRepository;
+import java.time.LocalDateTime;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -10,27 +14,26 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
-import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class ContactChangeDispatcher {
-    private final ContactChangeRepository commands;
-    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
-    private final ContactChangeTransactionService transactions;
+	private final ContactChangeRepository commands;
+	private final ObjectMapper objectMapper;
+	private final ContactChangeTransactionService transactions;
     @Qualifier("memberServiceRestClient") private final RestClient memberServiceRestClient;
 
     @Scheduled(fixedDelayString = "${auth.account-change.retry-delay-ms:10000}")
     public void retryPending() {
-        commands.findByStatusAndNextAttemptAtLessThanEqualOrderByNextAttemptAtAsc("PENDING", java.time.LocalDateTime.now(), PageRequest.of(0, 50))
+        commands.findByStatusAndNextAttemptAtLessThanEqualOrderByNextAttemptAtAsc("PENDING", LocalDateTime.now(), PageRequest.of(0, 50))
                 .forEach(command -> dispatch(command.getId()));
     }
 
     private JsonNode parseResponse(String body) {
         if (body == null) return null;
         try { return objectMapper.readTree(body); }
-        catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+        catch (JsonProcessingException exception) {
             throw new IllegalStateException("연락처 변경 응답을 읽을 수 없습니다.");
         }
     }

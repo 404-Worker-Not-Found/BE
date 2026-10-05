@@ -3,24 +3,29 @@ package com.workernotfound.auth.domain.account.service;
 import com.workernotfound.auth.domain.account.entity.enums.MemberStatus;
 import com.workernotfound.auth.domain.account.repository.AuthAccountRepository;
 import com.workernotfound.auth.domain.auth.exception.AuthErrorCode;
+import com.workernotfound.auth.domain.auth.service.VerificationService;
 import com.workernotfound.auth.domain.token.repository.RefreshTokenRepository;
 import com.workernotfound.auth.domain.token.service.AuthTokenClaims;
 import com.workernotfound.auth.global.exception.BusinessException;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.util.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.time.LocalDateTime;
-import java.util.*;
 
 @Service
 @RequiredArgsConstructor
 public class WithdrawalTransactionService {
-    private final AuthAccountRepository accounts;
-    private final RefreshTokenRepository tokens;
-    private final JdbcTemplate jdbc;
-    private final com.workernotfound.auth.domain.auth.service.VerificationService verification;
-    private final jakarta.persistence.EntityManager entityManager;
+	private final AuthAccountRepository accounts;
+	private final RefreshTokenRepository tokens;
+	private final JdbcTemplate jdbc;
+	private final VerificationService verification;
+	private final EntityManager entityManager;
     public record State(String commandId, Long accountId, Long memberId, String state, String blockedService) {}
     public record Claim(State command, String lease) {}
 
@@ -55,7 +60,7 @@ public class WithdrawalTransactionService {
     @Transactional
     public void finish(Claim claim, boolean rejected) {
         var account = accounts.findByIdForUpdate(claim.command().accountId()).orElseThrow();
-        entityManager.refresh(account, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        entityManager.refresh(account, LockModeType.PESSIMISTIC_WRITE);
         var command = jdbc.queryForObject("select command_id,account_id,member_id,state,blocked_service from account_withdrawals where command_id=? and lease_token=? and lease_until>CURRENT_TIMESTAMP(6) for update", (row,index) -> map(row), claim.command().commandId(), claim.lease());
         if (rejected) account.cancelWithdrawal();
         else {
@@ -84,7 +89,7 @@ public class WithdrawalTransactionService {
     private Optional<State> find(String key) {
         return jdbc.query("select command_id,account_id,member_id,state,blocked_service from account_withdrawals where command_id=?", (row,index) -> map(row), key).stream().findFirst();
     }
-    private State map(java.sql.ResultSet row) throws java.sql.SQLException {
+    private State map(ResultSet row) throws SQLException {
         return new State(row.getString(1), row.getLong(2), row.getLong(3), row.getString(4), row.getString(5));
     }
     private BusinessException conflict() { return new BusinessException(AuthErrorCode.ACCOUNT_CHANGE_CONFLICT); }

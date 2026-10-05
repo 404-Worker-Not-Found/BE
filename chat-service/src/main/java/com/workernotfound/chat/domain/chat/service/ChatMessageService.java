@@ -6,6 +6,7 @@ import com.workernotfound.chat.domain.chat.entity.ChatMessage;
 import com.workernotfound.chat.domain.chat.event.ChatMessageStored;
 import com.workernotfound.chat.domain.chat.exception.ChatRoomErrorCode;
 import com.workernotfound.chat.domain.chat.repository.*;
+import com.workernotfound.chat.global.account.AccountGateService;
 import com.workernotfound.chat.global.exception.BusinessException;
 import com.workernotfound.chat.global.security.AuthenticatedMember;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class ChatMessageService {
-    private final com.workernotfound.chat.global.account.AccountGateService accountGates;
+  private final AccountGateService accountGates;
   private final ChatRoomRepository rooms;
   private final ChatMessageRepository messages;
   private final ApplicationEventPublisher events;

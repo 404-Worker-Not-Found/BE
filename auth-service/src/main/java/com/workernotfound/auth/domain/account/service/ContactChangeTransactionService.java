@@ -1,19 +1,22 @@
 package com.workernotfound.auth.domain.account.service;
 
+import com.workernotfound.auth.domain.account.dto.*;
 import com.workernotfound.auth.domain.account.entity.*;
 import com.workernotfound.auth.domain.account.entity.enums.MemberStatus;
 import com.workernotfound.auth.domain.account.repository.*;
-import com.workernotfound.auth.domain.account.dto.*;
-import com.workernotfound.auth.domain.auth.service.VerificationService;
 import com.workernotfound.auth.domain.auth.exception.AuthErrorCode;
+import com.workernotfound.auth.domain.auth.service.VerificationService;
 import com.workernotfound.auth.domain.token.repository.RefreshTokenRepository;
 import com.workernotfound.auth.domain.token.service.AuthTokenClaims;
 import com.workernotfound.auth.global.exception.BusinessException;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
 import java.util.HexFormat;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,11 +24,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class ContactChangeTransactionService {
-    private final AuthAccountRepository accounts;
-    private final ContactChangeRepository commands;
-    private final VerificationService verification;
-    private final RefreshTokenRepository tokens;
-    private final jakarta.persistence.EntityManager entityManager;
+	private final AuthAccountRepository accounts;
+	private final ContactChangeRepository commands;
+	private final VerificationService verification;
+	private final RefreshTokenRepository tokens;
+	private final EntityManager entityManager;
 
     @Transactional
     public AccountChangeResponse submit(AuthTokenClaims claims, String id, ContactChangeRequest request) {
@@ -52,13 +55,13 @@ public class ContactChangeTransactionService {
     public record DispatchCommand(String id, Long memberId, String channel, String target) {}
 
     @Transactional
-    public java.util.Optional<DispatchCommand> claim(String id) {
+    public Optional<DispatchCommand> claim(String id) {
         var command = commands.findByIdForUpdate(id).orElseThrow();
         if (!"PENDING".equals(command.getStatus()) || command.getNextAttemptAt().isAfter(LocalDateTime.now())) {
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
         command.claim();
-        return java.util.Optional.of(new DispatchCommand(command.getId(), command.getMemberId(), command.getChannel(), command.getTarget()));
+        return Optional.of(new DispatchCommand(command.getId(), command.getMemberId(), command.getChannel(), command.getTarget()));
     }
 
     @Transactional
@@ -67,7 +70,7 @@ public class ContactChangeTransactionService {
         AuthAccount account = accounts.findByIdForUpdate(snapshot.getAccountId()).orElseThrow();
         ContactChange command = commands.findByIdForUpdate(id).orElseThrow();
         commands.flush();
-        entityManager.refresh(command, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        entityManager.refresh(command, LockModeType.PESSIMISTIC_WRITE);
         if (!"PENDING".equals(command.getStatus())) return;
         if (rejected) account.restoreEmail(command.getPreviousEmail());
         else account.finishContactChange();

@@ -1,9 +1,11 @@
 package com.workernotfound.notification.global.account;
+
 import com.workernotfound.notification.global.exception.*;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+
 @Component
 public class AccountInternalAuthorization {
     @Value("${notification.internal.secret:}") private String secret;

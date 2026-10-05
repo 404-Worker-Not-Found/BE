@@ -25,6 +25,7 @@ import com.workernotfound.matching.domain.matching.repository.MatchingRepository
 import com.workernotfound.matching.domain.matching.repository.MatchingStatusHistoryRepository;
 import com.workernotfound.matching.domain.outbox.service.OutboxEventCommandService;
 import com.workernotfound.matching.external.client.confirmation.dto.SeatReservationResponse;
+import com.workernotfound.matching.global.account.AccountGateService;
 import com.workernotfound.matching.global.exception.BusinessException;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -39,8 +40,7 @@ public class MatchingConfirmationCommandService {
 
 	private static final String MATCHING_CONFIRMED_REASON = "MATCHING_CONFIRMED_BY_WORKER";
 	private static final String APPLICATION_SELECTED_REASON = "MATCHING_CONFIRMATION_COMPLETED";
-
-    private final com.workernotfound.matching.global.account.AccountGateService accountGates;
+	private final AccountGateService accountGates;
 	private final ApplicationRepository applicationRepository;
 	private final ApplicationStatusHistoryRepository applicationHistoryRepository;
 	private final MatchingRepository matchingRepository;

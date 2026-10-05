@@ -1,9 +1,10 @@
 package com.workernotfound.member.domain.member.service;
 
+import com.workernotfound.member.domain.member.dto.request.VerifiedContactChangeRequest;
 import com.workernotfound.member.domain.member.entity.Member;
 import com.workernotfound.member.domain.member.entity.enums.MemberRole;
-import com.workernotfound.member.domain.member.dto.request.VerifiedContactChangeRequest;
 import com.workernotfound.member.domain.member.repository.MemberRepository;
+import com.workernotfound.member.global.exception.BusinessException;
 import com.workernotfound.member.support.IntegrationTestSupport;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -42,7 +43,7 @@ class MemberContactChangeTests extends IntegrationTestSupport {
         String id = UUID.randomUUID().toString();
         contacts.changeContact(member.getId(), id, email("one@example.com"));
         assertThatThrownBy(() -> contacts.changeContact(member.getId(), id, email("two@example.com")))
-                .isInstanceOf(com.workernotfound.member.global.exception.BusinessException.class);
+                .isInstanceOf(BusinessException.class);
     }
     private Member save(String prefix) {
         return members.saveAndFlush(Member.builder().name("회원").email(prefix + "@example.com")

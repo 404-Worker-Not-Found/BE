@@ -1,5 +1,7 @@
 package com.workernotfound.auth.global.security;
 
+import com.workernotfound.auth.domain.account.entity.enums.MemberStatus;
+import com.workernotfound.auth.domain.account.repository.AuthAccountRepository;
 import com.workernotfound.auth.domain.token.service.AuthTokenClaims;
 import com.workernotfound.auth.domain.token.service.JwtTokenProvider;
 import jakarta.servlet.FilterChain;
@@ -9,6 +11,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.dao.DataAccessException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,15 +24,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
 	private static final String AUTHORIZATION_HEADER = "Authorization";
 	private static final String BEARER_PREFIX = "Bearer ";
-
 	private final JwtTokenProvider jwtTokenProvider;
 	private final HandlerExceptionResolver exceptionResolver;
-    private final com.workernotfound.auth.domain.account.repository.AuthAccountRepository accounts;
+	private final AuthAccountRepository accounts;
 
 	public JwtAuthenticationFilter(
 			JwtTokenProvider jwtTokenProvider,
 			@Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver,
-            com.workernotfound.auth.domain.account.repository.AuthAccountRepository accounts) {
+            AuthAccountRepository accounts) {
 		this.jwtTokenProvider = jwtTokenProvider;
 		this.exceptionResolver = exceptionResolver;
         this.accounts = accounts;
@@ -45,7 +47,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 				authenticate(token);
 			} catch (InvalidAccessTokenException exception) {
 				SecurityContextHolder.clearContext();
-			} catch (JwtProcessingException exception) {
+			} catch (JwtProcessingException | DataAccessException exception) {
 				SecurityContextHolder.clearContext();
 				if (exceptionResolver.resolveException(request, response, null, exception) == null) {
 					throw exception;
@@ -67,7 +69,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
 	private void authenticate(String token) {
 		AuthTokenClaims claims = jwtTokenProvider.parseAccessToken(token);
-        if (accounts.findById(claims.authAccountId()).filter(account -> account.getStatus() != com.workernotfound.auth.domain.account.entity.enums.MemberStatus.WITHDRAWN
+        if (accounts.findById(claims.authAccountId()).filter(account -> account.getStatus() != MemberStatus.WITHDRAWN
                 && account.getMemberId().equals(claims.memberId())).isEmpty()) throw new InvalidAccessTokenException("탈퇴한 계정입니다.");
 		List<SimpleGrantedAuthority> authorities =
 				List.of(new SimpleGrantedAuthority("ROLE_" + claims.role().name()));

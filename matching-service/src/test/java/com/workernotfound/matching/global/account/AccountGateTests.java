@@ -1,20 +1,23 @@
 package com.workernotfound.matching.global.account;
 
+import com.workernotfound.matching.global.exception.BusinessException;
 import com.workernotfound.matching.support.IntegrationTestSupport;
 import java.util.UUID;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import static org.assertj.core.api.Assertions.*;
 
 class AccountGateTests extends IntegrationTestSupport {
     @Autowired AccountGateService gates;
-    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactionManager;
     @Test
-    @org.springframework.transaction.annotation.Transactional
+    @Transactional
     void ongoingRecordsRejectWithdrawalWithoutInstallingABarrier() {
         jdbc.update("insert into applications(job_post_id,worker_member_id,job_application_admission_id,status,applied_at,created_at,updated_at) values(919202,919203,919204,'APPLIED',CURRENT_TIMESTAMP(6),CURRENT_TIMESTAMP(6),CURRENT_TIMESTAMP(6))");
         String key=UUID.randomUUID().toString();
@@ -52,7 +55,7 @@ class AccountGateTests extends IntegrationTestSupport {
             release.countDown(); creation.get(5,TimeUnit.SECONDS);
             assertThat(withdrawal.get(5,TimeUnit.SECONDS).state()).isEqualTo("PREPARED");
             assertThatThrownBy(() -> transactions.executeWithoutResult(status -> gates.requireActive(member)))
-                .isInstanceOf(com.workernotfound.matching.global.exception.BusinessException.class);
+                .isInstanceOf(BusinessException.class);
         } finally { release.countDown(); executor.shutdownNow(); }
     }
 }

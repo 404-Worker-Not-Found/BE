@@ -1,6 +1,7 @@
 package com.workernotfound.chat.external.websocket;
 
 import com.workernotfound.chat.domain.chat.service.ChatRoomQueryService;
+import com.workernotfound.chat.global.account.AccountGateService;
 import com.workernotfound.chat.global.security.*;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,7 +19,7 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 @RequiredArgsConstructor
 public class ChatSocketAuthorization implements ChannelInterceptor {
   private static final Pattern DESTINATION = Pattern.compile("/topic/chat-rooms/([1-9][0-9]{0,18})");
-    private final com.workernotfound.chat.global.account.AccountGateService accountGates;
+  private final AccountGateService accountGates;
   private final JwtTokenParser tokens;
   private final ChatRoomQueryService rooms;
   private final Map<String, AuthenticatedChatSession> sessions = new ConcurrentHashMap<>();

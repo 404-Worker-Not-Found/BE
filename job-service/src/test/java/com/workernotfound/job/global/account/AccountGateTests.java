@@ -1,12 +1,13 @@
 package com.workernotfound.job.global.account;
 
+import com.workernotfound.job.global.exception.BusinessException;
 import com.workernotfound.job.support.IntegrationTestSupport;
 import java.util.UUID;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import static org.assertj.core.api.Assertions.*;
 
 class AccountGateTests extends IntegrationTestSupport {
@@ -42,7 +43,7 @@ class AccountGateTests extends IntegrationTestSupport {
             release.countDown(); creation.get(5,TimeUnit.SECONDS);
             assertThat(withdrawal.get(5,TimeUnit.SECONDS).state()).isEqualTo("PREPARED");
             assertThatThrownBy(() -> transactions.executeWithoutResult(status -> gates.requireActive(member)))
-                .isInstanceOf(com.workernotfound.job.global.exception.BusinessException.class);
+                .isInstanceOf(BusinessException.class);
         } finally { release.countDown(); executor.shutdownNow(); }
     }
 }

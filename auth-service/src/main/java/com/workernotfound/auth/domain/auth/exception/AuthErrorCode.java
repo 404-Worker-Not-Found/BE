@@ -20,7 +20,6 @@ public enum AuthErrorCode implements ErrorCode {
 	OAUTH_ALREADY_CONNECTED("AUTH-409-002", "이미 연결된 OAuth 계정입니다.", HttpStatus.CONFLICT),
 	VERIFICATION_RATE_LIMITED(
 			"AUTH-429-001", "인증번호는 1분 후 다시 요청할 수 있습니다.", HttpStatus.TOO_MANY_REQUESTS);
-
 	private final String code;
 	private final String message;
 	private final HttpStatus httpStatus;

@@ -15,6 +15,7 @@ import com.workernotfound.matching.domain.score.entity.MatchingScoreBatch;
 import com.workernotfound.matching.domain.score.entity.MatchingScoreSnapshot;
 import com.workernotfound.matching.domain.score.entity.enums.ScoreCalculationStatus;
 import com.workernotfound.matching.domain.score.service.MatchingScoreFindService;
+import com.workernotfound.matching.global.account.AccountGateService;
 import com.workernotfound.matching.global.exception.BusinessException;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -26,8 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class MatchingCommandService {
 
 	private static final String MANUAL_SELECTION_REASON = "MANUAL_CANDIDATE_SELECTED";
-
-    private final com.workernotfound.matching.global.account.AccountGateService accountGates;
+	private final AccountGateService accountGates;
 	private final ApplicationRepository applicationRepository;
 	private final MatchingRepository matchingRepository;
 	private final MatchingStatusHistoryRepository historyRepository;
