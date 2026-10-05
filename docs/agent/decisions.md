@@ -1388,7 +1388,7 @@ Implication for agents:
 - Do not record or acknowledge a link-pending notification as applied, and do not link an order from notification content.
 - Do not compare funding notifications with the current `@Version` or the current wage calculation.
 - Check the funding block under the job-row lock for every new admission, reservation, and first confirmation; keep idempotent replays ahead of that check.
-- Refund review tooling, actual refunds and settlement, post-confirmation recovery after a block, re-payment, and cross-service E2E remain follow-up work.
+- Refund review tooling, actual refunds and settlement, and post-confirmation recovery after a block remain follow-up work. Re-payment and a cross-service E2E with a local PG double were added by "2026-10-06 - Job Payment Terms Change and Re-payment"; a real Toss checkout E2E remains.
 
 Related files:
 - `docs/architecture/job-post-design.md`
@@ -1413,3 +1413,34 @@ Reason:
 Related files:
 - `docs/architecture/auth-member-signup-design.md`
 - `auth-service`
+
+## 2026-10-06 - Job Payment Terms Change and Re-payment
+
+Decision:
+- Owners change payment terms (`PUT /api/jobs/{id}/payment-terms`: work date, start/end time, next-day flag, base wage, hourly extra wage, recruit count, application deadline) or re-pay (`POST /api/jobs/{id}/payment-order/retries`) only for their own `PAYMENT_PENDING` jobs. Authorization uses the JWT `memberId`; other owners' jobs are 404. Published or closed jobs, jobs with admission or seat history, jobs whose current order has applied funding state or a funding block, and jobs with an in-flight order command are rejected. Edits after publication need a separate re-recruitment policy.
+- Each request requires an `Idempotency-Key`. A change request row (V13) stores the key, type, and immutable pending terms snapshot together with the next-sequence order command under the job-row lock. The same key and request return the request's current state; any different request is `JOB-409-004`. At most one order command per job is in flight; this is enforced under the job-row lock, and the latest-sequence fence remains the defense against stale results.
+- The payment job version is the payment terms snapshot version, not JPA `@Version`. A terms change uses the job's highest command version + 1 (including rejected commands). A same-terms re-payment keeps the linked order's version and amount, so payment-service's rule (same version only for a FAILED order with the same amount) keeps READY re-payment from replacing a reusable order. New attempts are identified by a new issue sequence, idempotency key, and order ID.
+- The current terms and order link change only in the transaction that links the verified new order. That transaction also applies the terms and never publishes or unblocks. For an already linked job, payment-service 409 is a definitive rejection: the command and request end as `REJECTED` and the job is unchanged; the rejected key is never resent. Timeouts, network errors, 5xx, and malformed or mismatched responses stay pending and converge with the same key and snapshot. Lease tokens fence late executors.
+- If a new order is returned while the job can no longer be replaced (published by the earlier order or the earlier order's funding was applied), job-service does not link it, keeps the order ID on a `SUPERSEDED` command so that order's later funding is `STALE_ORDER`, and logs for operators. The link transaction reads funding state with a locking read because its read view predates the job-row lock.
+- Funding that cannot publish (`PUBLICATION_SKIPPED`) and earlier-order `funded=true` create one refund-review record per order (V12), linked to the first such receipt, in the receipt transaction. No refund is executed.
+- payment-service accepts a non-default Toss API base URL only for loopback HTTP test doubles.
+
+Reason:
+- payment-service already decides replacement under its own command, job, and order-row locks and rolls back rejected requests, so the job side must not finalize replaceability from a pre-check and must not overwrite valid terms before the replacement is confirmed.
+- Keeping the version for same-terms re-payment matches the existing payment-service contract and keeps "same version" meaning "same terms".
+- A pending-snapshot row is the smallest change that keeps current terms intact while reusing the existing durable command, lease, and retry path.
+
+Implication for agents:
+- Do not treat a READY/FAILED pre-check in job-service as replacement approval, and do not make REVIEW_REQUIRED, CONFIRMING, or DEPOSITED orders replaceable without a review or refund policy.
+- Do not restore old terms or issue a new key while an outcome is unknown.
+- Do not unblock or publish on order linking; only the new order's verified `funded=true` may.
+- Keep the job-row → command-row → change-request-row lock order.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `docs/architecture/toss-deposit-design.md`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobPaymentChangeCommandService.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/PaymentOrderCommandTransactionService.java`
+- `job-service/src/main/resources/db/migration/V12__create_job_payment_refund_reviews.sql`
+- `job-service/src/main/resources/db/migration/V13__create_job_payment_change_requests.sql`
+- `payment-service/src/test/java/com/workernotfound/payment/OrderReplacementTests.java`
