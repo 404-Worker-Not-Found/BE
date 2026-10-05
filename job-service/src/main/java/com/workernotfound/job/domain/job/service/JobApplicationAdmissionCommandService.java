@@ -37,6 +37,7 @@ public class JobApplicationAdmissionCommandService {
         }
 
         validateOpen(jobPost);
+        validateFundingNotBlocked(jobPost);
         validateApplicationDeadline(jobPost);
 
         return jobApplicationAdmissionRepository.save(newAdmission(jobPost, workerMemberId, idempotencyKey));
@@ -85,6 +86,14 @@ public class JobApplicationAdmissionCommandService {
     private void validateOpen(JobPost jobPost) {
         if (jobPost.getStatus() != JobStatus.OPEN) {
             throw new BusinessException(JobErrorCode.JOB_NOT_OPEN);
+        }
+    }
+
+    // OPEN 상태만으로 판단하지 않는다. 예치 취소·검토 필요가 확인된 공고는 상태와 관계없이 신규 지원을 받지 않는다.
+    // matching-service가 이미 처리하는 "지원을 받지 않는 공고" 코드로 응답한다.
+    private void validateFundingNotBlocked(JobPost jobPost) {
+        if (jobPost.isFundingBlocked()) {
+            throw new BusinessException(JobErrorCode.JOB_NOT_OPEN, "예치 확인이 필요해 신규 지원을 받지 않는 공고입니다.");
         }
     }
 

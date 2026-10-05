@@ -166,6 +166,9 @@ public class MatchingSeatReservationCommandService {
         if (reservation.isExpiredAt(now)) {
             throw new BusinessException(JobErrorCode.SEAT_RESERVATION_EXPIRED);
         }
+        // 공고 행 잠금 아래에서 예치 차단을 확인한다. 차단 뒤의 최초 확정은 거절하고, Saga가 4xx 거절로 보고 자리를 반환·보상한다.
+        // 이미 CONSUMED인 예약의 같은 키 재요청은 이 검사 전에 성공하므로 차단이 확정 결과를 되돌리지 않는다.
+        validateFundingNotBlocked(jobPost);
         reservation.consume(idempotencyKey, now);
         recruitmentCompletionService.completeIfFilled(jobPost, now);
     }
@@ -212,9 +215,17 @@ public class MatchingSeatReservationCommandService {
         if (!MATCHABLE_STATUSES.contains(jobPost.getStatus())) {
             throw new BusinessException(JobErrorCode.JOB_NOT_MATCHABLE);
         }
+        validateFundingNotBlocked(jobPost);
         // 지원 마감이 아니라 근무 시작 시각을 자리 예약 기한으로 사용한다.
         if (!jobPost.getWorkDate().atTime(jobPost.getStartTime()).isAfter(now)) {
             throw new BusinessException(JobErrorCode.WORK_ALREADY_STARTED);
+        }
+    }
+
+    // 예치 취소·검토 필요가 확인된 공고는 OPEN·MATCHING이어도 새 자리 예약과 최초 확정을 받지 않는다.
+    private void validateFundingNotBlocked(JobPost jobPost) {
+        if (jobPost.isFundingBlocked()) {
+            throw new BusinessException(JobErrorCode.JOB_NOT_MATCHABLE, "예치 확인이 필요해 매칭을 진행할 수 없는 공고입니다.");
         }
     }
 

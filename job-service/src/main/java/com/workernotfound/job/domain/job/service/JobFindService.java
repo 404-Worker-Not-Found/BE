@@ -74,6 +74,8 @@ public class JobFindService {
                 .filter(job -> matchesStartTime(job, request))
                 .filter(job -> matchesUrgency(job, request))
                 .filter(job -> job.getApplicationDeadline().isAfter(LocalDateTime.now()))
+                // 예치 차단 공고는 신규 지원을 받지 않으므로 검색에서 뺀다. 상세 조회는 기존 지원자를 위해 유지한다.
+                .filter(job -> !job.isFundingBlocked())
                 .map(job -> {
                     Double distanceKm = calculateDistance(job, request);
                     return JobCardResponse.of(job, resolveCategoryName(categoryNameMap, job.getCategoryId()), distanceKm);

@@ -287,6 +287,9 @@ class FundingStatusApiTests extends FundingStatusApiTestSupport {
         sendFunding(job.jobPostId(), fundingKey(job, 2), notice(job, 2, false))
                 .andExpect(jsonPath("$.data.result").value("FUNDING_BLOCKED"))
                 .andExpect(jsonPath("$.data.jobStatus").value("OPEN"));
+        requestAdmission(job.jobPostId(), newKey("admission"), 100L)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("JOB-409-001"));
 
         sendFunding(job.jobPostId(), fundingKey(job, 3), notice(job, 3, true))
                 .andExpect(status().isOk())
