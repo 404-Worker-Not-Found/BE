@@ -576,7 +576,7 @@ Decision:
 - Refresh token rotation must lock the refresh token row during reissue to reduce concurrent replay risk.
 - Verification code sending and verification attempts must be limited with Redis-backed counters.
 - If member-service creation succeeds but auth-service persistence fails during signup, auth-service should call a member-service internal compensation endpoint.
-- Verification code logging must be disabled by default and enabled only through local configuration.
+- Verification codes must never be logged by auth-service.
 
 Reason:
 - Blocked or withdrawn accounts must not continue receiving new tokens through refresh token reissue.
@@ -588,7 +588,7 @@ Reason:
 Implication for agents:
 - Preserve account status validation and row locking when changing refresh token rotation.
 - Do not remove verification rate/attempt limits without replacing them with equivalent protection.
-- Keep verification code logging behind configuration, defaulting to disabled.
+- Never add verification-code logging. Use Resend for email and SOLAPI for SMS; provider acceptance must be confirmed before returning send success. Configure credentials and registered sender identities in the runtime environment.
 - Keep signup compensation behavior or replace it with a stronger consistency mechanism such as idempotency, pending state, or outbox-based cleanup.
 
 Related files:

@@ -2,6 +2,7 @@ package com.workernotfound.auth.global.config;
 
 import com.workernotfound.auth.external.client.member.MemberServiceProperties;
 import com.workernotfound.auth.external.client.oauth.OAuth2ClientProperties;
+import com.workernotfound.auth.domain.auth.service.VerificationDeliveryProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,7 +10,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 @Configuration
-@EnableConfigurationProperties({MemberServiceProperties.class, OAuth2ClientProperties.class})
+@EnableConfigurationProperties({MemberServiceProperties.class, OAuth2ClientProperties.class, VerificationDeliveryProperties.class})
 public class RestClientConfig {
 
 	@Bean
@@ -35,5 +36,13 @@ public class RestClientConfig {
 		return RestClient.builder()
 			.requestFactory(requestFactory)
 			.build();
+	}
+
+	@Bean
+	public RestClient verificationDeliveryRestClient() {
+		SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+		requestFactory.setConnectTimeout(java.time.Duration.ofSeconds(3));
+		requestFactory.setReadTimeout(java.time.Duration.ofSeconds(5));
+		return RestClient.builder().requestFactory(requestFactory).build();
 	}
 }

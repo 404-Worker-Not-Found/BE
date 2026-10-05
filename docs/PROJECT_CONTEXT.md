@@ -217,6 +217,7 @@ Current implementation state:
 - Core auth logic tests cover refresh token rotation, LOCAL login, signup verification checks, token hashing, and JWT validation.
 - Refresh token reissue checks account status and locks the refresh token row during rotation.
 - Verification code sending has a Redis-backed short rate limit, and verification attempts are limited before the code is invalidated.
+- Verification email delivery uses Resend and SMS delivery uses SOLAPI. Provider rejection returns a safe 502, and a failed send clears the pending code and send-limit keys. Production delivery requires provider credentials and registered sender identities.
 - Initial KAKAO/NAVER OAuth2 login support has been added.
 - OAuth2 login connects to an existing OAuth connection, links same-email accounts when no connection exists, or issues a Redis-backed signup ticket for new users.
 - OAuth2 signup ticket completion supports OWNER/WORKER signup without creating `LocalCredential`.

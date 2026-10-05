@@ -5,13 +5,11 @@ import com.workernotfound.auth.domain.auth.exception.AuthErrorCode;
 import com.workernotfound.auth.global.exception.BusinessException;
 import java.time.Duration;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
-@EnableConfigurationProperties(VerificationProperties.class)
 public class VerificationService {
 
 	private static final Duration EMAIL_CODE_TTL = Duration.ofMinutes(5);
@@ -28,17 +26,33 @@ public class VerificationService {
 	private final SmsVerificationSender smsVerificationSender;
 
 	public void sendEmailVerificationCode(VerificationPurpose purpose, String email) {
-		validateSendRateLimit(emailSendRateLimitKey(purpose, email));
+		String limitKey = emailSendRateLimitKey(purpose, email);
+		String codeKey = emailCodeKey(purpose, email);
+		validateSendRateLimit(limitKey);
 		String verificationCode = verificationCodeGenerator.generate();
-		saveVerificationCode(emailCodeKey(purpose, email), verificationCode, EMAIL_CODE_TTL);
-		emailVerificationSender.send(email, verificationCode);
+		try {
+			saveVerificationCode(codeKey, verificationCode, EMAIL_CODE_TTL);
+			emailVerificationSender.send(email, verificationCode);
+		} catch (RuntimeException exception) {
+			redisTemplate.delete(codeKey);
+			redisTemplate.delete(limitKey);
+			throw exception;
+		}
 	}
 
 	public void sendSmsVerificationCode(VerificationPurpose purpose, String phoneNumber) {
-		validateSendRateLimit(smsSendRateLimitKey(purpose, phoneNumber));
+		String limitKey = smsSendRateLimitKey(purpose, phoneNumber);
+		String codeKey = smsCodeKey(purpose, phoneNumber);
+		validateSendRateLimit(limitKey);
 		String verificationCode = verificationCodeGenerator.generate();
-		saveVerificationCode(smsCodeKey(purpose, phoneNumber), verificationCode, SMS_CODE_TTL);
-		smsVerificationSender.send(phoneNumber, verificationCode);
+		try {
+			saveVerificationCode(codeKey, verificationCode, SMS_CODE_TTL);
+			smsVerificationSender.send(phoneNumber, verificationCode);
+		} catch (RuntimeException exception) {
+			redisTemplate.delete(codeKey);
+			redisTemplate.delete(limitKey);
+			throw exception;
+		}
 	}
 
 	public boolean verifyEmailCode(

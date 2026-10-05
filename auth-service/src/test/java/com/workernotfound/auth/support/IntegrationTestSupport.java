@@ -1,6 +1,9 @@
 package com.workernotfound.auth.support;
 
 import org.junit.jupiter.api.TestInstance;
+import com.workernotfound.auth.domain.auth.service.EmailVerificationSender;
+import com.workernotfound.auth.domain.auth.service.SmsVerificationSender;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -13,6 +16,8 @@ import org.testcontainers.utility.DockerImageName;
 @ActiveProfiles("test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class IntegrationTestSupport {
+	@MockitoBean protected EmailVerificationSender emailVerificationSender;
+	@MockitoBean protected SmsVerificationSender smsVerificationSender;
 
 	static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
 		.withDatabaseName("auth_service_test")

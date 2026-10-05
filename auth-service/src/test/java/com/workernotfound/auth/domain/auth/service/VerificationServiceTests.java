@@ -7,10 +7,35 @@ import com.workernotfound.auth.domain.auth.entity.enums.VerificationPurpose;
 import com.workernotfound.auth.support.IntegrationTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import static org.mockito.Mockito.doThrow;
 
 class VerificationServiceTests extends IntegrationTestSupport {
 
 	@Autowired private VerificationService verificationService;
+	@Autowired private StringRedisTemplate redisTemplate;
+
+	@Test
+	void failedEmailDeliveryClearsCodeAndRateLimit() {
+		String email = "delivery-failure@example.com";
+		doThrow(new VerificationDeliveryException("failed"))
+			.when(emailVerificationSender).send(org.mockito.ArgumentMatchers.eq(email), org.mockito.ArgumentMatchers.anyString());
+		assertThatThrownBy(() -> verificationService.sendEmailVerificationCode(VerificationPurpose.SIGNUP, email))
+			.isInstanceOf(VerificationDeliveryException.class);
+		assertThat(redisTemplate.hasKey("auth:verification:email:SIGNUP:" + email)).isFalse();
+		assertThat(redisTemplate.hasKey("auth:verification:email:send-limit:SIGNUP:" + email)).isFalse();
+	}
+
+	@Test
+	void failedSmsDeliveryClearsCodeAndRateLimit() {
+		String phoneNumber = "01011119999";
+		doThrow(new VerificationDeliveryException("failed"))
+			.when(smsVerificationSender).send(org.mockito.ArgumentMatchers.eq(phoneNumber), org.mockito.ArgumentMatchers.anyString());
+		assertThatThrownBy(() -> verificationService.sendSmsVerificationCode(VerificationPurpose.SIGNUP, phoneNumber))
+			.isInstanceOf(VerificationDeliveryException.class);
+		assertThat(redisTemplate.hasKey("auth:verification:sms:SIGNUP:" + phoneNumber)).isFalse();
+		assertThat(redisTemplate.hasKey("auth:verification:sms:send-limit:SIGNUP:" + phoneNumber)).isFalse();
+	}
 
 	@Test
 	void verifyEmailCodeStoresVerifiedFlag() {

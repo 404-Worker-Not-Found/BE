@@ -19,7 +19,12 @@ server:
 
 auth:
   verification:
-    log-code-enabled: ${AUTH_VERIFICATION_LOG_CODE_ENABLED:false}
+    delivery:
+      resend-api-key: ${AUTH_RESEND_API_KEY:}
+      email-from: ${AUTH_VERIFICATION_EMAIL_FROM:}
+      solapi-api-key: ${AUTH_SOLAPI_API_KEY:}
+      solapi-api-secret: ${AUTH_SOLAPI_API_SECRET:}
+      sms-from: ${AUTH_VERIFICATION_SMS_FROM:}
   jwt:
     secret: ${AUTH_JWT_SECRET}
     access-token-expiration: 15m
