@@ -35,10 +35,13 @@ public class JobController implements JobControllerDocs {
     @Override
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<JobDetailResponse>> getDetail(
+            @AuthenticationPrincipal MemberClaims claims,
             @PathVariable Long id
     ) {
+        // 토큰 없는 조회도 허용한다. 비공개 공고의 점주 확인에만 인증된 회원 ID를 쓴다.
+        Long viewerMemberId = claims == null ? null : claims.memberId();
         return ResponseEntity.ok(ApiResponse.success(
-                jobApplicationService.getJobDetail(id)
+                jobApplicationService.getJobDetail(id, viewerMemberId)
         ));
     }
 

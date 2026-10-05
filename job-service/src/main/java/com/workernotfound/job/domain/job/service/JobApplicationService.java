@@ -25,8 +25,8 @@ public class JobApplicationService {
         return jobCommandService.create(ownerId, request);
     }
 
-    public JobDetailResponse getJobDetail(Long jobId) {
-        return jobFindService.findJobDetail(jobId);
+    public JobDetailResponse getJobDetail(Long jobId, Long viewerMemberId) {
+        return jobFindService.findJobDetail(jobId, viewerMemberId);
     }
 
     public JobSearchResponse getJobs(JobSearchRequest request) {

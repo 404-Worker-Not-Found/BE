@@ -125,6 +125,11 @@ public class JobPost extends BaseEntity {
         this.status = JobStatus.PAYMENT_PENDING;
     }
 
+    // 결제 대기 공고는 인증된 점주 본인에게만 보인다. 공개 이후 상태의 조회 정책은 바꾸지 않는다.
+    public boolean isVisibleTo(Long viewerMemberId) {
+        return status != JobStatus.PAYMENT_PENDING || ownerId.equals(viewerMemberId);
+    }
+
     // 모집 완료로 마감할 수 있는 상태다. 이미 CLOSED인 공고는 다시 마감하지 않는다.
     public boolean isRecruiting() {
         return status == JobStatus.OPEN || status == JobStatus.MATCHING;

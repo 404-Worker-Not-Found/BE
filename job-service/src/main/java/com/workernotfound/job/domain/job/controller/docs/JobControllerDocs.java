@@ -8,6 +8,7 @@ import com.workernotfound.job.global.config.OpenApiConfig;
 import com.workernotfound.job.global.response.ApiResponse;
 import com.workernotfound.job.global.security.MemberClaims;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -36,7 +37,8 @@ public interface JobControllerDocs {
 
     @Operation(
             summary = "공고 상세 조회",
-            description = "공고 ID로 상세 정보를 조회합니다."
+            description = "공고 ID로 상세 정보를 조회합니다. 결제 대기(PAYMENT_PENDING) 공고는 Bearer 토큰의 회원이 "
+                    + "점주 본인일 때만 조회되며, 그 밖의 요청은 404입니다."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -46,7 +48,7 @@ public interface JobControllerDocs {
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "공고 없음", content = @Content)
     })
-    ResponseEntity<ApiResponse<JobDetailResponse>> getDetail(Long id);
+    ResponseEntity<ApiResponse<JobDetailResponse>> getDetail(@Parameter(hidden = true) MemberClaims claims, Long id);
 
     @Operation(
             summary = "공고 목록 조회",

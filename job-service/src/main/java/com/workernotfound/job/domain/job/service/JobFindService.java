@@ -35,8 +35,13 @@ public class JobFindService {
                 .orElseThrow(() -> new BusinessException(JobErrorCode.JOB_NOT_FOUND));
     }
 
-    public JobDetailResponse findJobDetail(Long jobId) {
+    // 사용자 상세 조회. 공개 전 공고를 다른 회원에게는 존재하지 않는 공고와 같은 404로 응답한다.
+    // findJobPost는 상태와 관계없이 조회하므로 이 접근 제한을 내부 처리에 적용하지 않는다.
+    public JobDetailResponse findJobDetail(Long jobId, Long viewerMemberId) {
         JobPost post = findJobPost(jobId);
+        if (!post.isVisibleTo(viewerMemberId)) {
+            throw new BusinessException(JobErrorCode.JOB_NOT_FOUND);
+        }
         Map<Long, String> categoryNameMap = buildCategoryNameMap();
         String categoryName = resolveCategoryName(categoryNameMap, post.getCategoryId());
         return JobDetailResponse.of(post, categoryName);
