@@ -4,8 +4,10 @@ import com.workernotfound.auth.domain.auth.entity.enums.VerificationPurpose;
 import com.workernotfound.auth.domain.auth.exception.AuthErrorCode;
 import com.workernotfound.auth.global.exception.BusinessException;
 import java.time.Duration;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -18,6 +20,21 @@ public class VerificationService {
 	private static final Duration SEND_RATE_LIMIT_TTL = Duration.ofMinutes(1);
 	private static final String VERIFIED_VALUE = "true";
 	private static final int MAX_VERIFY_ATTEMPTS = 5;
+	private static final DefaultRedisScript<String> REPLACE_CODE_SCRIPT = new DefaultRedisScript<>("""
+		local previous = redis.call('GET', KEYS[1]) or ''
+		local expiry = redis.call('PEXPIRETIME', KEYS[1])
+		redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+		return previous .. ':' .. expiry
+		""", String.class);
+	private static final DefaultRedisScript<Long> RESTORE_CODE_SCRIPT = new DefaultRedisScript<>("""
+		if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+		if ARGV[2] ~= '' and tonumber(ARGV[3]) > 0 then
+		  redis.call('SET', KEYS[1], ARGV[2], 'PXAT', ARGV[3])
+		else
+		  redis.call('DEL', KEYS[1])
+		end
+		return 1
+		""", Long.class);
 
 	private final StringRedisTemplate redisTemplate;
 	private final VerificationCodeGenerator verificationCodeGenerator;
@@ -30,12 +47,12 @@ public class VerificationService {
 		String codeKey = emailCodeKey(purpose, email);
 		validateSendRateLimit(limitKey);
 		String verificationCode = verificationCodeGenerator.generate();
-		saveVerificationCode(codeKey, verificationCode, EMAIL_CODE_TTL);
+		VerificationCodeReplacement replacement = replaceVerificationCode(codeKey, verificationCode, EMAIL_CODE_TTL);
 		try {
 			emailVerificationSender.send(email, verificationCode);
 		} catch (VerificationDeliveryException exception) {
 			if (!exception.isDeliveryUncertain()) {
-				redisTemplate.delete(codeKey);
+				restoreVerificationCode(codeKey, replacement);
 			}
 			throw exception;
 		}
@@ -46,12 +63,12 @@ public class VerificationService {
 		String codeKey = smsCodeKey(purpose, phoneNumber);
 		validateSendRateLimit(limitKey);
 		String verificationCode = verificationCodeGenerator.generate();
-		saveVerificationCode(codeKey, verificationCode, SMS_CODE_TTL);
+		VerificationCodeReplacement replacement = replaceVerificationCode(codeKey, verificationCode, SMS_CODE_TTL);
 		try {
 			smsVerificationSender.send(phoneNumber, verificationCode);
 		} catch (VerificationDeliveryException exception) {
 			if (!exception.isDeliveryUncertain()) {
-				redisTemplate.delete(codeKey);
+				restoreVerificationCode(codeKey, replacement);
 			}
 			throw exception;
 		}
@@ -94,10 +111,22 @@ public class VerificationService {
 				redisTemplate.opsForValue().get(smsVerifiedKey(purpose, phoneNumber)));
 	}
 
-	private void saveVerificationCode(String key, String verificationCode, Duration ttl) {
-		String hashedCode = verificationCodeHasher.hash(verificationCode);
-		redisTemplate.opsForValue().set(key, hashedCode, ttl);
+	private VerificationCodeReplacement replaceVerificationCode(String key, String verificationCode, Duration ttl) {
+		String newHash = verificationCodeHasher.hash(verificationCode);
+		String snapshot = redisTemplate.execute(REPLACE_CODE_SCRIPT, List.of(key), newHash, Long.toString(ttl.toMillis()));
+		if (snapshot == null) {
+			throw new IllegalStateException("인증번호 저장 결과가 없습니다.");
+		}
+		int separator = snapshot.lastIndexOf(':');
+		return new VerificationCodeReplacement(newHash, snapshot.substring(0, separator), snapshot.substring(separator + 1));
 	}
+
+	private void restoreVerificationCode(String key, VerificationCodeReplacement replacement) {
+		redisTemplate.execute(RESTORE_CODE_SCRIPT, List.of(key),
+			replacement.newHash(), replacement.previousHash(), replacement.previousExpiresAt());
+	}
+
+	private record VerificationCodeReplacement(String newHash, String previousHash, String previousExpiresAt) {}
 
 	private boolean verifyCode(
 			String key, String attemptKey, String verificationCode, Duration attemptTtl) {

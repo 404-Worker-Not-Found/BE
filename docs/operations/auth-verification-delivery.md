@@ -1,6 +1,6 @@
 # 인증번호 발송 운영 설정
 
-auth-service는 이메일을 Gmail SMTP(`smtp.gmail.com:587`, STARTTLS), SMS를 SOLAPI `POST /messages/v4/send-many/detail`로 접수합니다. 두 경로 모두 연결 제한은 3초, 읽기 제한은 5초입니다. Gmail 인증 실패 또는 SMS 업체의 확정된 거절은 해당 인증번호를 삭제합니다. 전송 중 연결이 끊겨 접수 여부가 불확실한 경우에는 인증번호를 TTL까지 유지합니다. 실패 응답은 안전한 `GLOBAL-502-001`이고, 1분 재발송 제한은 실패 후에도 유지합니다. SMTP 발송 완료 또는 업체 접수 성공은 최종 배달 완료를 뜻하지 않습니다.
+auth-service는 이메일을 Gmail SMTP(`smtp.gmail.com:587`, STARTTLS), SMS를 SOLAPI `POST /messages/v4/send-many/detail`로 접수합니다. 두 경로 모두 연결 제한은 3초, 읽기 제한은 5초입니다. Gmail 인증 실패나 SOLAPI HTTP 4xx 등 확정된 거절에서는 이번 요청의 인증번호를 제거하고, 아직 유효한 이전 인증번호가 있으면 남은 유효기간 그대로 복원합니다. 전송 중 연결이 끊겨 접수 여부가 불확실한 경우에는 새 인증번호를 TTL까지 유지합니다. 실패 응답은 안전한 `GLOBAL-502-001`이고, 1분 재발송 제한은 실패 후에도 유지합니다. SMTP 발송 완료 또는 업체 접수 성공은 최종 배달 완료를 뜻하지 않습니다.
 
 운영 환경에는 다음 값을 주입합니다. 값은 Git에 저장하지 않습니다.
 

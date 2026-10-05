@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withBadRequest;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
@@ -88,6 +89,20 @@ class VerificationDeliveryTests {
 		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
 		server.expect(requestTo("https://api.solapi.com/messages/v4/send-many/detail"))
 			.andRespond(withSuccess("{\"messageList\":[],\"failedMessageList\":[{\"statusCode\":\"3040\"}]}", MediaType.APPLICATION_JSON));
+		assertThatThrownBy(() -> new SmsVerificationSender(builder.build(), properties)
+			.send("01012345678", "123456"))
+			.isInstanceOf(VerificationDeliveryException.class)
+			.satisfies(exception -> org.assertj.core.api.Assertions.assertThat(
+				((VerificationDeliveryException) exception).isDeliveryUncertain()).isFalse());
+		server.verify();
+	}
+
+	@Test
+	void solapiHttpClientErrorIsDefiniteRejection() {
+		RestClient.Builder builder = RestClient.builder();
+		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+		server.expect(requestTo("https://api.solapi.com/messages/v4/send-many/detail"))
+			.andRespond(withBadRequest());
 		assertThatThrownBy(() -> new SmsVerificationSender(builder.build(), properties)
 			.send("01012345678", "123456"))
 			.isInstanceOf(VerificationDeliveryException.class)

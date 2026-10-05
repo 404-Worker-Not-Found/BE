@@ -11,6 +11,7 @@ import javax.crypto.spec.SecretKeySpec;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -50,6 +51,8 @@ public class SmsVerificationSender {
 					|| !"2000".equals(message.get("statusCode"))) {
 				throw new VerificationDeliveryException("SMS 발송 접수 응답이 올바르지 않습니다.", true);
 			}
+		} catch (HttpClientErrorException exception) {
+			throw new VerificationDeliveryException("SMS 발송이 거절되었습니다.");
 		} catch (RestClientException exception) {
 			throw new VerificationDeliveryException("SMS 발송에 실패했습니다.", exception, true);
 		}
