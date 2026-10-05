@@ -66,6 +66,12 @@ public class WorkerProfile extends BaseEntity {
 		this.baseLocation = baseLocation;
 	}
 
+	public void updatePreferences(Integer wage, Integer radius, Boolean available) {
+		if (wage != null) desiredHourlyWage = wage;
+		if (radius != null) activityRadiusKm = radius;
+		if (available != null) immediatelyAvailable = available;
+	}
+
 	public void addPreferredBusinessType(String businessType) {
 		preferredBusinessTypes.add(WorkerPreferredBusinessType.builder()
 			.workerProfile(this)

@@ -17,6 +17,8 @@ spring:
     hibernate:
       ddl-auto: validate
 notification:
+  internal:
+    secret: ${INTERNAL_API_SECRET}
   work-events:
     enabled: ${NOTIFICATION_WORK_EVENTS_ENABLED:true}
     stream: ${WORK_OUTBOX_STREAM_KEY:work:domain-events}

@@ -48,7 +48,6 @@ public class VerificationService {
 		if attempts >= tonumber(ARGV[2]) then redis.call('DEL', KEYS[1], KEYS[2]) end
 		return 0
 		""", Long.class);
-
 	private final StringRedisTemplate redisTemplate;
 	private final VerificationCodeGenerator verificationCodeGenerator;
 	private final VerificationCodeHasher verificationCodeHasher;
@@ -133,6 +132,24 @@ public class VerificationService {
 				verificationCodeHasher.hash(verificationCode), Integer.toString(MAX_VERIFY_ATTEMPTS));
 		return Long.valueOf(1).equals(result);
 	}
+
+    public boolean consumeContactCode(boolean email, String target, String code) {
+        String codeKey = email ? emailCodeKey(VerificationPurpose.CONTACT_CHANGE, target)
+                : smsCodeKey(VerificationPurpose.CONTACT_CHANGE, target);
+        String attempts = email ? emailAttemptKey(VerificationPurpose.CONTACT_CHANGE, target)
+                : smsAttemptKey(VerificationPurpose.CONTACT_CHANGE, target);
+        Long result = redisTemplate.execute(CONSUME_RESET_CODE_SCRIPT, List.of(codeKey, attempts),
+                verificationCodeHasher.hash(code), Integer.toString(MAX_VERIFY_ATTEMPTS));
+        return Long.valueOf(1).equals(result);
+    }
+
+    public void eraseAccountVerification(String email) {
+        if (email == null) return;
+        for (VerificationPurpose purpose : VerificationPurpose.values()) {
+            redisTemplate.delete(List.of(emailCodeKey(purpose,email), emailVerifiedKey(purpose,email),
+                    emailAttemptKey(purpose,email), emailSendRateLimitKey(purpose,email)));
+        }
+    }
 
 	public boolean isEmailVerified(VerificationPurpose purpose, String email) {
 		return VERIFIED_VALUE.equals(redisTemplate.opsForValue().get(emailVerifiedKey(purpose, email)));

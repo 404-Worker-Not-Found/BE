@@ -6,6 +6,7 @@ import com.workernotfound.chat.domain.chat.entity.ChatMessage;
 import com.workernotfound.chat.domain.chat.event.ChatMessageStored;
 import com.workernotfound.chat.domain.chat.exception.ChatRoomErrorCode;
 import com.workernotfound.chat.domain.chat.repository.*;
+import com.workernotfound.chat.global.account.AccountGateService;
 import com.workernotfound.chat.global.exception.BusinessException;
 import com.workernotfound.chat.global.security.AuthenticatedMember;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class ChatMessageService {
+  private final AccountGateService accountGates;
   private final ChatRoomRepository rooms;
   private final ChatMessageRepository messages;
   private final ApplicationEventPublisher events;
@@ -24,6 +26,7 @@ public class ChatMessageService {
   @Transactional
   public ChatMessageResponse send(
       AuthenticatedMember member, Long roomId, ChatMessageRequest request) {
+    accountGates.requireActive(member.memberId());
     rooms.findConfirmedForMemberForUpdate(roomId, member.memberId(), member.role())
         .orElseThrow(() -> new BusinessException(ChatRoomErrorCode.CHAT_NOT_FOUND));
     var existing = messages.findByChatRoomIdAndSenderMemberIdAndClientMessageId(

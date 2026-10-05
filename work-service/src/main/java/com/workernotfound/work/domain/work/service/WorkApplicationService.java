@@ -5,6 +5,7 @@ import com.workernotfound.work.domain.work.dto.response.ScheduledWorkResponse;
 import com.workernotfound.work.domain.work.entity.Work;
 import com.workernotfound.work.domain.work.exception.WorkErrorCode;
 import com.workernotfound.work.domain.work.repository.*;
+import com.workernotfound.work.global.account.AccountGateService;
 import com.workernotfound.work.global.exception.BusinessException;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class WorkApplicationService {
+  private final AccountGateService accountGates;
   private final WorkRepository works;
   private final WorkCommandRepository commands;
 
@@ -23,6 +25,7 @@ public class WorkApplicationService {
   public ScheduledWorkResponse create(String key, ScheduledWorkRequest request) {
     var command = lockCommand(key, request.commandPayload());
     if (command.workId() != null) return ScheduledWorkResponse.from(command.workId());
+    accountGates.requireActive(request.ownerMemberId(), request.workerMemberId());
     if (commands.lockMatching(request.matchingId()) != null) {
       throw new BusinessException(WorkErrorCode.ACTIVE_WORK_EXISTS);
     }

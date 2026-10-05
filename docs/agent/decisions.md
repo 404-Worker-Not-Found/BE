@@ -1444,3 +1444,36 @@ Related files:
 - `job-service/src/main/resources/db/migration/V12__create_job_payment_refund_reviews.sql`
 - `job-service/src/main/resources/db/migration/V13__create_job_payment_change_requests.sql`
 - `payment-service/src/test/java/com/workernotfound/payment/OrderReplacementTests.java`
+
+## 2026-10-06 - Member Profile and Verified Contact Changes
+
+Decision:
+- Allow ACTIVE members to patch names and their own role's profile. Worker preferences/times/location and owner store name/type/location are editable; role, business registration number, and verification status are immutable in this API.
+- Treat omitted/null patch fields as unchanged and supplied nonempty lists as replacements. Preserve existing child rows for unchanged unique values.
+- Require a separate CONTACT_CHANGE code sent to the new email or phone and atomically consume it once. Signup and password-reset proofs cannot authorize changes.
+- Persist contact-change commands in auth-service, temporarily stop login/token issuance with UPDATING, revoke every refresh session, and synchronize member-service outside auth DB transactions.
+- Record stable command results in member-service so delayed replays cannot undo a later contact change. Unknown remote outcomes stay pending with durable backoff. Completed auth commands discard raw contact values.
+- Existing stateless access tokens retain their expiration; users log in again after synchronization.
+
+Reason:
+- Member profiles and authentication email have separate database owners. A lost response must converge without replaying verification or rolling back a possibly committed remote change.
+
+Related files:
+- `docs/architecture/member-account-management.md`
+- `auth-service`
+- `member-service`
+
+
+## 2026-10-06 - Block Withdrawal During Ongoing Transactions
+
+Decision:
+- The user confirmed that ongoing applications, matching, work, and payments block withdrawal. Never auto-cancel work or fabricate completed refunds/settlement.
+- Use durable auth coordination and per-service prepare/release/commit gates. Creation transactions acquire the same member gate as withdrawal; unknown remote outcomes retry the original command, and finalization never switches back to compensation.
+- Reject old access tokens in prepared/withdrawn services, including connected chat sockets. Restore ACTIVE only after every gate has acknowledged compensation; refresh sessions remain revoked.
+- Erase auth credentials/OAuth links/tokens/contact-command personal data and member profiles/locations/preferences at successful withdrawal. Preserve member IDs/status/timestamps and domain-owned transaction evidence rather than cascading across services.
+- Keep DEPOSITED/uncertain payment orders, outstanding deposits, pending Sagas and external commands as blockers until owning domains provide final completion contracts.
+- Define contract/payment evidence retention as five years after closure and separate dispute evidence as three years after resolution, referencing the statutory categories documented in the architecture note. Applicability review and expired-evidence cleanup belong to domain operation work, not account deletion.
+
+Related files:
+- `docs/architecture/member-account-management.md`
+- `auth-service`, `member-service`, `job-service`, `matching-service`, `work-service`, `payment-service`, `chat-service`, `notification-service`

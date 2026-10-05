@@ -4,6 +4,7 @@ import com.workernotfound.payment.domain.payment.dto.request.PaymentLockRequest;
 import com.workernotfound.payment.domain.payment.entity.*;
 import com.workernotfound.payment.domain.payment.exception.PaymentErrorCode;
 import com.workernotfound.payment.domain.payment.repository.*;
+import com.workernotfound.payment.global.account.AccountGateService;
 import com.workernotfound.payment.global.exception.BusinessException;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class PaymentCommandService {
+  private final AccountGateService accountGates;
   private final PaymentLockRepository payments;
   private final PaymentDepositRepository deposits;
   private final PaymentCommandRepository commands;
@@ -23,6 +25,7 @@ public class PaymentCommandService {
   public Outcome lock(String key, PaymentLockRequest request) {
     var command = lockCommand(key, request.fingerprintPayload());
     if (command.paymentId() != null || command.rejection() != null) return outcome(command);
+    accountGates.requireActive(request.ownerMemberId(), request.workerMemberId());
     try {
       return createLock(key, request);
     } catch (BusinessException exception) {

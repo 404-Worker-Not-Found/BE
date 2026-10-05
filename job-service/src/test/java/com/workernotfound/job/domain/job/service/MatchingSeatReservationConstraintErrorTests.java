@@ -29,7 +29,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -74,7 +73,7 @@ class MatchingSeatReservationConstraintErrorTests extends IntegrationTestSupport
     @Test
     void mapsConcurrentReservationKeyReuseAcrossJobsToConflict() throws Exception {
         JobPost first = saveJob();
-        JobPost second = saveJob();
+        JobPost second = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().ownerId(9001L).build()));
         String key = newKey();
         doAnswer(awaitBoth(new CountDownLatch(2))).when(reservationRepository).findByIdempotencyKey(key);
 

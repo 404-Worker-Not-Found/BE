@@ -7,6 +7,7 @@ import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import com.workernotfound.job.domain.job.exception.JobErrorCode;
 import com.workernotfound.job.domain.job.repository.JobApplicationAdmissionRepository;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
+import com.workernotfound.job.global.account.AccountGateService;
 import com.workernotfound.job.global.exception.BusinessException;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -19,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @EnableConfigurationProperties(ApplicationAdmissionProperties.class)
 public class JobApplicationAdmissionCommandService {
-
+    private final AccountGateService accountGates;
     private final JobApplicationAdmissionRepository jobApplicationAdmissionRepository;
     private final JobPostRepository jobPostRepository;
     private final ApplicationAdmissionProperties applicationAdmissionProperties;
@@ -29,6 +30,7 @@ public class JobApplicationAdmissionCommandService {
         // 공고 행 잠금을 먼저 잡아야 같은 키의 동시 요청이 앞선 커밋 결과를 조회할 수 있다.
         JobPost jobPost = jobPostRepository.findByIdForUpdate(jobPostId)
                 .orElseThrow(() -> new BusinessException(JobErrorCode.JOB_NOT_FOUND));
+        accountGates.requireActive(jobPost.getOwnerId(), workerMemberId);
 
         Optional<JobApplicationAdmission> existing =
                 jobApplicationAdmissionRepository.findByIdempotencyKey(idempotencyKey);

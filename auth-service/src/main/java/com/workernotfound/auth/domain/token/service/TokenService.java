@@ -16,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class TokenService {
-
 	private final RefreshTokenRepository refreshTokenRepository;
 	private final AuthAccountRepository authAccountRepository;
 	private final JwtTokenProvider jwtTokenProvider;
@@ -45,7 +44,10 @@ public class TokenService {
 
 	@Transactional
 	public TokenResponse issue(AuthAccount authAccount, String deviceId) {
-		authAccountRepository.findByIdForUpdate(authAccount.getId()).orElseThrow();
+		AuthAccount lockedAccount = authAccountRepository.findByIdForUpdate(authAccount.getId()).orElseThrow();
+        if (lockedAccount.getStatus() != MemberStatus.ACTIVE) {
+            throw new RefreshTokenException(TokenErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
 		LocalDateTime now = LocalDateTime.now();
 		String accessToken =
 				jwtTokenProvider.createAccessToken(

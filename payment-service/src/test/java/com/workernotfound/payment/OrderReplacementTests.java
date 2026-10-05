@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import com.workernotfound.payment.global.account.AccountGateService;
+import org.springframework.transaction.annotation.Transactional;
 import com.workernotfound.payment.domain.order.dto.*;
 import com.workernotfound.payment.domain.order.exception.OrderErrorCode;
 import com.workernotfound.payment.domain.order.service.*;
@@ -37,7 +39,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 class OrderReplacementTests extends IntegrationTestSupport {
   static final AtomicLong IDS = new AtomicLong(500000);
-  static final String ORDER_LOCK_WAIT_QUERY =
+  static final String ACCOUNT_OR_ORDER_LOCK_WAIT_QUERY =
       """
       SELECT 1
       FROM performance_schema.data_lock_waits waits
@@ -47,7 +49,7 @@ class OrderReplacementTests extends IntegrationTestSupport {
       JOIN performance_schema.threads requester ON requester.THREAD_ID = waits.REQUESTING_THREAD_ID
       JOIN performance_schema.threads blocker ON blocker.THREAD_ID = waits.BLOCKING_THREAD_ID
       WHERE requester.PROCESSLIST_ID = ? AND blocker.PROCESSLIST_ID = ?
-        AND requested.OBJECT_NAME = 'payment_orders' AND requested.LOCK_STATUS = 'WAITING'
+        AND requested.OBJECT_NAME IN ('payment_orders', 'account_gates') AND requested.LOCK_STATUS = 'WAITING'
       """;
 
   @Autowired OrderApplicationService service;
@@ -184,7 +186,7 @@ class OrderReplacementTests extends IntegrationTestSupport {
     awaitLatch(firstWritten);
     Future<OrderResponse> replacement =
         executor.submit(() -> runContender(() -> service.create(replacementKey, request(jobId, 2, "20000"))));
-    assertWaitingForOrderLock(replacement);
+    assertWaitingForAccountOrOrderLock(replacement);
     releaseFirst.countDown();
     approval.get(10, TimeUnit.SECONDS);
 
@@ -207,7 +209,7 @@ class OrderReplacementTests extends IntegrationTestSupport {
     Future<?> approval =
         executor.submit(
             () -> runContender(() -> transactions.prepare(order.orderId(), 20L, confirm("key-q", "10000"))));
-    assertWaitingForOrderLock(approval);
+    assertWaitingForAccountOrOrderLock(approval);
     releaseFirst.countDown();
     var replaced = replacement.get(10, TimeUnit.SECONDS);
 
@@ -253,10 +255,10 @@ class OrderReplacementTests extends IntegrationTestSupport {
             });
   }
 
-  void assertWaitingForOrderLock(Future<?> contender) throws Exception {
+  void assertWaitingForAccountOrOrderLock(Future<?> contender) throws Exception {
     long contenderId = contenderConnectionId.get(10, TimeUnit.SECONDS);
     try (Connection observer = openRootConnection();
-        PreparedStatement query = observer.prepareStatement(ORDER_LOCK_WAIT_QUERY)) {
+        PreparedStatement query = observer.prepareStatement(ACCOUNT_OR_ORDER_LOCK_WAIT_QUERY)) {
       query.setLong(1, contenderId);
       query.setLong(2, firstConnectionId);
       long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
@@ -268,7 +270,7 @@ class OrderReplacementTests extends IntegrationTestSupport {
         Thread.sleep(50);
       }
     }
-    throw new AssertionError("경쟁 트랜잭션이 주문 행 잠금을 기다리지 않았습니다.");
+    throw new AssertionError("경쟁 트랜잭션이 계정 또는 주문 행 잠금을 기다리지 않았습니다.");
   }
 
   void awaitLatch(CountDownLatch latch) {
@@ -319,4 +321,52 @@ class OrderReplacementTests extends IntegrationTestSupport {
     return jdbc.queryForObject(
         "SELECT COUNT(*) FROM payment_order_commands WHERE command_key=?", Long.class, key);
   }
+}
+
+class AccountGateTests extends IntegrationTestSupport {
+    @Autowired AccountGateService gates;
+    @Autowired JdbcTemplate jdbc;
+    @Autowired PlatformTransactionManager transactionManager;
+    @Test
+    @Transactional
+    void ongoingRecordsRejectWithdrawalWithoutInstallingABarrier() {
+        jdbc.update("insert into payment_deposits(job_post_id,owner_member_id,currency,deposited_amount,locked_amount,version) values(919205,919203,'KRW',10000,0,0)");
+        String key=UUID.randomUUID().toString();
+        assertThat(gates.transition(919203L,key,"prepare").state()).isEqualTo("REJECTED");
+        assertThat(gates.isActive(919203L)).isTrue();
+        assertThat(gates.transition(919203L,key,"prepare").state()).isEqualTo("REJECTED");
+    }
+    @Test
+    void releasedAttemptCannotUndoLaterCommittedWithdrawal() {
+        long member = 919100L;
+        String first = UUID.randomUUID().toString(), second = UUID.randomUUID().toString();
+        assertThat(gates.transition(member,first,"prepare").state()).isEqualTo("PREPARED");
+        assertThat(gates.transition(member,first,"release").state()).isEqualTo("RELEASED");
+        assertThat(gates.transition(member,second,"prepare").state()).isEqualTo("PREPARED");
+        assertThat(gates.transition(member,second,"commit").state()).isEqualTo("COMMITTED");
+        assertThat(gates.transition(member,first,"release").state()).isEqualTo("RELEASED");
+        assertThat(gates.isActive(member)).isFalse();
+        assertThat(gates.transition(member,second,"commit").state()).isEqualTo("COMMITTED");
+    }
+    @Test
+    void prepareWaitsForInFlightCreationAndRejectsSubsequentCreation() throws Exception {
+        long member = 919101L;
+        CountDownLatch locked = new CountDownLatch(1), release = new CountDownLatch(1);
+        var executor = Executors.newFixedThreadPool(2);
+        var transactions = new TransactionTemplate(transactionManager);
+        try {
+            Future<?> creation = executor.submit(() -> transactions.executeWithoutResult(status -> {
+                gates.requireActive(member); locked.countDown();
+                try { if (!release.await(5,TimeUnit.SECONDS)) throw new IllegalStateException("test latch timeout"); }
+                catch (InterruptedException exception) { Thread.currentThread().interrupt(); throw new IllegalStateException(exception); }
+            }));
+            assertThat(locked.await(5,TimeUnit.SECONDS)).isTrue();
+            Future<AccountGateService.Result> withdrawal = executor.submit(() -> gates.transition(member,UUID.randomUUID().toString(),"prepare"));
+            assertThatThrownBy(() -> withdrawal.get(150,TimeUnit.MILLISECONDS)).isInstanceOf(TimeoutException.class);
+            release.countDown(); creation.get(5,TimeUnit.SECONDS);
+            assertThat(withdrawal.get(5,TimeUnit.SECONDS).state()).isEqualTo("PREPARED");
+            assertThatThrownBy(() -> transactions.executeWithoutResult(status -> gates.requireActive(member)))
+                .isInstanceOf(BusinessException.class);
+        } finally { release.countDown(); executor.shutdownNow(); }
+    }
 }

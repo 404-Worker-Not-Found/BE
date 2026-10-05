@@ -28,7 +28,7 @@ public class AuthAccount extends BaseEntity {
 	@Column(name = "member_id", nullable = false)
 	private Long memberId;
 
-	@Column(nullable = false, length = 255)
+	@Column(length = 255)
 	private String email;
 
 	@Enumerated(EnumType.STRING)
@@ -58,6 +58,22 @@ public class AuthAccount extends BaseEntity {
 	public void recordLogin(LocalDateTime loginAt) {
 		this.lastLoginAt = loginAt;
 	}
+
+    public void beginEmailChange(String email) {
+        this.email = email;
+        this.status = MemberStatus.UPDATING;
+    }
+
+    public void finishContactChange() { this.status = MemberStatus.ACTIVE; }
+
+    public void restoreEmail(String email) {
+        this.email = email;
+        this.status = MemberStatus.ACTIVE;
+    }
+
+    public void prepareWithdrawal() { status = MemberStatus.WITHDRAWING; }
+    public void cancelWithdrawal() { if (status == MemberStatus.WITHDRAWING) status = MemberStatus.ACTIVE; }
+    public void erasePersonalData() { status = MemberStatus.WITHDRAWN; email = null; lastLoginAt = null; }
 
 	public void withdraw() {
 		this.status = MemberStatus.WITHDRAWN;

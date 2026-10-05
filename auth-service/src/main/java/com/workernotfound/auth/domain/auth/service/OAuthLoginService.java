@@ -13,6 +13,8 @@ import com.workernotfound.auth.domain.token.dto.response.TokenResponse;
 import com.workernotfound.auth.domain.token.service.TokenService;
 import com.workernotfound.auth.external.client.oauth.OAuthProviderClient;
 import com.workernotfound.auth.external.client.oauth.OAuthProviderProfile;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -21,12 +23,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class OAuthLoginService {
-
 	private final OAuthProviderClient oAuthProviderClient;
 	private final OAuthConnectionRepository oAuthConnectionRepository;
 	private final AuthAccountRepository authAccountRepository;
 	private final OAuthSignupTicketService oAuthSignupTicketService;
 	private final TokenService tokenService;
+	private final EntityManager entityManager;
 
 	@Transactional
 	public OAuthLoginResponse login(OAuthProvider provider, OAuthLoginRequest request) {
@@ -42,6 +44,7 @@ public class OAuthLoginService {
 
 	private OAuthLoginResponse loginConnectedAccount(OAuthConnection connection, String deviceId) {
 		AuthAccount authAccount = connection.getAuthAccount();
+        entityManager.refresh(authAccount, LockModeType.PESSIMISTIC_WRITE);
 		validateActiveAccount(authAccount);
 		authAccount.recordLogin(LocalDateTime.now());
 		TokenResponse tokenResponse = tokenService.issue(authAccount, deviceId);
@@ -62,6 +65,7 @@ public class OAuthLoginService {
 			OAuthProviderProfile profile,
 			AuthAccount authAccount,
 			String deviceId) {
+        entityManager.refresh(authAccount, LockModeType.PESSIMISTIC_WRITE);
 		validateActiveAccount(authAccount);
 		oAuthConnectionRepository.save(
 				OAuthConnection.builder()

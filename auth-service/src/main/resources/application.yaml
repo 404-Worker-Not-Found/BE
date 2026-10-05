@@ -33,6 +33,13 @@ server:
   port: ${AUTH_SERVICE_PORT:8081}
 
 auth:
+  withdrawal:
+    job-url: ${JOB_SERVICE_BASE_URL}
+    matching-url: ${MATCHING_SERVICE_BASE_URL}
+    work-url: ${WORK_SERVICE_BASE_URL}
+    chat-url: ${CHAT_SERVICE_BASE_URL}
+    payment-url: ${PAYMENT_SERVICE_BASE_URL}
+    notification-url: ${NOTIFICATION_SERVICE_BASE_URL}
   verification:
     delivery:
       email-username: ${AUTH_MAIL_USERNAME:}

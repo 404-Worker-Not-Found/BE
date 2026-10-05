@@ -5,6 +5,7 @@ import com.workernotfound.chat.domain.chat.dto.response.ChatRoomResponse;
 import com.workernotfound.chat.domain.chat.entity.ChatRoom;
 import com.workernotfound.chat.domain.chat.exception.ChatRoomErrorCode;
 import com.workernotfound.chat.domain.chat.repository.*;
+import com.workernotfound.chat.global.account.AccountGateService;
 import com.workernotfound.chat.global.exception.BusinessException;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class ChatRoomApplicationService {
+  private final AccountGateService accountGates;
   private final ChatRoomRepository rooms;
   private final ChatRoomCommandRepository commands;
 
@@ -23,6 +25,7 @@ public class ChatRoomApplicationService {
   public ChatRoomResponse create(String key, ChatRoomRequest request) {
     var command = lockCommand(key, "CREATE:" + request.toString());
     if (command.chatRoomId() != null) return ChatRoomResponse.from(command.chatRoomId());
+    accountGates.requireActive(request.ownerMemberId(), request.workerMemberId());
     if (commands.lockMatching(request.matchingId()) != null) {
       throw new BusinessException(ChatRoomErrorCode.ACTIVE_CHAT_EXISTS);
     }

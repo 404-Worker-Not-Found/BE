@@ -33,7 +33,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -79,9 +78,12 @@ class JobApplicationAdmissionConstraintErrorTests extends IntegrationTestSupport
     @Test
     void mapsDuplicateIdempotencyKeyToConflictWhenConcurrentRequestsUseDifferentJobs() throws Exception {
         JobPost firstJobPost = saveJobPost();
-        JobPost secondJobPost = saveJobPost();
+        JobPost secondJobPost = newJobPost();
+        ReflectionTestUtils.setField(secondJobPost,"ownerId",8L);
+        secondJobPost = jobPostRepository.save(secondJobPost);
+        final Long secondJobId=secondJobPost.getId();
         String idempotencyKey = newKey();
-        // 공고가 서로 다르면 공고 행 잠금이 직렬화해 주지 않는다. 두 요청이 모두 멱등 키 조회를 지난 뒤에 저장하도록 맞춘다.
+        // 공고와 참여 회원이 다르면 공고·회원 잠금이 직렬화하지 않는다. 두 요청이 모두 멱등 키 조회를 지난 뒤에 저장하도록 맞춘다.
         CountDownLatch keyLookups = new CountDownLatch(2);
         doAnswer(invocation -> {
             keyLookups.countDown();
@@ -91,7 +93,7 @@ class JobApplicationAdmissionConstraintErrorTests extends IntegrationTestSupport
 
         List<Future<MvcResult>> requests = List.of(
                 executorService.submit(() -> requestAdmission(firstJobPost.getId(), idempotencyKey)),
-                executorService.submit(() -> requestAdmission(secondJobPost.getId(), idempotencyKey))
+                executorService.submit(() -> requestAdmission(secondJobId, idempotencyKey,101L))
         );
 
         List<MvcResult> results = new ArrayList<>();
@@ -124,11 +126,15 @@ class JobApplicationAdmissionConstraintErrorTests extends IntegrationTestSupport
     }
 
     private MvcResult requestAdmission(Long jobPostId, String idempotencyKey) throws Exception {
+        return requestAdmission(jobPostId,idempotencyKey,100L);
+    }
+
+    private MvcResult requestAdmission(Long jobPostId, String idempotencyKey, Long workerId) throws Exception {
         return mockMvc.perform(post("/api/jobs/internal/{jobPostId}/application-admissions", jobPostId)
                         .header("X-Internal-Secret", "test-internal-secret")
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"workerMemberId\":100}"))
+                        .content("{\"workerMemberId\":"+workerId+"}"))
                 .andReturn();
     }
 

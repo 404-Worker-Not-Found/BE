@@ -7,6 +7,7 @@ import com.workernotfound.job.domain.job.entity.enums.MatchingSeatReservationSta
 import com.workernotfound.job.domain.job.exception.JobErrorCode;
 import com.workernotfound.job.domain.job.repository.JobMatchingSeatReservationRepository;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
+import com.workernotfound.job.global.account.AccountGateService;
 import com.workernotfound.job.global.exception.BusinessException;
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -35,7 +36,7 @@ public class MatchingSeatReservationCommandService {
     private static final Set<JobStatus> MATCHABLE_STATUSES = EnumSet.of(JobStatus.OPEN, JobStatus.MATCHING);
     private static final Set<MatchingSeatReservationStatus> OCCUPYING_STATUSES =
             EnumSet.of(MatchingSeatReservationStatus.RESERVED, MatchingSeatReservationStatus.CONSUMED);
-
+    private final AccountGateService accountGates;
     private final JobPostRepository jobPostRepository;
     private final JobMatchingSeatReservationRepository reservationRepository;
     private final JobWageCalculator jobWageCalculator;
@@ -58,6 +59,7 @@ public class MatchingSeatReservationCommandService {
             return replayReservation(existing.get(), jobPostId, matchingId, applicationId, workerMemberId);
         }
 
+        accountGates.requireActive(jobPost.getOwnerId(), workerMemberId);
         LocalDateTime now = LocalDateTime.now(clock);
         validateMatchable(jobPost, now);
         // 스케줄러가 늦어도 만료된 예약이 새 예약을 막지 않도록 같은 잠금 안에서 먼저 회수한다.
