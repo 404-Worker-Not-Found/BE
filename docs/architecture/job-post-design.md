@@ -252,7 +252,7 @@ HTTP 2xx만으로 성공 처리하지 않는다. 끝까지 받은 본문이 JSON
 
 - 공통 응답의 `success`가 불리언 `true`이고 `data`가 객체다.
 - 필수 필드 `orderId`(`[A-Za-z0-9-]{1,64}`), `jobPostId`, `jobVersion`(정수), `amount`(숫자), `currency`, `status`(문자열)가 있다.
-- `jobPostId`, `jobVersion`, `amount`(소수 표기 `100000.00`도 값으로 비교), `currency`가 요청 스냅샷과 같다. 응답에 점주 ID는 없으므로 점주는 요청 지문으로 payment-service가 대조한다.
+- `jobPostId`, `jobVersion`, `amount`(소수 표기 `100000.00`도 값으로 비교), `currency`가 요청 스냅샷과 같다. 응답 JSON의 소수는 이 클라이언트의 reader에서 `USE_BIG_DECIMAL_FOR_FLOATS`로 처음부터 `BigDecimal`로 읽는다. double을 거치면 `9999999999999999.00` 같은 허용 범위의 큰 금액이 다른 값이 되어 정상 주문도 불일치로 거절되기 때문이다. 전역 `ObjectMapper` 설정은 바꾸지 않는다. 응답에 점주 ID는 없으므로 점주는 요청 지문으로 payment-service가 대조한다.
 - `status`가 연결 가능한 주문 상태다. payment-service 주문 상태는 `READY → CONFIRMING → DEPOSITED/FAILED/REVIEW_REQUIRED`, 대체 시 `SUPERSEDED`다. 같은 키의 재요청은 처음 만든 주문의 현재 상태를 돌려주므로, 응답이 유실된 사이 결제가 진행됐을 수 있다. 주문이 존재한다는 사실은 같으므로 `READY`, `CONFIRMING`, `DEPOSITED`, `FAILED`, `REVIEW_REQUIRED`는 모두 같은 주문 ID를 연결한다. 주문 상태로 공고를 공개하거나 결제 성공을 판단하지 않는다. `SUPERSEDED`는 이미 다른 주문으로 대체된 주문이므로 연결하지 않는다.
 
 ### 실패 분류와 재시도
@@ -283,6 +283,7 @@ HTTP 2xx만으로 성공 처리하지 않는다. 끝까지 받은 본문이 JSON
 
 - 명령의 `lease_token`이 이 실행자의 것이고 `PENDING`일 때만 기록한다. 실행권이 만료되어 다른 실행자가 넘겨받았거나 이미 처리된 명령이면 아무것도 바꾸지 않는다(늦은 응답 무시).
 - 이 명령이 공고의 가장 큰 `issue_sequence`가 아니면(더 늦게 발급된 명령이 있으면) 주문을 연결하지 않고 명령을 `SUPERSEDED`로 종료한다. 과거 명령이 최신 연결을 덮어쓰지 않는다.
+- 최대 순번은 공고 행 잠금을 잡은 뒤 잠금 조회(`FOR SHARE`)로 읽는다. MySQL REPEATABLE READ의 일반 조회는 트랜잭션의 첫 일반 조회(공고 ID 조회) 시점 스냅샷을 보므로, 공고 잠금을 기다리는 사이 커밋된 새 명령을 놓쳐 오래된 명령을 최신으로 판정할 수 있다. 잠금 조회는 최신 커밋 값을 읽고, 새 명령 발급도 공고 행 잠금을 먼저 잡으므로 잠금을 가진 동안 이 값은 바뀌지 않는다. 서비스 전체 격리 수준은 바꾸지 않는다.
 - 최신 명령이면 명령을 `SUCCEEDED`로 바꾸고 `order_id`를 기록하며, 공고에 `payment_order_id`와 원래 결제 스냅샷(`payment_job_version`, `payment_amount`, `payment_currency`)을 연결한다. 공고 상태는 바꾸지 않는다. 연결로 공고의 `@Version`은 증가하지만 `payment_job_version`은 명령의 발급 당시 버전이다.
 - 예치 상태 수신(후속)은 공고에 연결된 이 주문 ID·금액·통화·점주·결제용 버전과 대조해야 한다.
 
