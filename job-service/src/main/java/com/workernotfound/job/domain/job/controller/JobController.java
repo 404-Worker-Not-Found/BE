@@ -4,6 +4,7 @@ import com.workernotfound.job.domain.job.controller.docs.JobControllerDocs;
 import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
+import com.workernotfound.job.domain.job.dto.response.JobPaymentOrderResponse;
 import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
 import com.workernotfound.job.domain.job.service.JobApplicationService;
 import com.workernotfound.job.global.response.ApiResponse;
@@ -42,6 +43,17 @@ public class JobController implements JobControllerDocs {
         Long viewerMemberId = claims == null ? null : claims.memberId();
         return ResponseEntity.ok(ApiResponse.success(
                 jobApplicationService.getJobDetail(id, viewerMemberId)
+        ));
+    }
+
+    @Override
+    @GetMapping("/{id}/payment-order")
+    public ResponseEntity<ApiResponse<JobPaymentOrderResponse>> getPaymentOrder(
+            @AuthenticationPrincipal MemberClaims claims,
+            @PathVariable Long id
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                jobApplicationService.getJobPaymentOrder(id, claims.memberId())
         ));
     }
 
