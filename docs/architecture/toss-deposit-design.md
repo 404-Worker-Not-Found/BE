@@ -6,7 +6,7 @@
 
 공고 서비스가 계산한 모집 인원 전체의 예정 급여를 예치한다. 금액은 100원 이상 정수 KRW이고, 클라이언트가 보낸 금액을 근거로 주문을 만들지 않는다. 근무 시간·시급·가산·휴게시간 계산은 공고 도메인의 책임이며 별도 공식을 결제 서비스에 복제하지 않는다.
 
-공고는 PAYMENT_PENDING으로 비공개 저장하고, 검증된 예치가 반영된 이후에만 OPEN으로 공개한다. 결제 중단·실패 중에는 점주만 공고를 볼 수 있다. 현재 job-service 코드는 생성 즉시 OPEN이므로 아래 계약은 공고 담당자의 구현이 필요하다. payment-service만 배포해서 이 정책이 시행됐다고 간주하면 안 된다.
+공고는 PAYMENT_PENDING으로 비공개 저장하고, 검증된 예치가 반영된 이후에만 OPEN으로 공개한다. 결제 중단·실패 중에는 점주만 공고를 볼 수 있다. 2026-10-05 기준 job-service는 PAYMENT_PENDING 비공개 생성, 결제 주문 생성 명령 저장·재시도, 주문 ID 연결과 점주 조회, 공개 전 공고의 접근·검색·신규 지원·자리 예약 차단을 구현했다. 아래 2절 예치 상태 수신(funding-status)과 예치 후 OPEN 공개는 아직 구현되지 않았으므로, 현재 신규 공고는 결제가 끝나도 공개되지 않는다. payment-service만 배포해서 이 정책이 시행됐다고 간주하면 안 된다. job-service 구현 세부는 [공고 설계](./job-post-design.md#결제-주문-생성)를 따른다.
 
 ## 공고 담당자 구현 계약
 
@@ -24,7 +24,7 @@ POST /api/payments/internal/orders
 
 jobVersion은 비공개 공고의 금액·모집 조건 스냅샷 버전이다. 응답은 공통 ApiResponse이며 data에는 orderId, jobPostId, jobVersion, amount, currency, status가 포함된다. 클라이언트가 공개 주문 API에 임의의 금액을 전달하는 경로는 없다.
 
-점주의 공고 조회 응답에서 paymentOrderId를 제공한다. 공고 공개 전에는 다른 회원의 조회·검색·지원 경로에 노출하지 않는다. 네트워크 오류로 주문 ID를 받지 못하면 동일 키로 재시도해 원래 ID를 복구한다.
+점주의 공고 조회 응답에서 paymentOrderId를 제공한다(구현: `GET /api/jobs/{id}/payment-order`, 주문 생성 완료 전에는 `orderCreationStatus=PENDING`, `paymentOrderId=null`). 공고 공개 전에는 다른 회원의 조회·검색·지원 경로에 노출하지 않는다. 네트워크 오류로 주문 ID를 받지 못하면 동일 키로 재시도해 원래 ID를 복구한다.
 
 금액 관련 정보를 수정하면 새 공고 버전과 새 주문 생성 키가 필요하다. 결제 키가 아직 연결되지 않은 READY 주문과 확인된 FAILED 주문만 대체할 수 있다. CONFIRMING은 결과 확인 전까지 변경할 수 없고, DEPOSITED/REVIEW_REQUIRED는 재결제할 수 없다. 이전 주문은 SUPERSEDED로 남기고 승인을 차단한다. FAILED 주문의 같은 금액 재결제도 새 주문·새 키를 사용한다.
 
@@ -52,7 +52,7 @@ POST /api/jobs/internal/{jobPostId}/funding-status
 
 ## 점주·프론트엔드 계약
 
-1. 공고 서비스에서 결제 주문 생성이 완료되면 paymentOrderId를 받는다.
+1. 공고 등록 후 `GET /api/jobs/{id}/payment-order`를 점주 JWT로 조회해 `orderCreationStatus=CREATED`가 되면 paymentOrderId를 받는다. `PENDING`이면 주문 생성이 아직 완료되지 않은 것이다.
 2. GET /api/payments/orders/{orderId}를 점주의 Bearer JWT로 호출한다. OWNER만 접근하고 다른 점주의 주문은 404다.
 3. 토스 V2 주문서형 결제를 테스트 클라이언트 키로 초기화한다. 카드 결제만 노출하며 서버 응답의 orderId와 amount를 사용한다. orderName은 공고 급여 예치임을 명확히 표시한다.
 4. 토스 인증 성공 후 POST /api/payments/orders/{orderId}/confirm에 동일 점주의 JWT와 아래 본문을 보낸다.
@@ -105,11 +105,13 @@ POST /api/jobs/internal/{jobPostId}/funding-status
 | --- | --- |
 | 프런트·공고 담당자에게 주문/승인/알림 계약 전달 | 지금 진행 가능. 이 문서의 요청·응답 계약 사용 |
 | 실제 프런트 결제 화면 연결 및 실패·취소 안내 | 공고 API 완성 전에도 계약과 테스트 주문으로 준비 가능 |
-| 공고 비공개 생성 및 결제 주문 생성 연결 | 공고 담당자의 PAYMENT_PENDING·주문 생성 구현 필요 |
-| 예치 완료 알림 수신 후 OPEN 전환 | 공고 담당자의 funding-status API 및 revision 검증 구현 필요 |
-| 결제 전 비노출 → 결제 후 공개 전체 검증 | 위 공고 API와 실제 프런트 연결 후 진행 |
+| 공고 비공개 생성 및 결제 주문 생성 연결 | 2026-10-05 job-service 구현 완료: PAYMENT_PENDING 생성, 주문 생성 명령 저장·재시도, 주문 ID 연결, 점주 결제 주문 조회, 공개 전 접근 차단. 실제 서비스 간 E2E는 미검증 |
+| 예치 완료 알림 수신 후 OPEN 전환 | 미구현. job-service의 funding-status API, 주문·스냅샷 대조, revision 저장 구현 필요 |
+| 공고 조건 수정 시 새 버전·새 주문 생성 키, 주문 교체·재결제 | 미구현. job-service의 새 명령 발급(다음 순번) 경로와 API 필요 |
+| 기존(주문 없는) 공개 공고 처리 | 일괄 비공개 전환·소급 주문 생성 안 함. 예치가 없어 매칭 확정의 결제 잠금 단계에서 거절됨. 재등록 또는 후속 재결제 경로 필요 |
+| 결제 전 비노출 → 결제 후 공개 전체 검증 | 위 funding-status 구현과 실제 프런트 연결 후 진행 |
 
-결제 서비스의 기본 설정과 테스트 예치 확인은 완료했다. 공고 담당자의 구현을 임의로 대신 변경하지 않으며, 공고 공개까지의 완료 판정은 연동 후로 남긴다.
+결제 서비스의 기본 설정과 테스트 예치 확인, job-service의 비공개 생성·주문 생성 연동은 완료했다. 공고 공개까지의 완료 판정은 funding-status 수신 구현과 연동 후로 남긴다.
 
 ## 공식 문서
 

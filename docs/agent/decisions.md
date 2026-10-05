@@ -1316,3 +1316,33 @@ Reason:
 Related files:
 - `docs/architecture/notification-design.md`
 - `notification-service`
+
+## 2026-10-05 - Job Private Creation and Payment Order Provisioning
+
+Decision:
+- New jobs are stored as `PAYMENT_PENDING` and a payment-order creation command is stored in the same local transaction. Only the authenticated owner (JWT `memberId`) can read a `PAYMENT_PENDING` detail; others get 404. Search, new application admissions, and new seat reservations exclude it; idempotent replays of already issued admissions and reservations keep their contracts.
+- The command keeps an immutable snapshot: job ID, payment job version (the version right after the job insert), owner ID, total deposit in integer KRW, `KRW`, and a UUID `Idempotency-Key`. Retries resend the same row. A new order (re-payment, amount edit) must issue a new command with the next per-job `issue_sequence` under the job-row lock; `(job_post_id, issue_sequence)`, the key, and `order_id` are unique.
+- Totals below 100 KRW are rejected with `JOB-400-004` and never rounded up.
+- Delivery reuses the recruitment-completion lease pattern in separate classes (no generic framework): claim, call outside transactions with a total `PAYMENT_SERVICE_CALL_TIMEOUT`, record only with the matching lease token. Lease must be at least the call timeout plus one second.
+- Success requires 2xx, boolean `success=true`, object `data`, required fields, the same job ID/version/amount/currency as the request, and an order status of `READY`, `CONFIRMING`, `DEPOSITED`, `FAILED`, or `REVIEW_REQUIRED` (idempotent replays may return a progressed status). `SUPERSEDED` is not linked.
+- Timeouts, network errors, 408, 429, and 5xx retry with backoff. Authentication, 409, other 4xx, contract violations, snapshot mismatches, and superseded orders stay `PENDING` at the maximum delay with operator error logs. Commands are never deleted or marked successful on failure.
+- Linking locks the job row then the command row, requires the lease token and the latest issue sequence, marks the command `SUCCEEDED`, and stores `payment_order_id` plus the original payment snapshot on the job. An older command is closed as `SUPERSEDED` without linking. Order creation never changes job status.
+- Jobs created before V10 are not changed to `PAYMENT_PENDING` and get no retroactive order. They are not deposit-backed, so matching acceptance fails at the payment-lock step until they are re-created or a later re-payment path provisions an order.
+
+Reason:
+- Payment-before-publication was decided on 2026-09-22; payment-service accepts only trusted job snapshots with stable idempotency keys.
+- A response lost after payment-service created an order must converge to the original order ID, and a late or older result must not overwrite the latest link.
+- Reverting published jobs to private would abruptly block in-progress applications and matching.
+
+Implication for agents:
+- Do not publish a job on order creation or fabricate funding; `funding-status` consumption and `PAYMENT_PENDING -> OPEN` are follow-up work and must compare against the linked order and `payment_job_version`.
+- Do not re-read the current job version when retrying; use the stored command snapshot.
+- Do not log request headers, the internal secret, idempotency keys, response bodies, or raw exception messages for this call.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `docs/architecture/toss-deposit-design.md`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/PaymentOrderDispatcher.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/PaymentOrderCommandTransactionService.java`
+- `job-service/src/main/java/com/workernotfound/job/external/client/payment/PaymentOrderClient.java`
+- `job-service/src/main/resources/db/migration/V10__create_job_payment_order_commands.sql`
