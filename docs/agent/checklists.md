@@ -119,12 +119,13 @@ When opening or updating a PR, check:
 
 When merging a PR, check:
 
-- Does CodeRabbit's actual reviewed commit coverage include the current PR head and all changes, including documentation-only commits?
+- Did CodeRabbit complete an initial review of the PR's changes?
 - Do the configured review path filters include all changed paths?
-- Were follow-up changes and verification batched before pushing, then a manual `@coderabbitai review` requested when capacity was available? Automatic incremental reviews are disabled.
-- Is there no rate-limit, skipped-review, or in-progress notice for the latest changes? A green status or an older "no actionable comments" summary is not sufficient.
-- If rate-limited, was the PR kept open until the reset time, then reviewed again before continuing?
-- If automatic reviews paused after `auto_pause_after_reviewed_commits`, was `@coderabbitai review` requested and the latest head coverage confirmed? Treat this pause separately from rate-limit reset waiting; if the manual request hits a rate limit, follow the reset-and-retry step.
+- Were post-review changes assessed for security, payment, concurrency, data integrity, transaction, or external-integration risk?
+- If a post-review change introduces nontrivial behavior in those areas or its impact is unclear, were related fixes and verification batched, then a manual `@coderabbitai review` requested? Automatic incremental reviews are disabled.
+- When re-review is required, did CodeRabbit actually review the commit containing the high-risk changes? A green status with a rate-limit, skipped-review, or in-progress notice is insufficient; wait for the stated reset time before retrying.
+- If re-review is not required, were the remaining changes checked directly, relevant verification run, and the reason for skipping re-review reported?
+- If automatic reviews paused after `auto_pause_after_reviewed_commits`, was a manual review requested when the initial review or a risk-based re-review was required?
 - Was the mandatory CodeRabbit review preserved rather than replaced with the agent's own review?
 - Were its findings checked against code and project contracts, and were valid findings fixed and verified?
 - Were any unaccepted findings recorded with their reasons?
