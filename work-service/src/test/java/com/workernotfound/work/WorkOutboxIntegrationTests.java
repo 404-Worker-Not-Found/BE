@@ -145,6 +145,29 @@ class WorkOutboxIntegrationTests extends IntegrationTestSupport {
   }
 
   @Test
+  void failedAcknowledgementAndFailureRecordDoNotStopRemainingBatchEvents() {
+    checkIn();
+    attendance.start(owner(), workId);
+    long first = eventId();
+    long second = jdbc.queryForObject("SELECT id FROM work_outbox WHERE work_id = ? AND revision = 2",
+        Long.class, workId);
+    doThrow(new org.springframework.dao.DataAccessResourceFailureException("injected acknowledgement failure"))
+        .when(outbox).published(eq(first), anyString(), any());
+    doThrow(new org.springframework.dao.DataAccessResourceFailureException("injected retry failure"))
+        .when(outbox).failed(eq(first), anyString(), any());
+
+    assertThatCode(relay::relay).doesNotThrowAnyException();
+
+    assertThat(jdbc.queryForObject("SELECT published_at FROM work_outbox WHERE id = ?", LocalDateTime.class, first))
+        .isNull();
+    assertThat(jdbc.queryForObject("SELECT lease_token FROM work_outbox WHERE id = ?", String.class, first))
+        .isNotNull();
+    assertThat(jdbc.queryForObject("SELECT published_at FROM work_outbox WHERE id = ?", LocalDateTime.class, second))
+        .isNotNull();
+    assertThat(redis.opsForStream().size(properties.stream())).isEqualTo(2);
+  }
+
+  @Test
   void oneClaimWinsAndExpiredLeaseCanBeReclaimedWithoutStaleWriterOverwritingIt() throws Exception {
     checkIn();
     long id = eventId();

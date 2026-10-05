@@ -32,9 +32,14 @@ public class WorkOutboxRelay {
       publisher.publish(message);
       repository.published(message.id(), token, now());
     } catch (RuntimeException exception) {
-      repository.failed(message.id(), token, now().plus(retryDelay(message.retryCount())));
       log.warn("근무 이벤트 발행 실패: eventId={}, exceptionType={}", message.eventId(),
           exception.getClass().getSimpleName());
+      try {
+        repository.failed(message.id(), token, now().plus(retryDelay(message.retryCount())));
+      } catch (RuntimeException recordFailure) {
+        log.warn("근무 이벤트 실패 기록 실패, lease 만료로 복구: eventId={}, exceptionType={}",
+            message.eventId(), recordFailure.getClass().getSimpleName());
+      }
     }
   }
 
