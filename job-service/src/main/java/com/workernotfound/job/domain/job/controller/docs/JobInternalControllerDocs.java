@@ -1,8 +1,10 @@
 package com.workernotfound.job.domain.job.controller.docs;
 
 import com.workernotfound.job.domain.job.dto.request.ApplicationAdmissionRequest;
+import com.workernotfound.job.domain.job.dto.request.FundingStatusRequest;
 import com.workernotfound.job.domain.job.dto.request.MatchingSeatReservationRequest;
 import com.workernotfound.job.domain.job.dto.response.ApplicationAdmissionResponse;
+import com.workernotfound.job.domain.job.dto.response.FundingStatusResponse;
 import com.workernotfound.job.domain.job.dto.response.MatchingSeatReservationCommandResponse;
 import com.workernotfound.job.domain.job.dto.response.MatchingSeatReservationResponse;
 import com.workernotfound.job.global.response.ApiResponse;
@@ -134,5 +136,35 @@ public interface JobInternalControllerDocs {
             @Positive Long jobPostId,
             @Positive Long reservationId,
             @NotBlank @Size(max = 100) @Pattern(regexp = "[!-~]+") String idempotencyKey
+    );
+
+    @Operation(
+            summary = "예치 상태 수신",
+            description = "payment-service가 검증한 예치 상태를 공고에 연결된 주문의 저장 스냅샷과 대조해 반영합니다. "
+                    + "funded=true이고 결제 대기 공고가 지원 마감·근무 시작 전이면 OPEN으로 공개하고, funded=false면 "
+                    + "공고 상태는 두고 신규 지원 승인·자리 예약을 차단합니다. 같은 Idempotency-Key나 같은 주문·revision의 "
+                    + "재전송은 처음 응답을 그대로 반환하며, 낮거나 같은 revision과 이전 주문 알림은 상태를 바꾸지 않고 200으로 기록합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "수신 기록 완료(result: PUBLISHED, FUNDING_CONFIRMED, PUBLICATION_SKIPPED, "
+                            + "FUNDING_BLOCKED, STALE_REVISION, STALE_ORDER) 또는 같은 명령의 재요청",
+                    content = @Content(schema = @Schema(implementation = FundingStatusResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "내부 인증 실패", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "공고 없음 (JOB-404-001)", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "멱등 키 재사용(JOB-409-004), 주문·스냅샷 불일치(JOB-409-011), "
+                            + "같은 주문·revision의 내용 충돌(JOB-409-012), 결제 주문 연결 대기(JOB-409-013, 같은 명령으로 재시도)",
+                    content = @Content
+            )
+    })
+    ResponseEntity<ApiResponse<FundingStatusResponse>> receiveFundingStatus(
+            @Positive Long jobPostId,
+            @NotBlank @Size(max = 100) @Pattern(regexp = "[!-~]+") String idempotencyKey,
+            @Valid FundingStatusRequest request
     );
 }

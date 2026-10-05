@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.hibernate.exception.ConstraintViolationException;
@@ -24,11 +25,14 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    private static final Set<String> IDEMPOTENCY_KEY_CONSTRAINTS = Set.of(
-            "uk_job_application_admissions_idempotency_key",
-            "uk_job_matching_seat_reservations_idempotency_key",
-            "uk_job_matching_seat_reservations_confirm_key",
-            "uk_job_matching_seat_reservations_release_key");
+    // 롤백 이후 비즈니스 오류로 변환할 제약 이름과 오류 코드. 이름이 정확히 일치하는 제약만 변환한다.
+    private static final Map<String, JobErrorCode> CONSTRAINT_ERRORS = Map.of(
+            "uk_job_application_admissions_idempotency_key", JobErrorCode.IDEMPOTENCY_KEY_REUSED,
+            "uk_job_matching_seat_reservations_idempotency_key", JobErrorCode.IDEMPOTENCY_KEY_REUSED,
+            "uk_job_matching_seat_reservations_confirm_key", JobErrorCode.IDEMPOTENCY_KEY_REUSED,
+            "uk_job_matching_seat_reservations_release_key", JobErrorCode.IDEMPOTENCY_KEY_REUSED,
+            "uk_job_funding_status_receipts_idempotency_key", JobErrorCode.IDEMPOTENCY_KEY_REUSED,
+            "uk_job_funding_status_receipts_order_revision", JobErrorCode.FUNDING_REVISION_CONFLICT);
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(
@@ -110,10 +114,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleException(
             Exception exception, HttpServletRequest request) {
         // 트랜잭션 롤백이 끝난 HTTP 예외 처리 경계에서만 제약 위반을 비즈니스 오류 응답으로 변환한다.
-        if (hasIdempotencyKeyConstraintViolation(exception)) {
+        Optional<JobErrorCode> constraintError = findConstraintError(exception);
+        if (constraintError.isPresent()) {
             return error(
-                    JobErrorCode.IDEMPOTENCY_KEY_REUSED,
-                    JobErrorCode.IDEMPOTENCY_KEY_REUSED.getMessage(),
+                    constraintError.get(),
+                    constraintError.get().getMessage(),
                     request.getRequestURI(),
                     null);
         }
@@ -128,22 +133,22 @@ public class GlobalExceptionHandler {
                 null);
     }
 
-    private boolean hasIdempotencyKeyConstraintViolation(Throwable exception) {
+    private Optional<JobErrorCode> findConstraintError(Throwable exception) {
         Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Throwable cause = exception; cause != null && visited.add(cause); cause = cause.getCause()) {
-            if (cause instanceof ConstraintViolationException violation
-                    && isIdempotencyKeyConstraint(violation.getConstraintName())) {
-                return true;
+            if (cause instanceof ConstraintViolationException violation) {
+                Optional<JobErrorCode> errorCode = toConstraintError(violation.getConstraintName());
+                if (errorCode.isPresent()) return errorCode;
             }
         }
-        return false;
+        return Optional.empty();
     }
 
-    private boolean isIdempotencyKeyConstraint(String constraintName) {
-        if (constraintName == null) return false;
+    private Optional<JobErrorCode> toConstraintError(String constraintName) {
+        if (constraintName == null) return Optional.empty();
         // MySQL이 반환하는 테이블명 접두사를 제거한 뒤 정확한 제약 이름만 비교한다.
         String name = constraintName.substring(constraintName.lastIndexOf('.') + 1);
-        return IDEMPOTENCY_KEY_CONSTRAINTS.contains(name);
+        return Optional.ofNullable(CONSTRAINT_ERRORS.get(name));
     }
 
     private ResponseEntity<ApiResponse<Void>> error(

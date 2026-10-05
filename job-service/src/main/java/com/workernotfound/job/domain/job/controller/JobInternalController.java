@@ -2,8 +2,10 @@ package com.workernotfound.job.domain.job.controller;
 
 import com.workernotfound.job.domain.job.controller.docs.JobInternalControllerDocs;
 import com.workernotfound.job.domain.job.dto.request.ApplicationAdmissionRequest;
+import com.workernotfound.job.domain.job.dto.request.FundingStatusRequest;
 import com.workernotfound.job.domain.job.dto.request.MatchingSeatReservationRequest;
 import com.workernotfound.job.domain.job.dto.response.ApplicationAdmissionResponse;
+import com.workernotfound.job.domain.job.dto.response.FundingStatusResponse;
 import com.workernotfound.job.domain.job.dto.response.MatchingSeatReservationCommandResponse;
 import com.workernotfound.job.domain.job.dto.response.MatchingSeatReservationResponse;
 import com.workernotfound.job.domain.job.service.JobApplicationService;
@@ -68,6 +70,18 @@ public class JobInternalController implements JobInternalControllerDocs {
     ) {
         return ResponseEntity.ok(ApiResponse.success(
                 jobApplicationService.releaseMatchingSeat(jobPostId, reservationId, idempotencyKey)
+        ));
+    }
+
+    @Override
+    @PostMapping("/{jobPostId}/funding-status")
+    public ResponseEntity<ApiResponse<FundingStatusResponse>> receiveFundingStatus(
+            @PathVariable Long jobPostId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody FundingStatusRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                jobApplicationService.receiveFundingStatus(jobPostId, request, idempotencyKey)
         ));
     }
 }

@@ -27,6 +27,9 @@ public interface JobPaymentOrderCommandRepository extends JpaRepository<JobPayme
 
     Optional<JobPaymentOrderCommand> findByIdAndLeaseToken(Long id, String leaseToken);
 
+    // 검증을 거쳐 연결(SUCCEEDED)된 주문만 order_id가 있다. 예치 상태 알림이 이 공고의 이전 주문인지 확인할 때 쓴다.
+    Optional<JobPaymentOrderCommand> findByOrderId(String orderId);
+
     @Query("select max(c.issueSequence) from JobPaymentOrderCommand c where c.jobPostId = :jobPostId")
     Optional<Integer> findMaxIssueSequenceByJobPostId(@Param("jobPostId") Long jobPostId);
 
