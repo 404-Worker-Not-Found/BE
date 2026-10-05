@@ -1373,6 +1373,7 @@ Related files:
 Decision:
 - Recover only ACTIVE accounts that already have LOCAL credentials using a PASSWORD_RESET email code and new password submitted together. Do not create LOCAL credentials for OAuth-only accounts or use a shared email verified flag as reset authorization.
 - Keep reset codes valid for five minutes, allow five failed attempts, and atomically consume a successful code once in Redis.
+- Apply the same one-minute send rate limit to every email before account eligibility lookup. Perform BCrypt encoding only after successful reset-code consumption.
 - Change the BCrypt password and passwordChangedAt and revoke every device's refresh tokens in one auth DB transaction. Do not auto-login after reset; existing stateless access tokens retain their expiration.
 - Serialize LOCAL login, token issuance/reissue, and reset with the auth account row lock. Acquire the account lock before any refresh-token lock.
 - If DB persistence fails after code consumption, roll back DB changes and require a new code rather than restoring reset authorization.

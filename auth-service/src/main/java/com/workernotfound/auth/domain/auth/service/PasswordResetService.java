@@ -6,7 +6,6 @@ import com.workernotfound.auth.domain.account.entity.enums.MemberStatus;
 import com.workernotfound.auth.domain.account.repository.AuthAccountRepository;
 import com.workernotfound.auth.domain.account.repository.LocalCredentialRepository;
 import com.workernotfound.auth.domain.auth.dto.request.PasswordResetRequest;
-import com.workernotfound.auth.domain.auth.entity.enums.VerificationPurpose;
 import com.workernotfound.auth.domain.auth.exception.AuthErrorCode;
 import com.workernotfound.auth.domain.token.repository.RefreshTokenRepository;
 import com.workernotfound.auth.global.exception.BusinessException;
@@ -28,10 +27,11 @@ public class PasswordResetService {
 	private final PasswordEncoder passwordEncoder;
 
 	public void sendVerificationCode(String email) {
+		verificationService.reservePasswordResetEmailSend(email);
 		AuthAccount account = authAccountRepository.findByEmail(email).orElse(null);
 		if (account != null && account.getStatus() == MemberStatus.ACTIVE
 				&& localCredentialRepository.findByAuthAccount(account).isPresent()) {
-			verificationService.sendEmailVerificationCode(VerificationPurpose.PASSWORD_RESET, email);
+			verificationService.sendPasswordResetEmailCode(email);
 		}
 	}
 
@@ -45,10 +45,10 @@ public class PasswordResetService {
 		}
 		LocalCredential credential = localCredentialRepository.findByAuthAccount(account)
 				.orElseThrow(this::invalidReset);
-		String passwordHash = passwordEncoder.encode(request.newPassword());
 		if (!verificationService.consumePasswordResetCode(request.email(), request.verificationCode())) {
 			throw invalidReset();
 		}
+		String passwordHash = passwordEncoder.encode(request.newPassword());
 		LocalDateTime now = LocalDateTime.now();
 		credential.changePassword(passwordHash, now);
 		refreshTokenRepository.findAllByAuthAccountIdAndRevokedAtIsNull(account.getId())

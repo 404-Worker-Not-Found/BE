@@ -56,9 +56,20 @@ public class VerificationService {
 	private final SmsVerificationSender smsVerificationSender;
 
 	public void sendEmailVerificationCode(VerificationPurpose purpose, String email) {
-		String limitKey = emailSendRateLimitKey(purpose, email);
+		validateSendRateLimit(emailSendRateLimitKey(purpose, email));
+		sendEmailCode(purpose, email);
+	}
+
+	void reservePasswordResetEmailSend(String email) {
+		validateSendRateLimit(emailSendRateLimitKey(VerificationPurpose.PASSWORD_RESET, email));
+	}
+
+	void sendPasswordResetEmailCode(String email) {
+		sendEmailCode(VerificationPurpose.PASSWORD_RESET, email);
+	}
+
+	private void sendEmailCode(VerificationPurpose purpose, String email) {
 		String codeKey = emailCodeKey(purpose, email);
-		validateSendRateLimit(limitKey);
 		String verificationCode = verificationCodeGenerator.generate();
 		VerificationCodeReplacement replacement = replaceVerificationCode(codeKey, verificationCode, EMAIL_CODE_TTL);
 		try {

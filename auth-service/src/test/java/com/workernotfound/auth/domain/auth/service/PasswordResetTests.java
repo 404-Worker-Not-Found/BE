@@ -135,6 +135,11 @@ class PasswordResetTests extends IntegrationTestSupport {
 					.content("{\"email\":\"%s\"}".formatted(email)))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("data.message").value("재설정 가능한 계정이면 이메일 인증번호를 발송했습니다."));
+			mockMvc.perform(post("/api/auth/password-resets/email-verifications/send")
+					.contentType(MediaType.APPLICATION_JSON)
+					.content("{\"email\":\"%s\"}".formatted(email)))
+					.andExpect(status().isTooManyRequests())
+					.andExpect(jsonPath("code").value("AUTH-429-001"));
 			verify(emailVerificationSender, never()).send(eq(email), anyString());
 			assertInvalidReset(email, "123456");
 		}
