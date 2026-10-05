@@ -85,7 +85,10 @@ public class PaymentOrderClient implements PaymentOrderCreator, DisposableBean {
         this.readTimeout = properties.readTimeout();
         this.callTimeout = properties.callTimeout();
         this.objectMapper = objectMapper;
-        this.strictJsonReader = objectMapper.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+        // 금액은 소수 표기(예: 100000.00)로 온다. double로 읽으면 큰 금액의 정밀도가 사라지므로 처음부터 BigDecimal로 읽는다.
+        this.strictJsonReader = objectMapper.reader().with(
+                DeserializationFeature.FAIL_ON_TRAILING_TOKENS,
+                DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
         // HTTP 클라이언트의 비동기 작업이 쓰는 스레드 수를 고정해 반복 호출에도 스레드가 늘지 않게 한다.
         this.httpExecutor = new ThreadPoolExecutor(
                 HTTP_WORKER_THREADS, HTTP_WORKER_THREADS, 0L, TimeUnit.MILLISECONDS,

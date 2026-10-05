@@ -106,6 +106,25 @@ class PaymentOrderClientTests {
         assertFailure(PaymentOrderFailureType.SNAPSHOT_MISMATCH, 200, null);
     }
 
+    // 급여 계산기와 payment-service가 허용하는 범위의 큰 금액. double로는 정확히 표현되지 않는다.
+    @Test
+    void acceptsLargeAmountEchoedWithDecimalScale() {
+        server.enqueue(order(ORDER_ID, 10, 1, "9999999999999999.00", "KRW", "READY"));
+
+        assertThat(client(server.baseUrl()).createOrder(largeAmountRequest()))
+                .isEqualTo(new CreatedPaymentOrder(ORDER_ID, "READY"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"10000000000000000.00", "9999999999999998.00", "9999999999999999.01", "9999999999999998.99"})
+    void rejectsLargeAmountThatDiffersByOneWonOrFraction(String amount) {
+        server.enqueue(order(ORDER_ID, 10, 1, amount, "KRW", "READY"));
+
+        assertThatThrownBy(() -> client(server.baseUrl()).createOrder(largeAmountRequest()))
+                .isInstanceOfSatisfying(PaymentOrderCreationException.class, failure ->
+                        assertThat(failure.getFailureType()).isEqualTo(PaymentOrderFailureType.SNAPSHOT_MISMATCH));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {
             "",
@@ -207,6 +226,10 @@ class PaymentOrderClientTests {
             assertThat(failure.getHttpStatus()).isEqualTo(status);
             assertThat(failure.getResponseCode()).isEqualTo(code);
         });
+    }
+
+    private PaymentOrderRequest largeAmountRequest() {
+        return new PaymentOrderRequest(KEY, 10L, 1L, 20L, 9_999_999_999_999_999L, "KRW");
     }
 
     private StubResponse order(String orderId, long jobPostId, long jobVersion, String amount, String currency, String status) {
