@@ -82,8 +82,9 @@ public class PaymentOrderCommandTransactionService {
     }
 
     // 새 명령 발급도 공고 행 잠금 아래에서 하므로, 잠금을 잡은 지금의 최대 순번이 최신 명령이다.
+    // 앞선 일반 조회가 만든 읽기 스냅샷이 아니라 잠금 조회로 커밋된 최신 값을 읽는다.
     private boolean isLatestIssued(JobPaymentOrderCommand command) {
-        return commandRepository.findMaxIssueSequenceByJobPostId(command.getJobPostId())
+        return commandRepository.findCommittedMaxIssueSequenceByJobPostId(command.getJobPostId())
                 .map(command.getIssueSequence()::equals)
                 .orElse(false);
     }

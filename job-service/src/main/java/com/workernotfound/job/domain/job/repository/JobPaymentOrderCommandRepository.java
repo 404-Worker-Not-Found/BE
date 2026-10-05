@@ -30,6 +30,20 @@ public interface JobPaymentOrderCommandRepository extends JpaRepository<JobPayme
     @Query("select max(c.issueSequence) from JobPaymentOrderCommand c where c.jobPostId = :jobPostId")
     Optional<Integer> findMaxIssueSequenceByJobPostId(@Param("jobPostId") Long jobPostId);
 
+    /**
+     * 공고에 커밋된 최신 발급 순번을 잠금 조회로 읽는다. 호출자는 같은 트랜잭션에서 공고 행 잠금을 먼저 잡고 있어야 한다.
+     *
+     * <p>MySQL REPEATABLE READ의 일반 조회는 트랜잭션의 첫 일반 조회 시점 스냅샷을 계속 보므로, 공고 잠금을 기다리는 동안 다른
+     * 트랜잭션이 커밋한 새 명령을 놓칠 수 있다. 잠금 조회는 항상 최신 커밋 값을 읽는다. 새 명령 발급도 공고 행 잠금을 먼저 잡으므로
+     * 공고 잠금을 가진 동안에는 이 값이 바뀌지 않는다.
+     */
+    @Query(value = """
+            select max(issue_sequence) from job_payment_order_commands
+            where job_post_id = :jobPostId
+            for share
+            """, nativeQuery = true)
+    Optional<Integer> findCommittedMaxIssueSequenceByJobPostId(@Param("jobPostId") Long jobPostId);
+
     // 변경되지 않는 공고 ID만 잠그지 않고 읽는다. 공고 행을 명령 행보다 먼저 잠그기 위해 쓴다.
     @Query("select c.jobPostId from JobPaymentOrderCommand c where c.id = :id")
     Optional<Long> findJobPostIdById(@Param("id") Long id);
