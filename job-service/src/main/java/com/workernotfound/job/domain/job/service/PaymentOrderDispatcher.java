@@ -1,6 +1,7 @@
 package com.workernotfound.job.domain.job.service;
 
 import com.workernotfound.job.domain.job.entity.JobPaymentOrderCommand;
+import com.workernotfound.job.domain.job.entity.enums.PaymentOrderFailureType;
 import com.workernotfound.job.domain.job.exception.PaymentOrderCreationException;
 import com.workernotfound.job.domain.job.port.PaymentOrderCreator;
 import com.workernotfound.job.domain.job.port.PaymentOrderCreator.CreatedPaymentOrder;
@@ -114,10 +115,16 @@ public class PaymentOrderDispatcher {
                     + "jobPostId={}, orderId={}", dispatch.id(), dispatch.jobPostId(), order.orderId());
             case LEASE_LOST -> log.info("결제 주문 생성 결과를 기록하지 않음(실행권 만료 후 인계됨): commandId={}",
                     dispatch.id());
+            case JOB_STATE_CHANGED -> log.error("[운영 확인 필요] 교체할 수 없는 공고에 새 결제 주문이 만들어져 연결하지 않음: "
+                    + "commandId={}, jobPostId={}, orderId={}", dispatch.id(), dispatch.jobPostId(), order.orderId());
         }
     }
 
     private void recordFailure(PaymentOrderDispatch dispatch, PaymentOrderCreationException failure) {
+        if (isReplacementRejected(dispatch, failure)) {
+            recordRejection(dispatch, failure);
+            return;
+        }
         LocalDateTime now = storedNow();
         LocalDateTime nextAttemptAt = JobPaymentOrderCommand.toStoredTime(now.plus(retryDelay(dispatch, failure)));
         if (!transactionService.markFailed(dispatch.id(), dispatch.leaseToken(), failure, nextAttemptAt, now)) {
@@ -125,6 +132,25 @@ public class PaymentOrderDispatcher {
             return;
         }
         logFailure(dispatch, failure, nextAttemptAt);
+    }
+
+    /**
+     * 이미 연결된 주문을 교체하는 명령에 대한 409는 payment-service가 자신의 잠금 안에서 교체를 거절한 확정 결과다(이전 주문이
+     * READY·FAILED가 아니거나 같은 버전의 READY). payment-service는 거절한 요청을 롤백하므로 주문이 없고 키도 남지 않는다.
+     * 최초 주문 생성의 409는 기존과 같이 운영 확인 대상으로 남긴다. 타임아웃·5xx·잘못된 응답은 결과 불명이므로 거절로 보지 않는다.
+     */
+    private boolean isReplacementRejected(PaymentOrderDispatch dispatch, PaymentOrderCreationException failure) {
+        return dispatch.isReplacement() && failure.getFailureType() == PaymentOrderFailureType.CONFLICT;
+    }
+
+    private void recordRejection(PaymentOrderDispatch dispatch, PaymentOrderCreationException failure) {
+        if (!transactionService.recordRejected(dispatch.id(), dispatch.leaseToken(), failure, storedNow())) {
+            log.info("결제 주문 교체 거절을 기록하지 않음(실행권 만료 후 인계됨): commandId={}", dispatch.id());
+            return;
+        }
+        log.warn("결제 주문 교체 거절로 결제 변경 요청 종료(기존 조건·주문 유지): commandId={}, jobPostId={}, jobVersion={}, "
+                        + "status={}, code={}", dispatch.id(), dispatch.jobPostId(), dispatch.request().jobVersion(),
+                failure.getHttpStatus(), failure.getResponseCode());
     }
 
     // 일시 오류는 시도마다 두 배로 늘리되 최대 지연을 넘지 않는다. 그 밖의 오류는 원인 확인 전까지 최대 지연으로만 다시 확인한다.

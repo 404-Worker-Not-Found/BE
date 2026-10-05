@@ -13,6 +13,7 @@ import com.workernotfound.job.domain.job.entity.enums.JobStatus;
  *
  * @param paymentJobVersion 주문 금액을 계산한 결제용 공고 버전. 현재 공고 버전과 다를 수 있다.
  * @param amount            전체 예치 예정액(정수 KRW)
+ * @param latestChange      가장 최근의 결제 조건 변경·재결제 요청. 없으면 null. {@code PENDING}인 동안 위 필드는 이전 주문이다.
  */
 public record JobPaymentOrderResponse(
         Long jobPostId,
@@ -21,7 +22,8 @@ public record JobPaymentOrderResponse(
         String paymentOrderId,
         Long paymentJobVersion,
         Long amount,
-        String currency
+        String currency,
+        JobPaymentChangeResponse latestChange
 ) {
 
     public enum OrderCreationStatus {
@@ -33,7 +35,7 @@ public record JobPaymentOrderResponse(
         CREATED
     }
 
-    public static JobPaymentOrderResponse linked(JobPost jobPost) {
+    public static JobPaymentOrderResponse linked(JobPost jobPost, JobPaymentChangeResponse latestChange) {
         return new JobPaymentOrderResponse(
                 jobPost.getId(),
                 jobPost.getStatus(),
@@ -41,7 +43,8 @@ public record JobPaymentOrderResponse(
                 jobPost.getPaymentOrderId(),
                 jobPost.getPaymentJobVersion(),
                 jobPost.getPaymentAmount(),
-                jobPost.getPaymentCurrency()
+                jobPost.getPaymentCurrency(),
+                latestChange
         );
     }
 
@@ -53,12 +56,13 @@ public record JobPaymentOrderResponse(
                 null,
                 command.getJobVersion(),
                 command.getAmount(),
-                command.getCurrency()
+                command.getCurrency(),
+                null
         );
     }
 
     public static JobPaymentOrderResponse notRequested(JobPost jobPost) {
         return new JobPaymentOrderResponse(
-                jobPost.getId(), jobPost.getStatus(), OrderCreationStatus.NOT_REQUESTED, null, null, null, null);
+                jobPost.getId(), jobPost.getStatus(), OrderCreationStatus.NOT_REQUESTED, null, null, null, null, null);
     }
 }

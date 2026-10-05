@@ -2,7 +2,9 @@ package com.workernotfound.job.domain.job.controller.docs;
 
 import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
+import com.workernotfound.job.domain.job.dto.request.UpdatePaymentTermsRequest;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
+import com.workernotfound.job.domain.job.dto.response.JobPaymentChangeResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentOrderResponse;
 import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
 import com.workernotfound.job.global.config.OpenApiConfig;
@@ -16,6 +18,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
 
 @Tag(name = "Job", description = "공고 API")
@@ -71,6 +76,60 @@ public interface JobControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "공고 없음 또는 본인 공고 아님", content = @Content)
     })
     ResponseEntity<ApiResponse<JobPaymentOrderResponse>> getPaymentOrder(@Parameter(hidden = true) MemberClaims claims, Long id);
+
+    @Operation(
+            summary = "공고 결제 조건 변경(점주 본인)",
+            description = "결제 대기(PAYMENT_PENDING) 공고의 근무일·시작/종료 시각·익일 여부·기본 시급·시간당 추가 시급·모집 인원·"
+                    + "지원 마감을 바꾸고 새 결제 주문을 요청합니다. 변경 후 전체 조건을 보냅니다. 새 주문이 확인·연결되기 전까지 공고는 "
+                    + "이전 조건과 이전 주문을 유지하며(status=PENDING), 연결되면 조건이 적용됩니다(APPLIED). payment-service가 이전 주문의 "
+                    + "교체를 거절하면(결제 확인 중·예치 완료·검토 필요) REJECTED로 끝나고 공고는 그대로입니다. 같은 Idempotency-Key의 같은 "
+                    + "요청은 현재 처리 상태를 반환하고, 다른 요청에 같은 키를 쓰면 409입니다. 공개·마감 공고와 진행 중인 주문 생성이 있는 "
+                    + "공고는 409입니다. 새 주문의 예치가 확인돼야 공개됩니다.",
+            security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "변경 요청 접수 또는 같은 키의 기존 요청 상태",
+                    content = @Content(schema = @Schema(implementation = JobPaymentChangeResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "입력 오류, 근무 시간(JOB-400-001)·지원 마감(JOB-400-002)·금액(JOB-400-004) 오류, 변경 없음(JOB-400-005)", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 요청", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "OWNER가 아님", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "공고 없음 또는 본인 공고 아님", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "멱등 키 재사용(JOB-409-004), 변경할 수 없는 공고(JOB-409-014), 진행 중인 주문 생성(JOB-409-015)", content = @Content)
+    })
+    ResponseEntity<ApiResponse<JobPaymentChangeResponse>> changePaymentTerms(
+            @Parameter(hidden = true) MemberClaims claims,
+            Long id,
+            @NotBlank @Size(max = 100) @Pattern(regexp = "[!-~]+") String idempotencyKey,
+            @Valid UpdatePaymentTermsRequest request
+    );
+
+    @Operation(
+            summary = "공고 재결제(점주 본인)",
+            description = "결제 대기 공고의 연결된 주문과 같은 조건·같은 결제용 버전으로 새 결제 주문을 요청합니다. payment-service는 결과가 "
+                    + "확인된 FAILED 주문만 같은 조건으로 교체하므로, READY 주문은 기존 주문으로 다시 결제하고 결제 확인 중·예치 완료·검토 필요 "
+                    + "주문은 REJECTED가 됩니다. 응답과 멱등 규칙은 결제 조건 변경과 같습니다.",
+            security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "재결제 요청 접수 또는 같은 키의 기존 요청 상태",
+                    content = @Content(schema = @Schema(implementation = JobPaymentChangeResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Idempotency-Key 누락·형식 오류", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 요청", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "OWNER가 아님", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "공고 없음 또는 본인 공고 아님", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "멱등 키 재사용(JOB-409-004), 재결제할 수 없는 공고(JOB-409-014), 진행 중인 주문 생성(JOB-409-015)", content = @Content)
+    })
+    ResponseEntity<ApiResponse<JobPaymentChangeResponse>> retryPayment(
+            @Parameter(hidden = true) MemberClaims claims,
+            Long id,
+            @NotBlank @Size(max = 100) @Pattern(regexp = "[!-~]+") String idempotencyKey
+    );
 
     @Operation(
             summary = "공고 목록 조회",

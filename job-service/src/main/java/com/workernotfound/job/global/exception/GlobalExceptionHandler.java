@@ -32,7 +32,8 @@ public class GlobalExceptionHandler {
             "uk_job_matching_seat_reservations_confirm_key", JobErrorCode.IDEMPOTENCY_KEY_REUSED,
             "uk_job_matching_seat_reservations_release_key", JobErrorCode.IDEMPOTENCY_KEY_REUSED,
             "uk_job_funding_status_receipts_idempotency_key", JobErrorCode.IDEMPOTENCY_KEY_REUSED,
-            "uk_job_funding_status_receipts_order_revision", JobErrorCode.FUNDING_REVISION_CONFLICT);
+            "uk_job_funding_status_receipts_order_revision", JobErrorCode.FUNDING_REVISION_CONFLICT,
+            "uk_job_payment_change_requests_idempotency_key", JobErrorCode.IDEMPOTENCY_KEY_REUSED);
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(

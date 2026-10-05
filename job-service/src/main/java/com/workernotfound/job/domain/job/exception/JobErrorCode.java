@@ -16,6 +16,7 @@ public enum JobErrorCode implements ErrorCode {
     INVALID_APPLICATION_DEADLINE("JOB-400-002", "지원 마감 시간이 올바르지 않습니다.", HttpStatus.BAD_REQUEST),
     INVALID_SEARCH_CONDITION("JOB-400-003", "검색 조건이 올바르지 않습니다.", HttpStatus.BAD_REQUEST),
     INVALID_WAGE_AMOUNT("JOB-400-004", "급여 계산 금액이 허용 범위를 벗어났습니다.", HttpStatus.BAD_REQUEST),
+    PAYMENT_TERMS_UNCHANGED("JOB-400-005", "변경된 결제 조건이 없습니다. 같은 조건의 재결제는 재결제 요청을 사용하세요.", HttpStatus.BAD_REQUEST),
     JOB_NOT_OPEN("JOB-409-001", "지원을 받지 않는 공고입니다.", HttpStatus.CONFLICT),
     APPLICATION_DEADLINE_PASSED("JOB-409-002", "지원 마감 시간이 지났습니다.", HttpStatus.CONFLICT),
     ADMISSION_EXPIRED("JOB-409-003", "지원 접수 승인이 만료되었습니다. 새 요청으로 다시 시도하세요.", HttpStatus.CONFLICT),
@@ -28,7 +29,9 @@ public enum JobErrorCode implements ErrorCode {
     SEAT_RESERVATION_STATE_CONFLICT("JOB-409-010", "모집 자리 예약 상태와 맞지 않는 요청입니다.", HttpStatus.CONFLICT),
     FUNDING_ORDER_MISMATCH("JOB-409-011", "공고의 결제 주문과 일치하지 않는 예치 상태 알림입니다.", HttpStatus.CONFLICT),
     FUNDING_REVISION_CONFLICT("JOB-409-012", "같은 주문과 revision의 예치 상태 알림 내용이 다릅니다.", HttpStatus.CONFLICT),
-    FUNDING_ORDER_LINK_PENDING("JOB-409-013", "결제 주문 연결이 끝나지 않아 예치 상태를 아직 반영할 수 없습니다. 같은 명령으로 다시 시도하세요.", HttpStatus.CONFLICT);
+    FUNDING_ORDER_LINK_PENDING("JOB-409-013", "결제 주문 연결이 끝나지 않아 예치 상태를 아직 반영할 수 없습니다. 같은 명령으로 다시 시도하세요.", HttpStatus.CONFLICT),
+    PAYMENT_CHANGE_NOT_ALLOWED("JOB-409-014", "결제 조건을 변경하거나 재결제할 수 없는 공고입니다.", HttpStatus.CONFLICT),
+    PAYMENT_CHANGE_IN_PROGRESS("JOB-409-015", "진행 중인 결제 주문 생성·교체가 있습니다. 결과가 확인된 뒤 다시 시도하세요.", HttpStatus.CONFLICT);
 
     private final String code;
     private final String message;

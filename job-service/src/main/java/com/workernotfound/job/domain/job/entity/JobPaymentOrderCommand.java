@@ -149,6 +149,31 @@ public class JobPaymentOrderCommand extends BaseEntity {
         complete(now);
     }
 
+    /**
+     * payment-service가 주문 교체를 확정적으로 거절했다(주문 없음). 거절 응답의 분류와 코드를 남기고 종료하며, 이 키는 다시 보내지 않는다.
+     */
+    public void reject(PaymentOrderFailureType failureType, Integer httpStatus, String failureCode, LocalDateTime now) {
+        this.status = PaymentOrderCommandStatus.REJECTED;
+        this.lastFailureType = failureType;
+        this.lastFailureHttpStatus = httpStatus;
+        this.lastFailureCode = failureCode;
+        complete(now);
+    }
+
+    /**
+     * 주문은 만들어졌지만 공고가 더 이상 교체할 수 없는 상태라 연결하지 않고 종료한다. 주문 ID는 남겨, 이 주문의 늦은 예치 알림을
+     * 이 공고의 이전 주문으로 판별하게 한다.
+     */
+    public void supersedeUnlinked(String orderId, LocalDateTime now) {
+        this.status = PaymentOrderCommandStatus.SUPERSEDED;
+        this.orderId = orderId;
+        complete(now);
+    }
+
+    public boolean isPending() {
+        return status == PaymentOrderCommandStatus.PENDING;
+    }
+
     private void complete(LocalDateTime now) {
         this.completedAt = toStoredTime(now);
         this.leaseToken = null;

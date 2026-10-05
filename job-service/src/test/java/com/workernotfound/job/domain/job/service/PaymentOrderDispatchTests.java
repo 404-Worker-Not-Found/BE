@@ -349,7 +349,7 @@ class PaymentOrderDispatchTests extends IntegrationTestSupport {
         JobPaymentOrderCommand command = createJob();
         claimAsCrashedExecutor(command);
         // 실행권을 가진 실행자가 주문 생성 응답까지 받은 뒤 결과를 기록하지 못하고 멈췄다.
-        creator.createOrder(PaymentOrderDispatch.from(reload(command)).request());
+        creator.createOrder(PaymentOrderDispatch.from(reload(command), false).request());
         assertThat(jobOf(command).getPaymentOrderId()).isNull();
         String originalOrderId = SERVER.issuedOrderId(command.getIdempotencyKey());
 

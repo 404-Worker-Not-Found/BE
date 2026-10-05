@@ -55,6 +55,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/jobs/*/payment-order").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/api/jobs/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/jobs").hasRole("OWNER")
+                        // 점주 본인 공고의 결제 조건 변경과 재결제. 소유자는 서비스가 JWT 회원 ID로 확인한다.
+                        .requestMatchers(HttpMethod.PUT, "/api/jobs/*/payment-terms").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.POST, "/api/jobs/*/payment-order/retries").hasRole("OWNER")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(internalSecretAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
