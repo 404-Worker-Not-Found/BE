@@ -2,6 +2,7 @@ package com.workernotfound.member.domain.member.service;
 
 import com.workernotfound.member.domain.location.entity.Location;
 import com.workernotfound.member.domain.member.dto.request.*;
+import com.workernotfound.member.domain.member.dto.request.UpdateMyMemberRequest.UpdateWorkerProfileRequest;
 import com.workernotfound.member.domain.member.dto.response.MyMemberResponse;
 import com.workernotfound.member.domain.member.entity.Member;
 import com.workernotfound.member.domain.member.entity.enums.MemberStatus;

@@ -1,9 +1,11 @@
 package com.workernotfound.auth.domain.account.controller.docs;
 
 import com.workernotfound.auth.domain.account.dto.*;
+import com.workernotfound.auth.domain.account.service.WithdrawalTransactionService;
 import com.workernotfound.auth.domain.auth.dto.request.*;
 import com.workernotfound.auth.domain.token.service.AuthTokenClaims;
 import com.workernotfound.auth.global.response.ApiResponse;
+import io.swagger.v3.oas.annotations.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -20,4 +22,12 @@ public interface AccountContactControllerDocs {
 	ResponseEntity<ApiResponse<AccountChangeResponse>> changeContact(@Parameter(hidden = true) AuthTokenClaims claims, UUID key, ContactChangeRequest request);
 	@Operation(summary = "연락처 변경 처리 상태")
 	ResponseEntity<ApiResponse<AccountChangeResponse>> getCommand(@Parameter(hidden = true) AuthTokenClaims claims, UUID id);
+
+@SecurityRequirement(name="bearerAuth")
+interface WithdrawalDocs {
+    @Operation(summary="회원 탈퇴",description="진행 중 지원·매칭·근무·결제는 탈퇴를 차단합니다. UUID 멱등 키로 처리 결과를 추적합니다. 성공 후 기존 토큰은 거절됩니다.")
+    ResponseEntity<ApiResponse<WithdrawalTransactionService.State>> withdraw(@Parameter(hidden=true) AuthTokenClaims claims, UUID key);
+    @Operation(summary="탈퇴 처리 상태 조회")
+    ResponseEntity<ApiResponse<WithdrawalTransactionService.State>> get(@Parameter(hidden=true) AuthTokenClaims claims, UUID key);
+}
 }

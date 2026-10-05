@@ -1,6 +1,6 @@
 package com.workernotfound.auth.domain.account.controller;
 
-import com.workernotfound.auth.domain.account.controller.docs.AccountWithdrawalControllerDocs;
+import com.workernotfound.auth.domain.account.controller.docs.AccountContactControllerDocs.WithdrawalDocs;
 import com.workernotfound.auth.domain.account.service.*;
 import com.workernotfound.auth.domain.token.service.AuthTokenClaims;
 import com.workernotfound.auth.global.response.ApiResponse;
@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/auth/account/withdrawals")
-public class AccountWithdrawalController implements AccountWithdrawalControllerDocs {
+public class AccountWithdrawalController implements WithdrawalDocs {
 	private final WithdrawalTransactionService transactions;
 	private final WithdrawalDispatcher dispatcher;
     @Override @PostMapping

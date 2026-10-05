@@ -1,11 +1,16 @@
 package com.workernotfound.member.global.account;
 
 import com.workernotfound.member.domain.member.service.MemberWithdrawalService;
+import com.workernotfound.member.global.exception.*;
 import com.workernotfound.member.global.exception.BusinessException;
 import com.workernotfound.member.global.exception.GlobalErrorCode;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.*;
 
@@ -73,4 +78,14 @@ public class AccountGateService {
     }
     private record Gate(String state, String command) {}
     public record Result(Long memberId, String commandId, String state) {}
+}
+
+@Component
+class AccountInternalAuthorization {
+    @Value("${member.internal.secret:}") private String secret;
+    public void verify(String supplied) {
+        if (secret.isBlank() || supplied == null || !MessageDigest.isEqual(secret.getBytes(StandardCharsets.UTF_8), supplied.getBytes(StandardCharsets.UTF_8))) {
+            throw new BusinessException(GlobalErrorCode.UNAUTHORIZED);
+        }
+    }
 }
