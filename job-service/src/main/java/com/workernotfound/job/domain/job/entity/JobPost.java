@@ -82,6 +82,18 @@ public class JobPost extends BaseEntity {
     @Column(nullable = false)
     private Long version = 1L;
 
+    // 검증된 결제 주문과 그 주문을 만든 원래 결제 스냅샷. 주문 생성이 완료되기 전에는 null이다.
+    // 결제용 버전은 현재 @Version이 아니라 주문 생성 명령 발급 당시의 버전이다.
+    @Column(length = 64)
+    private String paymentOrderId;
+
+    private Long paymentJobVersion;
+
+    private Long paymentAmount;
+
+    @Column(length = 3)
+    private String paymentCurrency;
+
     @Builder
     private JobPost(
             Long businessId,
@@ -123,6 +135,17 @@ public class JobPost extends BaseEntity {
         this.applicationDeadline = applicationDeadline;
         // 검증된 예치가 반영되기 전까지 비공개로 저장한다. 공개(OPEN) 전환은 예치 상태 수신 후속 작업이 맡는다.
         this.status = JobStatus.PAYMENT_PENDING;
+    }
+
+    /**
+     * 주문 생성 명령의 검증된 결과를 연결한다. 상태는 바꾸지 않는다. 주문 생성만으로 공고를 공개하지 않으며 공개는 예치 확인 후의 일이다.
+     * 호출자는 같은 트랜잭션에서 공고 행 잠금을 잡고, 이 명령이 공고의 최신 명령인지 확인해야 한다.
+     */
+    public void linkPaymentOrder(String orderId, Long jobVersion, Long amount, String currency) {
+        this.paymentOrderId = orderId;
+        this.paymentJobVersion = jobVersion;
+        this.paymentAmount = amount;
+        this.paymentCurrency = currency;
     }
 
     // 결제 대기 공고는 인증된 점주 본인에게만 보인다. 공개 이후 상태의 조회 정책은 바꾸지 않는다.
