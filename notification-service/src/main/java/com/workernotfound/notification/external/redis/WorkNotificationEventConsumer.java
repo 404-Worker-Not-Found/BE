@@ -20,6 +20,7 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(name = "notification.work-events.enabled", havingValue = "true", matchIfMissing = true)
 public class WorkNotificationEventConsumer {
   private static final String GROUP = "notification-work-v1";
+  private static final Set<String> SUPPORTED_EVENTS = Set.of("WorkCheckedIn", "WorkStarted", "WorkCompleted");
   // One logical consumer across replicas: every replica can recover its pending deliveries.
   // Concurrent delivery is safe because MySQL serializes notification updates and event receipts.
   private static final String CONSUMER = "notification-work";
@@ -90,7 +91,7 @@ public class WorkNotificationEventConsumer {
   private void process(List<MapRecord<String, Object, Object>> records) {
     for (var record : records) {
       try {
-        if (Set.of("WorkCheckedIn", "WorkStarted", "WorkCompleted").contains(record.getValue().get("eventType"))) {
+        if (isSupported(record.getValue())) {
           service.receive(parse(record.getValue()));
         }
         // The service transaction has committed before acknowledgment. Never trim the stream.
@@ -102,6 +103,13 @@ public class WorkNotificationEventConsumer {
             exception.getClass().getSimpleName());
       }
     }
+  }
+
+  private boolean isSupported(Map<Object, Object> fields) throws JsonProcessingException {
+    if (fields.get("eventType") instanceof String type && SUPPORTED_EVENTS.contains(type)) return true;
+    if (!(fields.get("payload") instanceof String payload)) return false;
+    var event = mapper.readTree(payload);
+    return event != null && SUPPORTED_EVENTS.contains(event.path("eventType").asText());
   }
 
   private WorkNotificationEvent parse(Map<Object, Object> fields) throws JsonProcessingException {

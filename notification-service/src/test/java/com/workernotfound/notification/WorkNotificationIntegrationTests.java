@@ -169,6 +169,38 @@ class WorkNotificationIntegrationTests extends IntegrationTestSupport {
   }
 
   @Test
+  void supportedPayloadWithMissingOrUnsupportedEnvelopeTypeRemainsPending() throws Exception {
+    redis.delete(STREAM);
+    var missing = event("WorkCheckedIn", "WORKER");
+    var missingType = new HashMap<>(fields(missing));
+    missingType.remove("eventType");
+    redis.opsForStream().add(StreamRecords.newRecord().in(STREAM).ofMap(missingType));
+    var mismatched = event("WorkStarted", "OWNER");
+    var unsupportedType = new HashMap<>(fields(mismatched));
+    unsupportedType.put("eventType", "UnknownWorkEvent");
+    redis.opsForStream().add(StreamRecords.newRecord().in(STREAM).ofMap(unsupportedType));
+    var valid = event("WorkCompleted", "OWNER");
+    redis.opsForStream().add(StreamRecords.newRecord().in(STREAM).ofMap(fields(valid)));
+    var unknown = event("WorkStarted", "OWNER");
+    var unknownPayload = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.valueToTree(unknown);
+    unknownPayload.put("eventType", "UnknownWorkEvent");
+    var unsupported = new HashMap<>(fields(unknown));
+    unsupported.put("eventType", "UnknownWorkEvent");
+    unsupported.put("payload", mapper.writeValueAsString(unknownPayload));
+    redis.opsForStream().add(StreamRecords.newRecord().in(STREAM).ofMap(unsupported));
+
+    consumer.poll();
+
+    assertThat(redis.opsForStream().pending(STREAM, "notification-work-v1").getTotalPendingMessages()).isEqualTo(2);
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id IN (?, ?)",
+        Long.class, missing.eventId(), mismatched.eventId())).isZero();
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id = ?", Long.class,
+        valid.eventId())).isEqualTo(1);
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id = ?", Long.class,
+        unknown.eventId())).isZero();
+  }
+
+  @Test
   void olderWorkEventArrivingLaterIsRetainedAsSeparateHistory() throws Exception {
     var completed = event("WorkCompleted", "OWNER");
     events.receive(completed);
