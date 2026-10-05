@@ -13,6 +13,7 @@ public enum AuthErrorCode implements ErrorCode {
 	EMAIL_NOT_VERIFIED("AUTH-400-001", "이메일 인증이 완료되지 않았습니다.", HttpStatus.BAD_REQUEST),
 	PHONE_NOT_VERIFIED("AUTH-400-002", "휴대폰 인증이 완료되지 않았습니다.", HttpStatus.BAD_REQUEST),
 	INVALID_SIGNUP_TICKET("AUTH-400-003", "OAuth signup ticket이 유효하지 않습니다.", HttpStatus.BAD_REQUEST),
+	INVALID_PASSWORD_RESET("AUTH-400-004", "비밀번호 재설정 요청이 유효하지 않습니다.", HttpStatus.BAD_REQUEST),
 	EMAIL_ALREADY_EXISTS("AUTH-409-001", "이미 가입된 이메일입니다.", HttpStatus.CONFLICT),
 	OAUTH_ALREADY_CONNECTED("AUTH-409-002", "이미 연결된 OAuth 계정입니다.", HttpStatus.CONFLICT),
 	VERIFICATION_RATE_LIMITED(

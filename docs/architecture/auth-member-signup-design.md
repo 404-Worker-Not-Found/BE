@@ -506,6 +506,13 @@ POST /api/auth/logout
 
 refresh token 폐기
 
+```text
+POST /api/auth/password-resets/email-verifications/send
+POST /api/auth/password-resets
+```
+
+비밀번호 재설정용 이메일 인증번호 발송 및 비밀번호 변경. 상세 계약은 아래 계정 복구 흐름을 따른다.
+
 ### member-service
 
 ```text
@@ -699,3 +706,27 @@ public interface BusinessVerificationService {
 - 초기에는 auth-service가 member-service의 내부 보상 삭제 API를 호출해 생성된 member/profile/location을 삭제한다.
 - member-service의 보상 삭제는 통합 테스트로 `Member`, 역할별 Profile, Location, Worker child record 삭제를 검증한다.
 - 추후 장애 격리와 재처리가 중요해지면 이벤트 기반 saga 또는 outbox 패턴을 검토한다.
+
+## 이메일 기반 계정 복구 흐름
+
+1. 인증 없이 `POST /api/auth/password-resets/email-verifications/send`에 `email`을 제출한다.
+2. `ACTIVE` 상태이고 `LocalCredential`이 있는 계정에만 기존 이메일 발송기를 통해 인증번호를 보낸다. OAuth만 연결된 계정에는 LOCAL 비밀번호를 새로 만들지 않는다. LOCAL과 OAuth를 함께 사용하는 계정은 기존 LOCAL 비밀번호를 재설정할 수 있다.
+3. 계정 조회 전에 모든 이메일 주소에 동일한 1분 발송 제한을 적용한다. 최초 요청은 계정 존재 여부에 관계없이 같은 200 응답 메시지를 반환하고, 1분 이내 재요청은 동일하게 429를 반환한다. 실제 발송 실패(502) 계약은 유지한다. 응답 시간과 발송 오류까지 동일하게 만드는 정책은 포함하지 않는다.
+4. `POST /api/auth/password-resets`에 `email`, 6자리 `verificationCode`, `newPassword`를 함께 제출한다. 별도의 인증 성공 플래그로 재설정을 허가하지 않는다.
+5. `PASSWORD_RESET` 이메일 인증번호는 5분 동안 유효하다. Redis Lua로 비교, 실패 횟수 증가, 성공 시 소비를 원자적으로 처리한다. 5회 실패하면 인증번호를 폐기한다. `SIGNUP` 인증번호·이메일 인증 성공·SMS 인증은 재설정을 허가하지 않는다.
+6. 새 비밀번호는 가입 정책과 같은 8~100자이며, BCrypt 입력 한계에 맞춰 UTF-8 72바이트를 넘으면 거절한다. 인증번호 검증이 성공한 뒤에만 BCrypt 인코딩을 실행해 저장하고 `passwordChangedAt`을 갱신한다.
+7. 비밀번호 변경과 모든 기기의 미폐기 refresh token 폐기는 하나의 auth DB 트랜잭션으로 처리한다. 재설정 응답은 공통 `ApiResponse<Void>`의 200이며 자동 로그인하지 않는다.
+8. LOCAL 로그인, 토큰 발급·재발급, 재설정은 계정 행 잠금을 공유한다. 재발급은 계정 ID 조회 → 계정 잠금 → refresh token 잠금 순서로 처리해 재설정과 교차하여 세션이 남는 것을 방지한다.
+9. 존재하지 않는 계정, 비활성 계정, LOCAL 비밀번호가 없는 계정, 잘못되거나 만료된 인증번호는 동일한 `AUTH-400-004` 오류를 반환한다.
+
+요청 예시:
+
+```json
+{
+  "email": "member@example.com",
+  "verificationCode": "123456",
+  "newPassword": "new-password123"
+}
+```
+
+Redis와 MySQL 사이에는 분산 트랜잭션이 없다. 인증번호 소비 뒤 DB 저장이 실패하면 비밀번호와 refresh token 변경은 함께 롤백되지만 인증번호는 복원하지 않는다. 사용자는 발송 제한 시간이 지난 뒤 새 인증번호를 요청해야 한다. 이미 발급된 stateless access token은 기존 15분 만료까지 유효하다.

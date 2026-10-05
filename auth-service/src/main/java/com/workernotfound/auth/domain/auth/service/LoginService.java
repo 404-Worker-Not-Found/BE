@@ -29,7 +29,7 @@ public class LoginService {
 	public LoginResponse login(LoginRequest request) {
 		AuthAccount authAccount =
 				authAccountRepository
-						.findByEmail(request.email())
+						.findByEmailForUpdate(request.email())
 						.orElseThrow(() -> new AuthenticationException(AuthErrorCode.INVALID_CREDENTIALS));
 		validateActiveAccount(authAccount);
 

@@ -1366,3 +1366,21 @@ Related files:
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/PaymentOrderCommandTransactionService.java`
 - `job-service/src/main/java/com/workernotfound/job/external/client/payment/PaymentOrderClient.java`
 - `job-service/src/main/resources/db/migration/V10__create_job_payment_order_commands.sql`
+
+
+## 2026-10-05 - Email-Code Password Reset
+
+Decision:
+- Recover only ACTIVE accounts that already have LOCAL credentials using a PASSWORD_RESET email code and new password submitted together. Do not create LOCAL credentials for OAuth-only accounts or use a shared email verified flag as reset authorization.
+- Keep reset codes valid for five minutes, allow five failed attempts, and atomically consume a successful code once in Redis.
+- Apply the same one-minute send rate limit to every email before account eligibility lookup. Perform BCrypt encoding only after successful reset-code consumption.
+- Change the BCrypt password and passwordChangedAt and revoke every device's refresh tokens in one auth DB transaction. Do not auto-login after reset; existing stateless access tokens retain their expiration.
+- Serialize LOCAL login, token issuance/reissue, and reset with the auth account row lock. Acquire the account lock before any refresh-token lock.
+- If DB persistence fails after code consumption, roll back DB changes and require a new code rather than restoring reset authorization.
+
+Reason:
+- Account recovery must prove email possession for this operation, prevent proof reuse, and prevent an old password or refresh token from leaving a usable refresh session across reset.
+
+Related files:
+- `docs/architecture/auth-member-signup-design.md`
+- `auth-service`
