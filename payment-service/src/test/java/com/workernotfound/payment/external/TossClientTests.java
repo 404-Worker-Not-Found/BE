@@ -16,7 +16,7 @@ import org.springframework.web.client.RestClient;
 class TossClientTests {
   @Test
   void sendsServerAmountAndStableIdempotencyKeyAndParsesOnlyNeededFields() {
-    var props = new TossProperties(true, "test_sk_fixture");
+    var props = new TossProperties(true, "test_sk_fixture", null);
     var builder =
         RestClient.builder()
             .baseUrl("https://api.tosspayments.com")
@@ -52,7 +52,7 @@ class TossClientTests {
     server
         .expect(requestTo("https://api.tosspayments.com/v1/payments/key-1"))
         .andRespond(withStatus(HttpStatus.BAD_REQUEST).body("sensitive provider details"));
-    var client = new TossClient(builder.build(), new TossProperties(true, "test_sk_fixture"));
+    var client = new TossClient(builder.build(), new TossProperties(true, "test_sk_fixture", null));
     assertThatThrownBy(() -> client.getPayment("key-1"))
         .isInstanceOf(BusinessException.class)
         .hasMessageNotContaining("sensitive");
@@ -61,14 +61,29 @@ class TossClientTests {
 
   @Test
   void disabledIntegrationMakesNoRequestsAndLiveKeysAreRejected() {
-    assertThatThrownBy(() -> new TossProperties(true, "live_sk_not_allowed"))
+    assertThatThrownBy(() -> new TossProperties(true, "live_sk_not_allowed", null))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new TossProperties(true, ""))
+    assertThatThrownBy(() -> new TossProperties(true, "", null))
         .isInstanceOf(IllegalArgumentException.class);
-    var client = new TossClient(RestClient.create(), new TossProperties(false, ""));
+    var client = new TossClient(RestClient.create(), new TossProperties(false, "", null));
     assertThatThrownBy(() -> client.confirm("order-1", "key", BigDecimal.ONE))
         .isInstanceOf(BusinessException.class);
-    assertThat(new TossProperties(true, "test_sk_fixture").toString())
+    assertThat(new TossProperties(true, "test_sk_fixture", null).toString())
         .doesNotContain("test_sk_fixture");
+  }
+
+  @Test
+  void apiBaseUrlDefaultsToTossAndAllowsOnlyLoopbackDoubles() {
+    assertThat(new TossProperties(false, "", null).apiBaseUrl())
+        .isEqualTo(TossProperties.DEFAULT_API_BASE_URL);
+    assertThat(new TossProperties(true, "test_sk_fixture", "http://127.0.0.1:18080").apiBaseUrl())
+        .isEqualTo("http://127.0.0.1:18080");
+    // 시크릿 키를 Basic 인증으로 보내므로 다른 원격 주소는 HTTPS여도 거절한다.
+    for (String url :
+        new String[] {"https://example.com", "http://10.0.0.5:8080", "ftp://localhost", "not a url"}) {
+      assertThatThrownBy(() -> new TossProperties(true, "test_sk_fixture", url))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageNotContaining("test_sk_fixture");
+    }
   }
 }
