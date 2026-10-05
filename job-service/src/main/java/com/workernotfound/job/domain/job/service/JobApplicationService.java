@@ -1,6 +1,8 @@
 package com.workernotfound.job.domain.job.service;
 
 import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
+import com.workernotfound.job.domain.job.dto.request.FundingStatusRequest;
+import com.workernotfound.job.domain.job.dto.response.FundingStatusResponse;
 import com.workernotfound.job.domain.job.dto.response.ApplicationAdmissionResponse;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
@@ -21,6 +23,7 @@ public class JobApplicationService {
     private final JobFindService jobFindService;
     private final JobApplicationAdmissionCommandService jobApplicationAdmissionCommandService;
     private final MatchingSeatReservationCommandService matchingSeatReservationCommandService;
+    private final JobFundingStatusCommandService jobFundingStatusCommandService;
 
     public Long create(Long ownerId, CreateJobRequest request) {
         return jobCommandService.create(ownerId, request);
@@ -78,5 +81,14 @@ public class JobApplicationService {
     ) {
         return MatchingSeatReservationCommandResponse.of(
                 matchingSeatReservationCommandService.release(jobPostId, reservationId, idempotencyKey));
+    }
+
+    public FundingStatusResponse receiveFundingStatus(
+            Long jobPostId,
+            FundingStatusRequest request,
+            String idempotencyKey
+    ) {
+        return FundingStatusResponse.of(
+                jobFundingStatusCommandService.receive(jobPostId, request.toNotification(), idempotencyKey));
     }
 }

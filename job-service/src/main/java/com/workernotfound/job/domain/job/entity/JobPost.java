@@ -94,6 +94,10 @@ public class JobPost extends BaseEntity {
     @Column(length = 3)
     private String paymentCurrency;
 
+    // 최신 주문의 예치 취소·검토 필요가 확인되어 신규 지원 승인과 신규 자리 예약을 막는다. 공고 상태와 별개다.
+    @Column(nullable = false)
+    private boolean fundingBlocked;
+
     @Builder
     private JobPost(
             Long businessId,
@@ -133,7 +137,7 @@ public class JobPost extends BaseEntity {
         this.longitude = longitude;
         this.urgencyLevel = urgencyLevel;
         this.applicationDeadline = applicationDeadline;
-        // 검증된 예치가 반영되기 전까지 비공개로 저장한다. 공개(OPEN) 전환은 예치 상태 수신 후속 작업이 맡는다.
+        // 검증된 예치가 반영되기 전까지 비공개로 저장한다. 공개(OPEN) 전환은 예치 상태 수신(publishAfterFunding)이 맡는다.
         this.status = JobStatus.PAYMENT_PENDING;
     }
 
@@ -146,6 +150,36 @@ public class JobPost extends BaseEntity {
         this.paymentJobVersion = jobVersion;
         this.paymentAmount = amount;
         this.paymentCurrency = currency;
+    }
+
+    public boolean isLinkedToPaymentOrder(String orderId) {
+        return paymentOrderId != null && paymentOrderId.equals(orderId);
+    }
+
+    // 연결된 주문의 원래 결제 스냅샷과 비교한다. 결제용 버전은 현재 @Version이 아니라 주문 생성 당시 버전이다.
+    public boolean hasPaymentSnapshot(Long jobVersion, Long ownerMemberId, Long amount, String currency) {
+        return paymentOrderId != null
+                && paymentJobVersion.equals(jobVersion)
+                && ownerId.equals(ownerMemberId)
+                && paymentAmount.equals(amount)
+                && paymentCurrency.equals(currency);
+    }
+
+    public void blockFunding() {
+        this.fundingBlocked = true;
+    }
+
+    // 예치 차단만 해제한다. 공고 상태 전이는 publishAfterFunding이 따로 판단한다.
+    public void unblockFunding() {
+        this.fundingBlocked = false;
+    }
+
+    // 검증된 예치 확인으로 공개한다. 공개 기한 등 조건은 호출자가 공고 행 잠금 아래에서 확인한다.
+    public void publishAfterFunding() {
+        if (status != JobStatus.PAYMENT_PENDING) {
+            throw new IllegalStateException("결제 대기 공고만 예치 확인으로 공개할 수 있습니다: " + status);
+        }
+        this.status = JobStatus.OPEN;
     }
 
     // 결제 대기 공고는 인증된 점주 본인에게만 보인다. 공개 이후 상태의 조회 정책은 바꾸지 않는다.

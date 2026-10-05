@@ -111,9 +111,17 @@
 
 `job-service`는 공고 행 잠금으로 공고가 매칭 가능한 상태(`OPEN`·`MATCHING`)이고 근무 시작 전인지, `confirmed + reserved < recruitCount`인지 확인한다. 성공 응답에는 `reservationId`(문자열), `jobPostId`, `ownerMemberId`, `jobVersion`, `reservedAt`, `expiresAt`을 포함한다. 예약은 `RESERVED`, `CONSUMED`, `RELEASED`, `EXPIRED` 상태를 보관하고 같은 멱등 키에는 상태와 관계없이 발급 당시 스냅샷을 그대로 반환한다. 확정(`.../{reservationId}/confirm`)과 해제(`.../{reservationId}/release`)는 예약 명령과 구분되는 각각의 안정적인 멱등 키를 사용한다. 이미 소비된 자리의 같은 키 확정 재시도는 성공하고, 만료로 회수된 자리의 해제는 성공한다. 세부 규칙은 [공고 설계](./job-post-design.md#모집-자리-예약)를 따른다.
 
-`matching-service`에는 이 계약과 payment/work/chat 계약을 호출하는 클라이언트 및 확정 Saga가 구현되어 있다. `job-service`의 자리 예약·확정·반환, `work-service`의 예정 근무 생성·취소, `chat-service`의 채팅방 생성·종료, `payment-service`의 예치 잔액 기반 잠금·해제 계약이 구현되어 있다. 토스 테스트 예치 반영은 구현되어 있으나 `job-service`의 비공개 생성·주문 생성·예치 후 공개 연결이 아직 없으므로, 예치가 없는 공고의 수락은 결제 잠금 단계에서 거절되고 보상된다. 외부 계약이 준비되지 않았는데도 `PENDING`을 확정 상태로 바꾸거나 임시 성공 응답을 사용하지 않는다.
+`matching-service`에는 이 계약과 payment/work/chat 계약을 호출하는 클라이언트 및 확정 Saga가 구현되어 있다. `job-service`의 자리 예약·확정·반환, `work-service`의 예정 근무 생성·취소, `chat-service`의 채팅방 생성·종료, `payment-service`의 예치 잔액 기반 잠금·해제 계약이 구현되어 있다. 토스 테스트 예치 반영과 `job-service`의 비공개 생성·주문 생성·예치 상태 수신 후 공개가 구현되어 있다. 예치가 없는 공고(V10 이전 공고)의 수락은 결제 잠금 단계에서 거절되고 보상된다. 외부 계약이 준비되지 않았는데도 `PENDING`을 확정 상태로 바꾸거나 임시 성공 응답을 사용하지 않는다.
 
 자리 예약 응답이 정상 형식이지만 `expiresAt`이 이미 지났다면 Saga는 이를 결과 불명이 아니라 확정적 거절로 처리한다. 예약 성공 응답이 유실된 뒤 예약이 만료되면 같은 키 재요청은 원래 스냅샷을 돌려주므로, 같은 키 재시도로는 회복되지 않기 때문이다. 이때 받은 예약 ID를 기록하고 기존 역순 보상 규칙대로 반환(만료된 예약의 반환은 성공)한 뒤 `START_NEW_ATTEMPT`로 남겨, 다음 수락 요청이 새 명령 키로 다시 예약한다. 네트워크 오류·5xx·필수 필드가 빠진 응답은 계속 결과 불명으로 보고 보상하지 않는다. 확정 단계에서 예약 만료(`JOB-409-009`)를 받으면 기존 4xx 거절과 같이 채팅·근무·결제·자리 순으로 보상한다.
+
+예치 차단 계약: payment-service가 확인한 예치 취소·검토 필요(`funded=false`)를 받은 `job-service`는 공고 상태를 바꾸지 않고 예치 차단을 저장한다. 공고 행 잠금 아래에서 차단을 확인하므로 차단과 각 명령은 커밋 순서로 직렬화된다.
+
+- 신규 지원 접수 승인은 `JOB-409-001`로 거절되며 matching-service는 기존 매핑대로 `APPLICATION-409-003`으로 응답한다.
+- 신규 자리 예약은 `JOB-409-005`(409)로 거절되고, 매칭 수락은 `MATCHING_CAPACITY_UNAVAILABLE`로 끝난다. 기록된 외부 리소스가 없으므로 보상할 것이 없다.
+- 차단 뒤의 `RESERVED → CONSUMED` 최초 확정은 `JOB-409-005`로 거절된다. 4xx이므로 결과 불명이 아니라 확정적 거절이며, Saga는 채팅·근무·결제·자리 순으로 보상한 뒤 `START_NEW_ATTEMPT`로 남긴다. 자리 반환은 차단과 관계없이 성공한다. 이 경로는 결제 잠금 성공 뒤 payment-service에서 예치가 취소된 경우에 해당한다(payment-service도 차단 후 새 결제 잠금을 `PAYMENT-409-006`으로 거절한다).
+- 확정이 차단보다 먼저 커밋됐으면 `CONSUMED`를 유지하고, 같은 확정 키 재요청도 계속 성공한다. 예치 차단은 확정된 자리를 반환·취소하지 않는다. 이미 확정된 매칭·근무의 사후 처리(취소·환불·정산)는 별도 복구 정책 대상이다.
+- 이미 성공한 같은 키의 지원 승인(만료 전)·자리 예약 재요청은 차단 후에도 저장된 결과를 받는다. 차단 전에 받은 승인으로 지원이 저장될 수 있지만 그 지원의 확정은 자리 예약 단계에서 거절된다.
 
 자리 예약 응답은 후속 명령에 필요한 `workDate`, `startTime`, `endTime`, `endTimeNextDay`, `lockedAmount`(1인 예정 급여, 정수 KRW), `currency` 공고 스냅샷도 포함한다. Saga는 `endTimeNextDay`를 `matching_confirmation_sagas.end_time_next_day`(V9)에 저장하고 예정 근무 생성 요청에 그대로 전달한다.
 

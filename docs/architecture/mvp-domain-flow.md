@@ -156,7 +156,7 @@
 규칙:
 
 - 토스페이먼츠 테스트 카드·KRW 결제를 사용한다. 공고는 `PAYMENT_PENDING`으로 저장하고 검증된 예치 완료 후 `OPEN`으로 공개한다.
-- 현재 job-service의 비공개 저장·예치 상태 수신은 공고 담당자가 구현해야 한다. `docs/architecture/toss-deposit-design.md`의 계약을 따른다.
+- job-service는 비공개 저장, 결제 주문 생성, 예치 상태 수신에 따른 공개와 예치 차단을 구현했다. 계약은 `docs/architecture/toss-deposit-design.md`, 세부는 `docs/architecture/job-post-design.md`의 예치 상태 수신을 따른다.
 - 매칭 확정은 예치 금액 잠금과 함께 처리한다.
 - `COMPLETED` 근무만 정상 정산할 수 있다.
 - 취소, 실패, 노쇼의 환불 금액 정책은 결제 연동 전에 확정한다.
