@@ -9,7 +9,6 @@ import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
 import com.workernotfound.job.domain.job.service.JobApplicationService;
 import com.workernotfound.job.global.response.ApiResponse;
 import com.workernotfound.job.global.security.MemberClaims;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,7 +25,7 @@ public class JobController implements JobControllerDocs {
     @PostMapping
     public ResponseEntity<ApiResponse<Long>> create(
             @AuthenticationPrincipal MemberClaims claims,
-            @Valid @RequestBody CreateJobRequest request
+            @RequestBody CreateJobRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.success(
                 jobApplicationService.create(claims.memberId(), request)
@@ -60,7 +59,7 @@ public class JobController implements JobControllerDocs {
     @Override
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<JobSearchResponse>> search(
-            @Valid @ModelAttribute JobSearchRequest request
+            @ModelAttribute JobSearchRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.success(
                 jobApplicationService.getJobs(request)

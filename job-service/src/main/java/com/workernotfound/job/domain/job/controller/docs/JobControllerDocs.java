@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 
 @Tag(name = "Job", description = "공고 API")
@@ -34,7 +35,8 @@ public interface JobControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청", content = @Content),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 요청", content = @Content)
     })
-    ResponseEntity<ApiResponse<Long>> create(MemberClaims claims, CreateJobRequest request);
+    // 제약은 이 인터페이스에만 둔다. 구현 메서드가 매개변수 제약을 다시 선언하면 메서드 검증이 거절한다.
+    ResponseEntity<ApiResponse<Long>> create(MemberClaims claims, @Valid CreateJobRequest request);
 
     @Operation(
             summary = "공고 상세 조회",
@@ -82,5 +84,5 @@ public interface JobControllerDocs {
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청", content = @Content)
     })
-    ResponseEntity<ApiResponse<JobSearchResponse>> search(JobSearchRequest request);
+    ResponseEntity<ApiResponse<JobSearchResponse>> search(@Valid JobSearchRequest request);
 }

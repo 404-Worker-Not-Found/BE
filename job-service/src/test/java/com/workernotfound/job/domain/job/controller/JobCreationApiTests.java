@@ -86,6 +86,23 @@ class JobCreationApiTests extends IntegrationTestSupport {
         assertThat(ids).contains(open.getId().intValue()).doesNotContain(pendingId.intValue());
     }
 
+    // 요청 제약은 ControllerDocs 인터페이스에 선언한다. 등록 본문과 검색 조건이 HTTP 경계에서 계속 검증되는지 확인한다.
+    @Test
+    void validatesCreateBodyAndSearchConditionAtHttpBoundary() throws Exception {
+        long ownerId = nextOwnerId();
+        mockMvc.perform(post("/api/jobs")
+                        .header("Authorization", TestAccessTokens.bearer(
+                                TestAccessTokens.owner(jwtProperties.secret(), ownerId)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody().replace("\"baseHourlyWage\":10320", "\"baseHourlyWage\":10319")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("GLOBAL-400-002"));
+        mockMvc.perform(get("/api/jobs/search").param("size", "101"))
+                .andExpect(status().isBadRequest());
+
+        assertThat(countJobsOf(ownerId)).isZero();
+    }
+
     @Test
     void acceptsTotalDepositOfExactlyOneHundredWon() {
         long ownerId = nextOwnerId();
