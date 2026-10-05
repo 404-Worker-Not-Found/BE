@@ -2,6 +2,7 @@ package com.workernotfound.auth.global.exception;
 
 import com.workernotfound.auth.external.client.member.MemberServiceClientException;
 import com.workernotfound.auth.external.client.oauth.OAuth2ClientException;
+import com.workernotfound.auth.domain.auth.service.VerificationDeliveryException;
 import com.workernotfound.auth.global.response.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
@@ -56,6 +57,16 @@ public class GlobalExceptionHandler {
 				GlobalErrorCode.EXTERNAL_API_ERROR.getMessage(),
 				request.getRequestURI(),
 				null);
+	}
+
+	@ExceptionHandler(VerificationDeliveryException.class)
+	public ResponseEntity<ApiResponse<Void>> handleVerificationDeliveryException(
+			VerificationDeliveryException exception, HttpServletRequest request) {
+		if (exception.getProviderErrorCode() != null) {
+			log.warn("SOLAPI 인증번호 발송 거절: errorCode={}", exception.getProviderErrorCode());
+		}
+		return error(GlobalErrorCode.EXTERNAL_API_ERROR,
+			GlobalErrorCode.EXTERNAL_API_ERROR.getMessage(), request.getRequestURI(), null);
 	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)

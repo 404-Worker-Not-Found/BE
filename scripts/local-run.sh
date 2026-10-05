@@ -36,7 +36,6 @@ load_env() {
   # shellcheck disable=SC1090
   source "${ENV_FILE}"
   set +a
-  export AUTH_VERIFICATION_LOG_CODE_ENABLED="${AUTH_VERIFICATION_LOG_CODE_ENABLED:-true}"
 }
 
 case "${1:-}" in
