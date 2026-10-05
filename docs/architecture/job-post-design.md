@@ -2,7 +2,7 @@
 
 ## 범위
 
-`job-service`는 공고와 업종 카테고리의 원본을 소유한다. 현재는 점주의 공고 비공개(`PAYMENT_PENDING`) 등록과 payment-service 결제 주문 생성 연동, 점주의 결제 주문 조회, 공고 상세·목록 조회, `matching-service`가 지원 저장 전에 호출하는 지원 접수 승인 내부 API, 매칭 확정 Saga가 호출하는 모집 자리 예약·확정·반환 내부 API와 만료 예약 회수, 1인 예정 급여 계산, 확정 인원 기준의 모집 완료 전이와 matching-service 모집 완료 알림을 제공한다. 예치 상태(`funding-status`) 수신과 예치 후 `OPEN` 공개, 공고 조건 수정과 주문 교체·재결제, 수동 마감, 지원 기한 만료에 따른 자동 마감, 재오픈은 후속 작업이다.
+`job-service`는 공고와 업종 카테고리의 원본을 소유한다. 현재는 점주의 공고 비공개(`PAYMENT_PENDING`) 등록과 payment-service 결제 주문 생성 연동, 점주의 결제 주문 조회, 공고 상세·목록 조회, `matching-service`가 지원 저장 전에 호출하는 지원 접수 승인 내부 API, 매칭 확정 Saga가 호출하는 모집 자리 예약·확정·반환 내부 API와 만료 예약 회수, 1인 예정 급여 계산, 확정 인원 기준의 모집 완료 전이와 matching-service 모집 완료 알림, payment-service 예치 상태(`funding-status`) 수신에 따른 `PAYMENT_PENDING → OPEN` 공개와 예치 차단을 제공한다. 공고 조건 수정과 주문 교체·재결제, 수동 마감, 지원 기한 만료에 따른 자동 마감, 재오픈, 실제 환불·정산, 확정된 매칭·근무의 자동 취소는 후속 작업이다.
 
 ## 공개 API
 
@@ -24,11 +24,11 @@
 - 시급은 10,320원 이상, 모집 인원은 1명 이상이다. 카테고리는 저장된 ID여야 한다.
 - 사업장 소유권 검증은 `BusinessValidator` 포트 뒤에 있다. 현재 구현체 `StubBusinessValidator`는 경고 로그만 남기고 통과시키므로 실제 소유권 검증으로 간주하지 않는다.
 - 등록하면 `PAYMENT_PENDING`(비공개)으로 저장하고, 같은 트랜잭션에서 전체 예치 예정액의 결제 주문 생성 명령을 저장한다. 응답은 기존과 같이 공고 ID이며 주문 생성 결과를 기다리지 않는다. 점주는 [결제 주문 조회](#점주-결제-주문-조회)로 주문 ID를 확인한다.
-- 검증된 예치 후 `OPEN`으로 공개하는 예치 상태 수신은 아직 구현되지 않았다. 따라서 이 구현 이후 등록한 공고는 후속 작업 전까지 공개되지 않는다. 임시 공개나 가짜 예치 성공 경로는 두지 않는다.
+- 공고는 payment-service가 검증한 예치 확인(`funded=true`)을 [예치 상태 수신](#예치-상태-수신)으로 받은 뒤에만 `OPEN`으로 공개된다. 임시 공개나 가짜 예치 성공 경로는 두지 않는다.
 
 목록 조회 규칙:
 
-- `OPEN`이고 지원 마감 전인 공고만 반환한다. `PAYMENT_PENDING` 공고는 점주 본인 요청이어도 검색에 포함하지 않는다.
+- `OPEN`이고 지원 마감 전이며 예치 차단(`funding_blocked`)이 아닌 공고만 반환한다. `PAYMENT_PENDING` 공고는 점주 본인 요청이어도 검색에 포함하지 않는다. 예치 차단 공고는 신규 지원을 받지 않으므로 제외한다([예치 차단 공고의 모집과 노출](#예치-차단-공고의-모집과-노출)).
 - `type=URGENT`이면 긴급도 `HIGH` 공고만 마감 임박 순으로 정렬한다. 그 외에는 거리 오름차순이며 거리를 계산할 수 없는 공고는 뒤에 둔다.
 - `maxDistanceKm`을 사용하려면 `workerLat`, `workerLng`가 필요하다. `minWage`는 `maxWage`보다 클 수 없다.
 - 기본 페이지는 0, 크기는 20, 최대 크기는 100이다.
@@ -39,8 +39,8 @@
 상세 조회 접근 규칙:
 
 - `PAYMENT_PENDING` 공고는 Bearer 토큰의 `memberId`가 공고의 점주 ID와 같을 때만 반환한다. 토큰이 없거나 유효하지 않은 요청, 다른 회원의 요청은 존재하지 않는 공고와 같은 404 `JOB-404-001`이다. 역할이 아니라 인증된 회원 ID로 본인을 확인한다.
-- `OPEN`·`MATCHING`·`CLOSED` 공고는 기존과 같이 인증 없이 반환한다.
-- 이 제한은 사용자 상세 조회(`JobFindService.findJobDetail`)에만 적용한다. 내부 처리(지원 접수 승인, 자리 예약·확정·반환, 모집 완료)는 공고 저장소를 직접 잠가 조회하고 각자 상태를 검사하며, `JobFindService.findJobPost`는 상태와 관계없이 조회한다.
+- `OPEN`·`MATCHING`·`CLOSED` 공고는 기존과 같이 인증 없이 반환한다. 예치 차단 여부는 상세 노출에 영향을 주지 않는다. 기존 지원자와 매칭 참여자가 공고를 계속 확인해야 하기 때문이다.
+- 이 제한은 사용자 상세 조회(`JobFindService.findJobDetail`)에만 적용한다. 내부 처리(지원 접수 승인, 자리 예약·확정·반환, 모집 완료, 예치 상태 수신)는 공고 저장소를 직접 잠가 조회하고 각자 상태를 검사하며, `JobFindService.findJobPost`는 상태와 관계없이 조회한다.
 
 ## 내부 API
 
@@ -54,13 +54,14 @@
 | 모집 자리 예약 | `POST /api/jobs/internal/{jobPostId}/matching-seat-reservations` | `matchingId`, `applicationId`, `workerMemberId` / `reservationId`(문자열), `jobPostId`, `jobVersion`, `ownerMemberId`, `workDate`, `startTime`, `endTime`, `endTimeNextDay`, `lockedAmount`, `currency`, `reservedAt`, `expiresAt` |
 | 모집 자리 확정 | `POST /api/jobs/internal/{jobPostId}/matching-seat-reservations/{reservationId}/confirm` | 본문 없음 / `reservationId`, `status` |
 | 모집 자리 반환 | `POST /api/jobs/internal/{jobPostId}/matching-seat-reservations/{reservationId}/release` | 본문 없음 / `reservationId`, `status` |
+| 예치 상태 수신 | `POST /api/jobs/internal/{jobPostId}/funding-status` | `orderId`, `jobVersion`, `ownerMemberId`, `amount`, `currency`, `fundingRevision`, `funded` / `jobPostId`, `orderId`, `fundingRevision`, `result`, `skipReason`, `jobStatus`, `fundingBlocked` ([예치 상태 수신](#예치-상태-수신)) |
 
 `Idempotency-Key`는 1~100자의 공백 없는 ASCII다. 공고 행을 비관적 잠금으로 잡은 뒤 같은 키의 승인을 조회한다. 따라서 같은 공고에 같은 키로 온 동시 요청은 앞선 요청의 결과를 본다. 공고가 서로 다르면 잠그는 행도 달라 조회가 직렬화되지 않으므로, `uk_job_application_admissions_idempotency_key` 유일 제약이 마지막 방어선이다.
 
 - 같은 키와 같은 공고·회원 요청이면 기존 승인을 반환한다. 만료됐거나 `RESERVED`가 아니면 `JOB-409-003`이다.
 - 같은 키를 다른 공고나 회원 요청에 재사용하면 `JOB-409-004`다. 동시 요청이 유일 제약에서 걸린 경우에도 같은 코드로 응답한다.
 - 제약 위반 변환은 저장 트랜잭션이 롤백된 뒤 전역 HTTP 예외 처리 경계인 `GlobalExceptionHandler`에서 한다. 서비스는 저장 예외를 변환하지 않고 전파한다. cause 사슬 전체에서 Hibernate `ConstraintViolationException`을 찾아 제약 이름이 정확히 일치할 때만 `JOB-409-004` 응답으로 변환한다. 중간에 다른 제약 위반을 만나도 탐색을 계속하고, 순환 참조에서는 종료한다. 대상 제약이 없는 무결성 위반은 서버 오류로 남긴다. MySQL이 반환하는 `테이블명.제약명`에서는 테이블명 접두사를 제거하고 비교한다.
-- 새 승인은 공고가 `OPEN`이고 지원 마감 전일 때만 발급한다. `PAYMENT_PENDING` 공고의 새 승인은 `JOB-409-001`이다. 같은 키의 기존 승인 재요청은 상태 검사보다 먼저 처리하므로 기존 계약을 유지한다. 승인 생성 시각이 지원 접수 시점이다.
+- 새 승인은 공고가 `OPEN`이고 예치 차단이 아니며 지원 마감 전일 때만 발급한다. `PAYMENT_PENDING` 공고와 예치 차단 공고의 새 승인은 `JOB-409-001`이다. 같은 키의 기존 승인 재요청은 상태 검사보다 먼저 처리하므로 기존 계약을 유지한다. 승인 생성 시각이 지원 접수 시점이다.
 - 승인은 모집 자리를 차감하지 않는다. 모집 인원 동시성은 매칭 확정 단계의 자리 예약에서 다룬다.
 - 만료 시간은 `APPLICATION_ADMISSION_TTL`이며 기본 5분이다.
 - 응답의 점주 회원 ID, 업종 ID, 근무 일시, 위경도는 발급 당시 잠근 공고에서 승인 레코드에 함께 저장한 스냅샷이다. 응답을 만들 때 공고를 다시 읽지 않으므로 같은 멱등 키의 재요청은 공고가 바뀌어도 같은 응답을 받는다.
@@ -80,7 +81,7 @@
 ### 예약
 
 - 같은 키의 기존 예약이 있으면 `jobPostId + matchingId + applicationId + workerMemberId`가 모두 같을 때 저장된 스냅샷으로 원래 응답을 돌려준다. 공고를 다시 읽지 않고, `RELEASED`·`EXPIRED`여도 되살리거나 새로 발급하지 않는다. 하나라도 다르면 `JOB-409-004`다. 동시 최초 요청은 같은 공고 잠금 아래에서 키를 다시 조회하므로 하나만 생성된다. 서로 다른 공고에 같은 키를 쓴 동시 요청은 유일 제약에서 거절되며 `JOB-409-004`로 응답한다.
-- 공고 상태는 `OPEN` 또는 `MATCHING`이어야 한다([MVP 도메인 흐름](./mvp-domain-flow.md)의 `MATCHING`은 지원 접수를 멈추고 매칭을 진행하는 상태다). 그 외 상태(`PAYMENT_PENDING`, `CLOSED`)는 `JOB-409-005`다. 같은 키의 재요청은 상태 검사보다 먼저 저장된 스냅샷을 돌려준다.
+- 공고 상태는 `OPEN` 또는 `MATCHING`이어야 한다([MVP 도메인 흐름](./mvp-domain-flow.md)의 `MATCHING`은 지원 접수를 멈추고 매칭을 진행하는 상태다). 그 외 상태(`PAYMENT_PENDING`, `CLOSED`)와 예치 차단 공고는 `JOB-409-005`다. 같은 키의 재요청은 상태 검사보다 먼저 저장된 스냅샷을 돌려준다.
 - 자리 예약 기한은 지원 마감이 아니라 근무 시작 시각(`workDate + startTime`)이다. 지원 마감 이후에도 기존 지원자의 매칭 확정은 가능하며, 근무 시작 이후에는 `JOB-409-006`이다.
 - 같은 잠금 안에서 이 공고의 만료된 `RESERVED`를 먼저 `EXPIRED`로 회수한다. 스케줄러가 늦어도 만료 자리가 새 예약을 막지 않는다.
 - 같은 공고에서 같은 `matchingId` 또는 `applicationId`가 `RESERVED`·`CONSUMED`로 자리를 점유하고 있으면 다른 키라도 `JOB-409-008`이다. 종료된(`RELEASED`·`EXPIRED`) 시도 이후에는 새 키로 다시 예약할 수 있다. `matchingId`에 영구 유일 제약을 두지 않는다.
@@ -92,7 +93,7 @@
 
 - 예약이 경로의 공고에 속하지 않거나 없으면 `JOB-404-003`이다.
 - 같은 확정 키가 다른 예약의 확정에 이미 쓰였으면 `JOB-409-004`다.
-- 유효한 `RESERVED`는 `CONSUMED`로 바꾸고 확정 키와 시각을 기록한다.
+- 유효한 `RESERVED`는 `CONSUMED`로 바꾸고 확정 키와 시각을 기록한다. 공고가 예치 차단이면 최초 확정을 `JOB-409-005`로 거절하고 예약은 `RESERVED`로 남는다([예치 차단 공고의 모집과 노출](#예치-차단-공고의-모집과-노출)).
 - 이미 `CONSUMED`인 예약에 처음 확정한 키로 다시 요청하면 성공한다. 확정 응답이 유실된 경우의 복구이므로 원래 `expiresAt`이 지났어도 거절하지 않는다. 다른 키는 저장된 키를 덮어쓰지 않고 `JOB-409-010`이다.
 - 기한이 지난 `RESERVED`와 `EXPIRED`는 `JOB-409-009`, `RELEASED`는 `JOB-409-010`이다.
 - 확정으로 `CONSUMED` 수가 `recruitCount`에 도달하면 같은 트랜잭션에서 공고를 모집 완료로 마감한다([모집 완료](#모집-완료)). 공고가 이미 `CLOSED`여도 원래 키의 확정 재요청은 성공하며 예약 스냅샷과 `jobVersion`은 바뀌지 않는다.
@@ -222,7 +223,7 @@
 
 ## 결제 주문 생성
 
-신규 공고는 `PAYMENT_PENDING`으로 비공개 저장되고, 모집 인원 전체 예정 급여의 결제 주문을 payment-service에 만든다. 계약은 [토스 예치 설계](./toss-deposit-design.md)의 공고 담당자 구현 계약을 따른다. 주문 생성은 공고 공개가 아니다. 검증된 예치 후 `OPEN` 전환은 예치 상태 수신 후속 작업이 맡는다.
+신규 공고는 `PAYMENT_PENDING`으로 비공개 저장되고, 모집 인원 전체 예정 급여의 결제 주문을 payment-service에 만든다. 계약은 [토스 예치 설계](./toss-deposit-design.md)의 공고 담당자 구현 계약을 따른다. 주문 생성은 공고 공개가 아니다. 검증된 예치 후 `OPEN` 전환은 [예치 상태 수신](#예치-상태-수신)이 맡는다.
 
 ### 명령 저장
 
@@ -285,7 +286,7 @@ HTTP 2xx만으로 성공 처리하지 않는다. 끝까지 받은 본문이 JSON
 - 이 명령이 공고의 가장 큰 `issue_sequence`가 아니면(더 늦게 발급된 명령이 있으면) 주문을 연결하지 않고 명령을 `SUPERSEDED`로 종료한다. 과거 명령이 최신 연결을 덮어쓰지 않는다.
 - 최대 순번은 공고 행 잠금을 잡은 뒤 잠금 조회(`FOR SHARE`)로 읽는다. MySQL REPEATABLE READ의 일반 조회는 트랜잭션의 첫 일반 조회(공고 ID 조회) 시점 스냅샷을 보므로, 공고 잠금을 기다리는 사이 커밋된 새 명령을 놓쳐 오래된 명령을 최신으로 판정할 수 있다. 잠금 조회는 최신 커밋 값을 읽고, 새 명령 발급도 공고 행 잠금을 먼저 잡으므로 잠금을 가진 동안 이 값은 바뀌지 않는다. 서비스 전체 격리 수준은 바꾸지 않는다.
 - 최신 명령이면 명령을 `SUCCEEDED`로 바꾸고 `order_id`를 기록하며, 공고에 `payment_order_id`와 원래 결제 스냅샷(`payment_job_version`, `payment_amount`, `payment_currency`)을 연결한다. 공고 상태는 바꾸지 않는다. 연결로 공고의 `@Version`은 증가하지만 `payment_job_version`은 명령의 발급 당시 버전이다.
-- 예치 상태 수신(후속)은 공고에 연결된 이 주문 ID·금액·통화·점주·결제용 버전과 대조해야 한다.
+- [예치 상태 수신](#예치-상태-수신)은 공고에 연결된 이 주문 ID·금액·통화·점주·결제용 버전과 대조한다.
 
 ### 점주 결제 주문 조회
 
@@ -319,6 +320,101 @@ HTTP 2xx만으로 성공 처리하지 않는다. 끝까지 받은 본문이 JSON
 - 이런 공고는 기존과 같이 검색·상세 조회·지원·자리 예약 대상이며, 결제 주문 조회는 `NOT_REQUESTED`다.
 - 적용 한계: 이 공고들은 예치로 뒷받침되지 않는다. 매칭 확정 Saga의 payment-service 결제 잠금은 예치가 있어야 하므로 거절되고 Saga가 보상한다. 즉 수락이 확정되지 않는다. 운영에서 기존 공고를 계속 쓰려면 공고를 다시 등록하거나, 후속 재결제(새 명령 발급) 기능이 생긴 뒤 그 경로로 주문을 만들어야 한다. 로컬·테스트 데이터는 공고를 다시 등록하는 것을 권장한다.
 
+## 예치 상태 수신
+
+payment-service가 검증한 예치 상태를 받아 결제 대기 공고를 공개하거나 신규 모집을 차단한다. 송신 계약은 [토스 예치 설계](./toss-deposit-design.md#2-예치-상태-수신)를 따른다. 실제 환불·정산, 이미 확정된 매칭·근무의 자동 취소, 공고 조건 수정과 주문 교체·재결제는 이 범위가 아니다.
+
+`POST /api/jobs/internal/{jobPostId}/funding-status`, 헤더 `X-Internal-Secret`, `Idempotency-Key`(1~100자 공백 없는 ASCII, payment-service는 `funding-{orderId}-{fundingRevision}`), 본문 `{"orderId","jobVersion","ownerMemberId","amount","currency","fundingRevision","funded"}`(payment-service `FundingJobClient`가 보내는 주문 스냅샷과 알림 revision). 성공 응답 `data`는 `jobPostId`, `orderId`, `fundingRevision`, `result`, `skipReason`, `jobStatus`(처리 직후 공고 상태), `fundingBlocked`다.
+
+### 입력 검증
+
+- 모든 필드가 필수이며 누락·null은 400(`GLOBAL-400-*`)이다. `funded`는 JSON 불리언만 받고 누락을 false로 해석하지 않는다.
+- `orderId`는 `[A-Za-z0-9-]{1,64}`(주문 연결 응답 검증과 같은 형식)다. `jobVersion`·`ownerMemberId`·`fundingRevision`은 1 이상의 정수 JSON 숫자다. 전역 Jackson 설정은 정수 필드에 온 `1.5`를 1로 잘라 받으므로, 이 필드들과 `funded`에만 형 변환 없는 역직렬화를 적용한다. `1.5`, `1.0`, `"1"`, `"true"`, `funded: 1`은 400이다. 전역 설정은 바꾸지 않는다.
+- `amount`는 100 이상 99,999,999,999,999,999 이하(payment-service DECIMAL(19,2)의 정수부)인 정수 KRW다. payment-service는 `100000.00`처럼 소수 둘째 자리로 보내므로 scale은 비교하지 않고 값이 정수인지만 본다(`100000.50`은 400). 비교·저장은 정수 KRW로 정규화한 값이다.
+- `currency`는 대문자 세 글자다. 저장 스냅샷(`KRW`)과 다르면 주문 불일치(409)다.
+- 인증 실패는 내부 인증 필터의 401 `GLOBAL-401-001`이다. 내부 secret, 멱등 키, 요청 원문은 로그에 남기지 않는다. 경고 로그에는 공고 ID, 주문 ID, revision만 남긴다.
+
+### 처리 순서와 트랜잭션
+
+한 로컬 트랜잭션에서 다음 순서로 처리한다.
+
+1. 공고 행 비관적 잠금(없으면 404 `JOB-404-001`). 지원 승인, 자리 예약·확정·반환, 만료 회수, 모집 완료와 같은 잠금이며 잠금 순서는 공고 행 → 수신 기록·주문별 예치 상태다. 잠금이 트랜잭션의 첫 조회라서, 뒤의 일반 조회는 잠금을 기다리는 동안 커밋된 수신 기록과 주문 연결을 본다.
+2. 멱등 재요청 확인. 공고 버전·업무 상태보다 먼저 확인한다. 같은 키의 수신 기록이 있으면 경로의 공고 ID와 본문 필드 전체가 같을 때 저장된 응답을 그대로 반환하고, 다르면 409 `JOB-409-004`다. 다른 키라도 같은 주문·revision의 수신 기록이 있으면, 같은 내용일 때 그 응답을 반환하고(효과·새 기록 없음) 다르면 409 `JOB-409-012`다. 공개로 `@Version`이 증가했거나 이후 공고가 마감됐어도 이미 처리한 명령은 처음 응답을 받는다.
+3. 주문 판별([주문 판별](#주문-판별)).
+4. revision 비교와 반영, 공개 전이와 상태 이력, 수신 기록 저장.
+
+수신 기록, 주문별 revision, 예치 차단, 공고 상태, 상태 이력은 함께 커밋되거나 함께 롤백된다. 중간 실패는 500이고 아무것도 남지 않으므로 같은 명령의 재시도가 처음부터 다시 처리된다.
+
+검증을 통과한 알림만 기록한다. 연결 대기·주문 불일치·멱등 충돌로 거절한 알림은 키와 revision을 선점하지 않으므로 이후의 정상 알림을 막지 않는다.
+
+같은 공고의 동시 최초 요청은 공고 잠금으로 직렬화되어 뒤 요청이 앞의 수신 기록을 본다. 서로 다른 공고에 같은 키를 쓴 동시 요청은 `uk_job_funding_status_receipts_idempotency_key`가, 같은 주문·revision은 `uk_job_funding_status_receipts_order_revision`이 마지막으로 막는다. 롤백 뒤 `GlobalExceptionHandler`가 제약 이름이 정확히 일치할 때만 각각 `JOB-409-004`, `JOB-409-012`로 변환한다. 롤백 전용 트랜잭션 안에서 재조회하지 않는다.
+
+### 주문 판별
+
+| 알림의 주문 | 판별 기준 | 처리 |
+| --- | --- | --- |
+| 공고에 연결된 주문(`payment_order_id`) | 결제용 버전(`payment_job_version`, 현재 `@Version`이 아님)·점주·금액·통화가 공고의 결제 스냅샷과 같다. 다르면 아래 불일치 | [revision과 상태 반영](#revision과-상태-반영) |
+| 이 공고의 이전 주문 | 현재 연결과 다르지만 이 공고의 명령에 검증된 주문으로 기록돼 있고(`job_payment_order_commands.order_id`) 그 명령 스냅샷과 같다 | 200 `STALE_ORDER`. 최신 주문의 예치 상태와 공고를 바꾸지 않는다 |
+| 연결 대기 주문 | 공고의 최신 명령이 아직 `PENDING`(주문 ID 미연결)이고 그 명령 스냅샷과 같다 | 409 `JOB-409-013`, 기록 없음 |
+| 그 밖의 주문 | 관련 없는 주문, 스냅샷 불일치, 주문이 없는 V10 이전 공고 | 409 `JOB-409-011`, 기록 없음, `[운영 확인 필요]` 경고 로그 |
+
+알림 금액을 현재 공고 조건으로 다시 계산하지 않는다. 비교 기준은 주문 생성 명령 발급 당시 고정한 스냅샷이다.
+
+#### 연결 대기 알림
+
+주문 생성 응답이 유실되거나 주문 연결이 늦으면, payment-service의 예치 알림이 job-service의 주문 연결보다 먼저 올 수 있다. 수신 내용을 저장했다가 연결 후 재처리하는 방식(A) 대신, payment-service가 재시도하는 실패 응답을 주고 연결 후 같은 명령을 정상 처리하는 방식(B)을 쓴다.
+
+- payment-service는 성공 envelope가 아닌 모든 응답을 같은 키·같은 본문으로 30~240초 backoff로 횟수 제한 없이 재전송한다(`PaymentRecovery`, `FundingNotificationRepository`). 주문당 최신 revision 한 건만 보관하므로 재전송은 항상 그 주문의 최신 상태다.
+- job-service의 주문 생성 명령도 같은 키로 무기한 재시도해 원래 주문 ID를 복구하고 연결한다. 따라서 연결 대기는 시간이 지나면 해소되고 다음 재전송이 정상 처리된다.
+- A는 대기 기록, 연결 시 재처리 트리거, 재시작 후 복구 스케줄러가 추가로 필요하고 이미 있는 두 재시도 경로와 겹친다.
+
+연결 대기 응답은 수신 기록과 revision을 남기지 않으므로 최종 멱등 응답으로 고정되지 않는다. 알림 내용만으로 공고에 주문을 연결하지 않는다. 한계: 주문 연결이 운영 확인 대상 실패(`SNAPSHOT_MISMATCH`, `ORDER_SUPERSEDED` 등)로 계속 이뤄지지 않으면 알림도 계속 409를 받는다. 이때 두 서비스의 로그에서 같은 공고·주문을 확인한다.
+
+### revision과 상태 반영
+
+연결된 주문의 알림만 예치 상태와 공고에 반영한다.
+
+- `job_payment_fundings`에 주문별 마지막 적용 revision과 예치 여부를 저장한다. 알림 revision이 저장값보다 낮거나 같으면 200 `STALE_REVISION`으로 수신 사실만 기록하고 예치 상태·공고 상태를 바꾸지 않는다. 처음 오는 주문은 revision 값과 관계없이 적용한다. payment-service는 revision을 1부터 올리지만 앞 revision이 재전송 전에 덮어써질 수 있기 때문이다.
+- `funded=false`: `job_posts.funding_blocked=true`로 신규 지원 승인과 신규 자리 예약을 막는다. 공고 상태는 바꾸지 않는다. 상태를 무조건 `PAYMENT_PENDING`으로 되돌리면 마감·취소 공고가 나중의 예치 확인으로 다시 공개될 수 있기 때문이다. 200 `FUNDING_BLOCKED`.
+- `funded=true`: 먼저 `funding_blocked=false`로 예치 차단을 해제하고, 공고 상태 전이는 따로 판단한다.
+  - `PAYMENT_PENDING`이고 지원 마감과 근무 시작(`workDate + startTime`) 전이면 `OPEN`으로 공개하고, 같은 트랜잭션에서 `job_status_histories`에 `PAYMENT_PENDING → OPEN`, `SYSTEM:FUNDING_CONFIRMED`를 기록한다. 200 `PUBLISHED`.
+  - `PAYMENT_PENDING`이지만 근무 시작(`WORK_STARTED`) 또는 지원 마감(`APPLICATION_DEADLINE_PASSED`)이 지났으면 공개하지 않고 이력도 남기지 않는다. 200 `PUBLICATION_SKIPPED`, 환불 검토 대상.
+  - `OPEN`·`MATCHING`은 이미 공개된 공고라 전이와 이력이 없다. 200 `FUNDING_CONFIRMED`.
+  - `CLOSED`는 다시 열지 않는다. 200 `PUBLICATION_SKIPPED`(`JOB_CLOSED`), 환불 검토 대상.
+- 경계 시각과 현재 시각이 같으면 지난 것으로 본다. 현재 시각은 공고 잠금을 얻은 뒤 `Clock`에서 읽는다.
+- 더 높은 `funded=true` revision의 차단 해제는 공고 상태 전이와 별개다. 예치가 회복돼도 마감 공고는 재개하지 않는다. 현재 payment-service는 `REVIEW_REQUIRED`가 된 주문에 다시 예치 확인을 보내지 않으므로, 이 경로는 향후 검토 해소 기능을 위한 수신 계약이다.
+
+### 응답 요약
+
+| 상황 | HTTP | 코드·결과 | 기록 |
+| --- | --- | --- | --- |
+| 처음 처리한 검증된 최신 주문 알림 | 200 | `PUBLISHED`, `FUNDING_CONFIRMED`, `FUNDING_BLOCKED`, `PUBLICATION_SKIPPED`(마감·공개 기한 경과, 환불 검토) | 수신 기록, revision, 상태 |
+| 같은 키·같은 요청의 재전송 | 200 | 처음 응답 그대로 | 추가 없음 |
+| 다른 키·같은 주문 revision·같은 내용 | 200 | 처음 응답 그대로 | 추가 없음 |
+| 낮거나 같은 revision | 200 | `STALE_REVISION` | 수신 기록만 |
+| 이전 주문의 알림 | 200 | `STALE_ORDER` | 수신 기록만(`funded=true`면 환불 검토) |
+| 주문 연결 대기 | 409 | `JOB-409-013` | 없음. payment-service 재전송으로 연결 후 처리 |
+| 관련 없는 주문·스냅샷 불일치 | 409 | `JOB-409-011` | 없음 |
+| 같은 키의 다른 요청·다른 공고 | 409 | `JOB-409-004` | 없음 |
+| 같은 주문·revision의 다른 내용 | 409 | `JOB-409-012` | 없음(처음 기록 보존) |
+| 내부 인증 실패 / 입력 오류 / 공고 없음 | 401 / 400 / 404 | `GLOBAL-401-001` / `GLOBAL-400-*` / `JOB-404-001` | 없음 |
+| 처리 중 서버 오류 | 500 | `GLOBAL-500-001` | 전부 롤백 |
+
+payment-service는 200 success만 전송 완료로 보고 그 밖의 응답은 모두 재전송한다. `JOB-409-011`·`JOB-409-012`·404는 재전송으로 해소되지 않을 가능성이 높으므로 경고 로그를 근거로 운영 확인한다.
+
+### 예치 차단 공고의 모집과 노출
+
+- 신규 지원 승인: `OPEN`이어도 예치 차단이면 409 `JOB-409-001`(메시지로 예치 확인 필요를 구분)이다. matching-service가 이미 `APPLICATION-409-003`(지원을 받지 않는 공고)으로 대응하는 코드라 그대로 쓴다. 새 코드는 matching-service에서 503으로 바뀌어 사용자에게 일시 장애처럼 보인다.
+- 신규 자리 예약: `OPEN`·`MATCHING`이어도 예치 차단이면 409 `JOB-409-005`다.
+- 자리 확정: 공고 잠금 아래에서 예치 차단을 확인하고, 차단 뒤의 `RESERVED → CONSUMED` 최초 확정을 409 `JOB-409-005`로 거절한다. matching-service Saga는 4xx 확정 거절을 확정적 거절로 보고(`MatchingConfirmationClientException.isOutcomeUnknown()`은 5xx·통신 오류만 결과 불명) 채팅·근무·결제·자리 순으로 보상한 뒤 `START_NEW_ATTEMPT`로 남긴다. 자리 반환은 보상 경로이므로 예치 차단과 관계없이 허용한다.
+- 이미 성공한 명령: 같은 키의 지원 승인(만료 전)과 자리 예약 재요청은 저장된 결과를, 이미 `CONSUMED`인 예약의 같은 키 확정 재요청은 성공을 그대로 돌려준다. 멱등 재요청 확인은 차단 검사보다 먼저다. 예치 차단은 `CONSUMED` 예약을 반환하거나 취소하지 않는다.
+- 확정이 차단보다 먼저 커밋되면 확정 결과를 보존한다. 이미 확정된 매칭·근무와 결제 잠금의 사후 처리(취소·환불·정산)는 별도 복구 정책 대상이다. 차단 전에 발급된 지원 승인은 TTL(기본 5분) 안에 matching-service 지원 저장에 쓰일 수 있지만, 그 지원의 매칭 확정은 자리 예약 단계에서 거절된다.
+- 노출: 공개 검색은 신규 지원을 받는 공고만 보여 주므로 예치 차단 공고를 제외한다. 상세 조회는 기존 지원자·매칭 참여자가 계속 볼 수 있도록 공고 상태 기준 정책을 유지한다(`OPEN`·`MATCHING`·`CLOSED`는 공개, `PAYMENT_PENDING`은 점주 본인만). 상세 응답에 예치 차단 여부 필드는 추가하지 않았다.
+
+### 환불 검토 추적
+
+`job_funding_status_receipts.refund_review_required=true`는 공개에 쓰이지 못한 예치 확인(`PUBLICATION_SKIPPED`)과 이전 주문의 예치 확인(`STALE_ORDER`이면서 `funded=true`)이다. `idx_job_funding_status_receipts_refund_review`로 조회한다. 실제 환불·정산은 실행하지 않으며, 후속 기능이 이 기록과 payment-service 주문 상태를 대조해 처리한다. 마감 공고(`JOB_CLOSED`)는 이미 공개·확정된 매칭에 쓰인 예치일 수 있으므로 검토에서 판정한다.
+
 ## 예정 급여 계산
 
 `JobWageCalculator`가 공고 도메인의 단일 계산 기준이다. payment-service에 같은 공식을 복제하지 않는다.
@@ -336,7 +432,7 @@ HTTP 2xx만으로 성공 처리하지 않는다. 끝까지 받은 본문이 JSON
 
 ## 상태와 버전
 
-공고 상태는 `PAYMENT_PENDING`, `OPEN`, `MATCHING`, `CLOSED`가 정의되어 있다. 생성 시 `PAYMENT_PENDING`(비공개)이며, 현재 구현된 전이는 확정 인원 충족에 따른 `OPEN`/`MATCHING → CLOSED`뿐이다. `PAYMENT_PENDING → OPEN`은 예치 상태 수신 후속 작업이며, 주문 생성 완료는 상태를 바꾸지 않는다. 이 전이만 `job_status_histories`에 기록한다. 수동 마감, 지원 기한 만료 마감, 재오픈 API는 없다. 전체 전이 규칙은 [MVP 도메인 흐름](./mvp-domain-flow.md)을 따른다.
+공고 상태는 `PAYMENT_PENDING`, `OPEN`, `MATCHING`, `CLOSED`가 정의되어 있다. 생성 시 `PAYMENT_PENDING`(비공개)이며, 현재 구현된 전이는 검증된 예치 확인에 따른 `PAYMENT_PENDING → OPEN`(`SYSTEM:FUNDING_CONFIRMED`)과 확정 인원 충족에 따른 `OPEN`/`MATCHING → CLOSED`(`SYSTEM:RECRUITMENT_FILLED`)다. 주문 생성 완료와 예치 차단은 상태를 바꾸지 않는다. 두 전이를 `job_status_histories`에 기록한다. 예치 차단은 상태가 아니라 `funding_blocked`로 저장한다. 수동 마감, 지원 기한 만료 마감, 재오픈 API는 없다. 전체 전이 규칙은 [MVP 도메인 흐름](./mvp-domain-flow.md)을 따른다.
 
 `job_posts.version`은 JPA 낙관적 잠금 값이며 1부터 시작한다. 결제 주문 생성 명령은 공고 저장 직후의 버전(신규 공고는 1)을 결제용 버전으로 고정하고, 주문 연결로 버전이 올라도 공고의 `payment_job_version`은 그 값을 유지한다. 지원 승인에는 발급 당시 버전을 `jobVersion`으로 저장한다. 모집 완료 전이로 증가한 버전은 알림 명령의 완료 버전이 되어 늦은 지원 차단과 재오픈 구분의 기준이 된다.
 
@@ -347,13 +443,15 @@ HTTP 2xx만으로 성공 처리하지 않는다. 끝까지 받은 본문이 JSON
 ## 영속성
 
 - `industry_categories`: 업종 카테고리. 대분류와 하위 분류를 V4 마이그레이션에서 초기 데이터로 넣는다.
-- `job_posts`: 사업장·점주 외부 ID, 카테고리 FK, 근무 일시, 급여, 모집 인원, 위경도, 긴급도, 지원 마감, 상태, 버전, 연결된 결제 주문 ID와 원래 결제 스냅샷(`payment_order_id`, `payment_job_version`, `payment_amount`, `payment_currency`, V10). 네 결제 컬럼은 모두 NULL이거나 모두 값이 있어야 한다(`ck_job_posts_payment_order_snapshot`).
-- `job_status_histories`: 공고 상태 전이 이력. 현재 모집 완료 전이만 기록한다. 처리 주체 컬럼이 없어 `reason`에 `주체:사유`로 기록한다.
+- `job_posts`: 사업장·점주 외부 ID, 카테고리 FK, 근무 일시, 급여, 모집 인원, 위경도, 긴급도, 지원 마감, 상태, 버전, 연결된 결제 주문 ID와 원래 결제 스냅샷(`payment_order_id`, `payment_job_version`, `payment_amount`, `payment_currency`, V10). 네 결제 컬럼은 모두 NULL이거나 모두 값이 있어야 한다(`ck_job_posts_payment_order_snapshot`). 예치 차단 여부 `funding_blocked`(V11, 기본 false).
+- `job_status_histories`: 공고 상태 전이 이력. 예치 확인 공개와 모집 완료 전이를 기록한다. 처리 주체 컬럼이 없어 `reason`에 `주체:사유`로 기록한다.
 - `job_application_admissions`: 공고 FK, 알바생 회원 외부 ID, 멱등 키(유일), 공고 버전, 승인 상태, 승인·만료·사용 시각, 발급 당시 공고 스냅샷(점주 회원 ID, 업종 ID, 근무 일시, 위도·경도). 스냅샷 컬럼은 `updatable = false`로 두어 발급 후 바뀌지 않는다.
 - `job_matching_seat_reservations`(V8): 공고 FK, 매칭·지원·알바생 외부 ID, 예약·확정·반환 멱등 키(각각 유일), 공고 버전, 상태, 예약·확정·반환·만료 처리 시각과 발급 시 확정한 `expires_at`, 발급 당시 스냅샷(점주 ID, 근무 일시, `end_time_next_day`, `locked_amount` 정수 KRW, `currency`). 인덱스는 공고별 점유 집계·중복 점유 확인용 `(job_post_id, status, expires_at)`과 만료 대상 공고 조회용 `(status, expires_at)`이다.
 - `job_recruitment_completion_commands`(V9): 공고 FK, 명령 ID(UUID, 유일), 완료 버전, 전송 상태(`PENDING`/`SUCCEEDED`), 시도 횟수, 다음 시도 시각, 실행권 토큰·만료 시각, 마지막 시도 시각, 마지막 실패 분류·HTTP 상태·응답 코드, 생성·성공 시각. `(job_post_id, job_version)` 유일 제약과 전송 대상 조회용 `(status, next_attempt_at)` 인덱스를 둔다.
 
 - `job_payment_order_commands`(V10): 공고 FK, 발급 순번, 멱등 키(UUID), 결제용 공고 버전, 점주 ID, 금액(정수 KRW), 통화, 처리 상태(`PENDING`/`SUCCEEDED`/`SUPERSEDED`), 검증된 주문 ID, 시도 횟수, 다음 시도 시각, 실행권 토큰·만료 시각, 마지막 시도 시각, 마지막 실패 분류·HTTP 상태·응답 코드, 종료 시각. 유일 제약은 [명령 저장](#명령-저장)을 따르고, 전송 대상 조회용 `(status, next_attempt_at)` 인덱스를 둔다.
+- `job_payment_fundings`(V11): 공고 FK, 주문 ID(유일), 마지막 적용 `funding_revision`, 예치 여부, 적용 시각. 연결된 주문의 알림만 생성·갱신한다.
+- `job_funding_status_receipts`(V11): 검증을 통과한 예치 상태 알림의 영구 수신 기록. 멱등 키(유일), 공고 FK, 요청 필드 전체(주문 ID, 결제용 버전, 점주, 정수 금액, 통화, revision, 예치 여부), 처리 결과·공개 생략 사유, 처리 직후 공고 상태·차단 여부, 환불 검토 필요 여부, 수신 시각. `(order_id, funding_revision)` 유일 제약과 환불 검토 조회용 `(refund_review_required, received_at)` 인덱스를 둔다. 모든 컬럼은 생성 후 바꾸지 않는다.
 
 사업장·점주·알바생 ID와 결제 주문 ID는 다른 서비스의 원본이므로 물리 FK 없이 외부 ID로만 저장한다.
 
@@ -378,12 +476,18 @@ HTTP 2xx만으로 성공 처리하지 않는다. 끝까지 받은 본문이 JSON
 | 409 | `JOB-409-008` | 같은 매칭 또는 지원이 이미 자리를 점유 |
 | 409 | `JOB-409-009` | 모집 자리 예약 만료 |
 | 409 | `JOB-409-010` | 자리 예약 상태와 맞지 않는 요청(반환된 예약 확정, 확정된 예약 반환, 다른 키로 이미 처리됨) |
+| 409 | `JOB-409-011` | 공고의 결제 주문과 일치하지 않는 예치 상태 알림(관련 없는 주문, 스냅샷 불일치) |
+| 409 | `JOB-409-012` | 같은 주문·revision의 예치 상태 알림 내용이 다름 |
+| 409 | `JOB-409-013` | 결제 주문 연결 전이라 예치 상태를 아직 반영할 수 없음(같은 명령으로 재시도) |
 
 요청 형식·검증 오류와 인증·권한 오류는 공통 `GLOBAL-*` 코드를 사용한다. 예상하지 못한 오류는 원문을 노출하지 않는 500으로 응답한다. 공통 기준은 [오류 처리 검토](./error-handling-review.md)를 따른다.
 
 ## 후속 작업
 
-- 예치 상태 수신 `POST /api/jobs/internal/{jobPostId}/funding-status`: 연결된 주문 ID·금액·통화·점주·결제용 버전 대조, 명령 처리 기록과 재전송 원래 결과 응답, 주문별 `fundingRevision` 저장, `funded=true`일 때 `PAYMENT_PENDING → OPEN` 공개와 이력 기록, `funded=false`일 때 신규 지원·매칭 차단 ([토스 예치 설계](./toss-deposit-design.md)). 공개 전까지 신규 공고는 비공개로 남는다.
+- 환불 검토 대상 예치 상태 수신 기록(`refund_review_required`)의 조회·조치 도구와 실제 환불·정산
+- 예치 차단 전에 확정된 매칭·근무·결제 잠금의 사후 복구 정책(취소·환불·정산)
+- 예치 차단 여부를 공고 상세 응답에 표시할지 여부(현재 필드 없음)
+- job-service·payment-service 실제 프로세스 간 예치 알림 E2E 검증
 - 공고 조건(금액 관련) 수정과 새 결제용 버전, 주문 교체·재결제를 위한 새 명령 발급(`JobPaymentOrderCommandIssuer`의 다음 순번)과 그 API
 - 운영 확인 대상으로 남은 결제 주문 생성 명령의 조회·조치 도구
 - 수동 마감, 지원 기한 만료 자동 마감, 재오픈 등 나머지 공고 상태 전이와 그 이력 기록. 재오픈은 버전을 올려 이전 완료 알림과 구분해야 한다.
@@ -394,4 +498,4 @@ HTTP 2xx만으로 성공 처리하지 않는다. 끝까지 받은 본문이 JSON
 
 ## 실행과 검증
 
-`.env.example`의 `JOB_*` 값을 개인 `.env`에 설정하고 공통 `AUTH_JWT_SECRET`, `INTERNAL_API_SECRET`을 맞춘다. `./scripts/local-run.sh infra`, `./scripts/local-run.sh job`으로 실행한다. HTTP 8083, 로컬 MySQL 3309를 사용한다. Swagger UI는 `/swagger-ui.html`이다. 통합 테스트는 MySQL Testcontainers로 지원 승인 발급·멱등·오류 코드, 모집 자리 예약·확정·반환의 멱등·동시성·만료 경계·제약 변환, 만료 회수, 모집 완료 전이(정원 미충족 시 미마감, 동시 확정 시 1회 기록, 이력·명령 저장 실패 시 함께 롤백, 이전 공고 복구), 알림 전송(실제 소켓의 matching-service 대역으로 경로·헤더·타임아웃·실패 분류, 헤더 전 정지·헤더 지연·본문 일부 후 정지·본문 조금씩 전송에서 전체 제한시간 안의 종료와 실제 연결 닫힘, 반복 초과 시 연결·작업·스레드 미누적, HTTP 대기 중 트랜잭션·잠금 미보유, backoff, 실행권 인계와 늦은 결과 무시, 응답 유실 수렴), 급여 계산(전체 예치액 100원 경계와 오버플로), 결제 대기 비공개 생성(공고·명령 원자적 저장과 명령 저장 실패 시 롤백, 스냅샷 불변), 공개 전 공고의 점주 본인 상세 조회 허용과 타인·익명 404·검색 제외·신규 지원 승인과 자리 예약 거절, 결제 주문 생성 전송(실제 소켓의 payment-service 대역으로 경로·헤더·본문, 응답 envelope·필수 필드·스냅샷·주문 상태 검증, 타임아웃·5xx·잘못된 응답 분류, HTTP 대기 중 트랜잭션·잠금 미보유, 응답 유실 뒤 같은 키·스냅샷으로 원래 주문 복구, 진행된 주문 상태 연결, `@Version` 증가 후 원래 결제용 버전 재시도, 동시 실행, 실행권 만료 인계와 늦은 결과 무시, 과거 명령의 최신 연결 덮어쓰기 방지, 커밋 후 즉시 전송, 안전한 로그), 점주 결제 주문 조회, 내부 인증, JWT 오류 경계, Swagger 접근을 확인한다. 시간 경계 테스트는 테스트용 `MutableClock` 빈으로 현재 시각을 고정한다. 테스트에서는 전송·복구 스케줄러와 커밋 후 즉시 전송(모집 완료 알림·결제 주문 생성 모두)을 끄고 직접 호출한다. payment-service 대역은 같은 키·본문에 처음 만든 주문을 돌려주는 멱등 응답을 흉내 내며 실제 PG 결제는 하지 않는다. payment-service의 주문 생성 수신 처리는 payment-service 테스트가, matching-service 수신 처리는 matching-service의 `RecruitmentCompletionContractTests`가 검증한다.
+`.env.example`의 `JOB_*` 값을 개인 `.env`에 설정하고 공통 `AUTH_JWT_SECRET`, `INTERNAL_API_SECRET`을 맞춘다. `./scripts/local-run.sh infra`, `./scripts/local-run.sh job`으로 실행한다. HTTP 8083, 로컬 MySQL 3309를 사용한다. Swagger UI는 `/swagger-ui.html`이다. 통합 테스트는 MySQL Testcontainers로 지원 승인 발급·멱등·오류 코드, 모집 자리 예약·확정·반환의 멱등·동시성·만료 경계·제약 변환, 만료 회수, 모집 완료 전이(정원 미충족 시 미마감, 동시 확정 시 1회 기록, 이력·명령 저장 실패 시 함께 롤백, 이전 공고 복구), 알림 전송(실제 소켓의 matching-service 대역으로 경로·헤더·타임아웃·실패 분류, 헤더 전 정지·헤더 지연·본문 일부 후 정지·본문 조금씩 전송에서 전체 제한시간 안의 종료와 실제 연결 닫힘, 반복 초과 시 연결·작업·스레드 미누적, HTTP 대기 중 트랜잭션·잠금 미보유, backoff, 실행권 인계와 늦은 결과 무시, 응답 유실 수렴), 급여 계산(전체 예치액 100원 경계와 오버플로), 결제 대기 비공개 생성(공고·명령 원자적 저장과 명령 저장 실패 시 롤백, 스냅샷 불변), 공개 전 공고의 점주 본인 상세 조회 허용과 타인·익명 404·검색 제외·신규 지원 승인과 자리 예약 거절, 결제 주문 생성 전송(실제 소켓의 payment-service 대역으로 경로·헤더·본문, 응답 envelope·필수 필드·스냅샷·주문 상태 검증, 타임아웃·5xx·잘못된 응답 분류, HTTP 대기 중 트랜잭션·잠금 미보유, 응답 유실 뒤 같은 키·스냅샷으로 원래 주문 복구, 진행된 주문 상태 연결, `@Version` 증가 후 원래 결제용 버전 재시도, 동시 실행, 실행권 만료 인계와 늦은 결과 무시, 과거 명령의 최신 연결 덮어쓰기 방지, 커밋 후 즉시 전송, 안전한 로그), 점주 결제 주문 조회, 예치 상태 수신(실제 등록·주문 생성·연결 경로 뒤 수신 API 호출로 내부 인증·입력 검증·공개와 이력 1건·같은 키 재전송과 공개 후 `@Version` 증가·키 재사용 409·다른 키의 같은 주문 revision 중복 효과 방지·같은 revision 내용 충돌·낮은 revision 뒤 차단 유지와 더 높은 true revision 처리·이전 주문 알림·주문 연결 전 409와 연결 후 같은 명령 처리·스냅샷 불일치·지원 마감과 근무 시작 경계·마감 공고 미공개·동시 수신·중간 실패 원자적 롤백·다른 공고 같은 키 동시 요청의 제약 변환·안전한 로그), 예치 차단과 신규 지원 승인·자리 예약·최초 확정의 양쪽 실행 순서 경쟁, 이미 성공한 지원 승인·예약·확정 명령의 멱등 결과 유지, 차단 공고의 검색 제외와 상세 노출, 내부 인증, JWT 오류 경계, Swagger 접근을 확인한다. 시간 경계 테스트는 테스트용 `MutableClock` 빈으로 현재 시각을 고정한다. 설정이 다른 테스트 클래스마다 캐시된 Spring 컨텍스트가 연결 풀을 유지하므로 테스트 MySQL 컨테이너는 `max_connections=500`으로 띄운다. 테스트에서는 전송·복구 스케줄러와 커밋 후 즉시 전송(모집 완료 알림·결제 주문 생성 모두)을 끄고 직접 호출한다. payment-service 대역은 같은 키·본문에 처음 만든 주문을 돌려주는 멱등 응답을 흉내 내며 실제 PG 결제는 하지 않는다. payment-service의 주문 생성 수신 처리는 payment-service 테스트가, matching-service 수신 처리는 matching-service의 `RecruitmentCompletionContractTests`가 검증한다.

@@ -1355,7 +1355,7 @@ Reason:
 - Reverting published jobs to private would abruptly block in-progress applications and matching.
 
 Implication for agents:
-- Do not publish a job on order creation or fabricate funding; `funding-status` consumption and `PAYMENT_PENDING -> OPEN` are follow-up work and must compare against the linked order and `payment_job_version`.
+- Do not publish a job on order creation or fabricate funding. Superseded by "2026-10-05 - Job Funding Status Consumption and Publication": `funding-status` consumption and `PAYMENT_PENDING -> OPEN` are now implemented and compare against the linked order and `payment_job_version`.
 - Do not re-read the current job version when retrying; use the stored command snapshot.
 - Do not log request headers, the internal secret, idempotency keys, response bodies, or raw exception messages for this call.
 
@@ -1366,3 +1366,33 @@ Related files:
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/PaymentOrderCommandTransactionService.java`
 - `job-service/src/main/java/com/workernotfound/job/external/client/payment/PaymentOrderClient.java`
 - `job-service/src/main/resources/db/migration/V10__create_job_payment_order_commands.sql`
+
+## 2026-10-05 - Job Funding Status Consumption and Publication
+
+Decision:
+- job-service receives payment-service funding status at `POST /api/jobs/internal/{jobPostId}/funding-status` and persists only verified notifications as receipts (unique `Idempotency-Key`, unique `(order_id, funding_revision)`, full request fields and the original response). Replays of the same key or the same order/revision are checked under the job-row lock before any version or status check and return the stored response. Key reuse for another job or content is `JOB-409-004`; the same order/revision with different content is `JOB-409-012`. Concurrent unique-constraint violations are translated by name in `GlobalExceptionHandler` after rollback.
+- Verification compares the order ID, payment job version (never the current `@Version`), owner, integer KRW amount (scale-insensitive), and currency against the linked order snapshot, without recalculating the amount. A notification whose order matches an earlier SUCCEEDED command of the same job returns 200 `STALE_ORDER` without changing state. Other orders and mismatches return `JOB-409-011` without recording.
+- A notification that arrives before order linking (latest command still `PENDING` with the same snapshot) gets a retryable 409 `JOB-409-013` and is not recorded (option B). payment-service retries every non-success response with the same key indefinitely, and job-service's order command recovers the original order ID with the same key, so the same command is processed after linking. Notifications never link an order.
+- The last applied revision is stored per order. Lower or equal revisions return 200 `STALE_REVISION`. Receipt, revision, block flag, `PAYMENT_PENDING -> OPEN`, and `job_status_histories` (`SYSTEM:FUNDING_CONFIRMED`) commit in one local transaction under the existing job-row lock order.
+- `funded=true` clears the funding block and publishes only a `PAYMENT_PENDING` job before its application deadline and work start (`now` equal to a boundary counts as passed). `OPEN`/`MATCHING` return `FUNDING_CONFIRMED` without history. `CLOSED`, deadline-passed, or work-started jobs are not published, return 200 `PUBLICATION_SKIPPED` with a reason, and are flagged `refund_review_required`; no refund is executed.
+- `funded=false` sets `job_posts.funding_blocked` without changing the job status. New admissions return `JOB-409-001` and new seat reservations and first `RESERVED -> CONSUMED` confirmations return `JOB-409-005`, both checked under the job-row lock. Idempotent replays, `CONSUMED` seats, and seat release are unaffected. Search excludes blocked jobs; detail visibility is unchanged.
+- Field-level strict JSON deserialization rejects non-integer versions/IDs/revisions and non-boolean `funded`. The global Jackson configuration is not changed.
+
+Reason:
+- The receiver must converge under duplicate, delayed, and reordered delivery, and a response lost before order linking must not drop or fabricate a funding fact.
+- Reverting status to `PAYMENT_PENDING` on cancellation could later reopen a closed job, so the block is a separate flag.
+- Existing matching-service mappings already treat `JOB-409-001` as "not accepting applications" and any 4xx confirmation rejection as a definitive rejection that triggers compensation. A new admission code would surface as a 503 dependency failure.
+- Option B reuses the two existing unlimited retry paths instead of adding a parked-notification table and a recovery scheduler.
+
+Implication for agents:
+- Do not record or acknowledge a link-pending notification as applied, and do not link an order from notification content.
+- Do not compare funding notifications with the current `@Version` or the current wage calculation.
+- Check the funding block under the job-row lock for every new admission, reservation, and first confirmation; keep idempotent replays ahead of that check.
+- Refund review tooling, actual refunds and settlement, post-confirmation recovery after a block, re-payment, and cross-service E2E remain follow-up work.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `docs/architecture/toss-deposit-design.md`
+- `docs/architecture/matching-application-design.md`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobFundingStatusCommandService.java`
+- `job-service/src/main/resources/db/migration/V11__create_job_funding_status.sql`
