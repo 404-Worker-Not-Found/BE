@@ -1,5 +1,8 @@
 package com.workernotfound.payment.support;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -11,6 +14,11 @@ public abstract class IntegrationTestSupport {
 
   static {
     MYSQL.start();
+  }
+
+  // 잠금 대기 관찰(performance_schema)에만 컨테이너 관리자 연결을 쓴다. 애플리케이션 계정 권한은 그대로 둔다.
+  protected static Connection openRootConnection() throws SQLException {
+    return DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
   }
 
   @DynamicPropertySource
