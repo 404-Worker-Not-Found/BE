@@ -44,6 +44,14 @@ job:
     connect-timeout: ${MATCHING_SERVICE_CONNECT_TIMEOUT:3s}
     read-timeout: ${MATCHING_SERVICE_READ_TIMEOUT:5s}
     call-timeout: ${MATCHING_SERVICE_CALL_TIMEOUT:8s}
+  payment-order:
+    dispatch-enabled: ${PAYMENT_ORDER_DISPATCH_ENABLED:true}
+    dispatch-after-commit: ${PAYMENT_ORDER_DISPATCH_AFTER_COMMIT:true}
+    dispatch-interval: ${PAYMENT_ORDER_DISPATCH_INTERVAL:5s}
+    batch-size: ${PAYMENT_ORDER_DISPATCH_BATCH_SIZE:50}
+    lease-duration: ${PAYMENT_ORDER_LEASE_DURATION:30s}
+    retry-base-delay: ${PAYMENT_ORDER_RETRY_BASE_DELAY:2s}
+    retry-max-delay: ${PAYMENT_ORDER_RETRY_MAX_DELAY:5m}
   payment-service:
     base-url: ${PAYMENT_SERVICE_BASE_URL:http://localhost:8085}
     connect-timeout: ${PAYMENT_SERVICE_CONNECT_TIMEOUT:3s}
