@@ -3,6 +3,7 @@ package com.workernotfound.job.domain.job.service;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
 import com.workernotfound.job.domain.job.dto.response.JobCardResponse;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
+import com.workernotfound.job.domain.job.dto.response.JobPaymentChangeResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentOrderResponse;
 import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
 import com.workernotfound.job.domain.job.entity.IndustryCategory;
@@ -11,6 +12,7 @@ import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import com.workernotfound.job.domain.job.entity.enums.UrgencyLevel;
 import com.workernotfound.job.domain.job.exception.JobErrorCode;
 import com.workernotfound.job.domain.job.repository.IndustryCategoryRepository;
+import com.workernotfound.job.domain.job.repository.JobPaymentChangeRequestRepository;
 import com.workernotfound.job.domain.job.repository.JobPaymentOrderCommandRepository;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
 import com.workernotfound.job.global.exception.BusinessException;
@@ -32,6 +34,7 @@ public class JobFindService {
     private final JobPostRepository jobPostRepository;
     private final IndustryCategoryRepository industryCategoryRepository;
     private final JobPaymentOrderCommandRepository paymentOrderCommandRepository;
+    private final JobPaymentChangeRequestRepository paymentChangeRequestRepository;
 
     public JobPost findJobPost(Long jobId) {
         return jobPostRepository.findById(jobId)
@@ -57,11 +60,19 @@ public class JobFindService {
             throw new BusinessException(JobErrorCode.JOB_NOT_FOUND);
         }
         if (post.getPaymentOrderId() != null) {
-            return JobPaymentOrderResponse.linked(post);
+            return JobPaymentOrderResponse.linked(post, findLatestPaymentChange(jobId));
         }
         return paymentOrderCommandRepository.findFirstByJobPostIdOrderByIssueSequenceDesc(jobId)
                 .map(command -> JobPaymentOrderResponse.pending(post, command))
                 .orElseGet(() -> JobPaymentOrderResponse.notRequested(post));
+    }
+
+    // 결제 조건 변경·재결제는 주문이 연결된 공고에만 발급되므로 연결된 경우에만 함께 보여 준다.
+    private JobPaymentChangeResponse findLatestPaymentChange(Long jobId) {
+        return paymentChangeRequestRepository.findFirstByJobPostIdOrderByIdDesc(jobId)
+                .map(request -> JobPaymentChangeResponse.of(
+                        request, paymentOrderCommandRepository.findById(request.getCommandId()).orElseThrow()))
+                .orElse(null);
     }
 
     public JobSearchResponse findJobs(JobSearchRequest request) {

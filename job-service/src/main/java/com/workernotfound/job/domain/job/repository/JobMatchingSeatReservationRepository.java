@@ -28,6 +28,9 @@ public interface JobMatchingSeatReservationRepository extends JpaRepository<JobM
 
     long countByJobPostIdAndStatusIn(Long jobPostId, Collection<MatchingSeatReservationStatus> statuses);
 
+    // 결제 조건을 바꿀 수 있는지 확인한다. 자리 예약이 한 번이라도 있었던 공고는 이미 매칭이 진행된 적이 있다.
+    boolean existsByJobPostId(Long jobPostId);
+
     @Query("""
             select count(r) > 0 from JobMatchingSeatReservation r
             where r.jobPostId = :jobPostId

@@ -36,12 +36,23 @@ public class JobPaymentOrderCommandIssuer {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public JobPaymentOrderCommand issue(JobPost jobPost, long amount, LocalDateTime now) {
+        return issue(jobPost, amount, jobPost.getVersion(), now);
+    }
+
+    /**
+     * 결제 조건 변경·재결제처럼 결제용 버전을 호출자가 정하는 발급. 결제용 버전은 결제 스냅샷의 버전이며 JPA {@code @Version}이 아니다.
+     * 새 결제 시도는 버전이 아니라 새 순번과 새 멱등 키로 구분한다.
+     *
+     * @param paymentJobVersion 조건 변경이면 이전 명령보다 큰 버전, 같은 조건의 재결제면 연결된 주문의 버전
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public JobPaymentOrderCommand issue(JobPost jobPost, long amount, long paymentJobVersion, LocalDateTime now) {
         int nextSequence = commandRepository.findMaxIssueSequenceByJobPostId(jobPost.getId()).orElse(0) + 1;
         JobPaymentOrderCommand command = commandRepository.save(JobPaymentOrderCommand.builder()
                 .jobPostId(jobPost.getId())
                 .issueSequence(nextSequence)
                 .idempotencyKey(UUID.randomUUID().toString())
-                .jobVersion(jobPost.getVersion())
+                .jobVersion(paymentJobVersion)
                 .ownerMemberId(jobPost.getOwnerId())
                 .amount(amount)
                 .currency(CURRENCY_KRW)

@@ -152,6 +152,29 @@ public class JobPost extends BaseEntity {
         this.paymentCurrency = currency;
     }
 
+    public JobPaymentTerms paymentTerms() {
+        return new JobPaymentTerms(workDate, startTime, endTime, endTimeNextDay, baseHourlyWage, extraWage,
+                recruitCount, applicationDeadline);
+    }
+
+    /**
+     * 새 주문이 검증·연결되는 트랜잭션에서 그 주문을 만든 결제 조건을 적용한다. 공고 상태와 예치 차단은 바꾸지 않는다.
+     * 호출자는 공고 행 잠금 아래에서 결제 대기 공고이고 연결된 주문이 이 조건의 주문인지 확인해야 한다.
+     */
+    public void applyPaymentTerms(JobPaymentTerms terms) {
+        if (status != JobStatus.PAYMENT_PENDING) {
+            throw new IllegalStateException("결제 대기 공고의 결제 조건만 바꿀 수 있습니다: " + status);
+        }
+        this.workDate = terms.workDate();
+        this.startTime = terms.startTime();
+        this.endTime = terms.endTime();
+        this.endTimeNextDay = terms.endTimeNextDay();
+        this.baseHourlyWage = terms.baseHourlyWage();
+        this.extraWage = terms.extraWage();
+        this.recruitCount = terms.recruitCount();
+        this.applicationDeadline = terms.applicationDeadline();
+    }
+
     public boolean isLinkedToPaymentOrder(String orderId) {
         return paymentOrderId != null && paymentOrderId.equals(orderId);
     }

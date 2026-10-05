@@ -15,7 +15,7 @@ import org.springframework.web.client.RestClient;
 public class PaymentClientConfig {
   @Bean
   public RestClient tossRestClient(TossProperties properties) {
-    return builder("https://api.tosspayments.com")
+    return builder(properties.apiBaseUrl())
         .defaultHeaders(
             headers -> {
               if (properties.enabled()) headers.setBasicAuth(properties.secretKey(), "");

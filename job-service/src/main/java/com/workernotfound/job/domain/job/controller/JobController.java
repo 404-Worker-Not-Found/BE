@@ -3,13 +3,14 @@ package com.workernotfound.job.domain.job.controller;
 import com.workernotfound.job.domain.job.controller.docs.JobControllerDocs;
 import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
+import com.workernotfound.job.domain.job.dto.request.UpdatePaymentTermsRequest;
+import com.workernotfound.job.domain.job.dto.response.JobPaymentChangeResponse;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentOrderResponse;
 import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
 import com.workernotfound.job.domain.job.service.JobApplicationService;
 import com.workernotfound.job.global.response.ApiResponse;
 import com.workernotfound.job.global.security.MemberClaims;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,7 +27,7 @@ public class JobController implements JobControllerDocs {
     @PostMapping
     public ResponseEntity<ApiResponse<Long>> create(
             @AuthenticationPrincipal MemberClaims claims,
-            @Valid @RequestBody CreateJobRequest request
+            @RequestBody CreateJobRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.success(
                 jobApplicationService.create(claims.memberId(), request)
@@ -58,9 +59,34 @@ public class JobController implements JobControllerDocs {
     }
 
     @Override
+    @PutMapping("/{id}/payment-terms")
+    public ResponseEntity<ApiResponse<JobPaymentChangeResponse>> changePaymentTerms(
+            @AuthenticationPrincipal MemberClaims claims,
+            @PathVariable Long id,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody UpdatePaymentTermsRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                jobApplicationService.changePaymentTerms(id, claims.memberId(), request, idempotencyKey)
+        ));
+    }
+
+    @Override
+    @PostMapping("/{id}/payment-order/retries")
+    public ResponseEntity<ApiResponse<JobPaymentChangeResponse>> retryPayment(
+            @AuthenticationPrincipal MemberClaims claims,
+            @PathVariable Long id,
+            @RequestHeader("Idempotency-Key") String idempotencyKey
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                jobApplicationService.retryPayment(id, claims.memberId(), idempotencyKey)
+        ));
+    }
+
+    @Override
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<JobSearchResponse>> search(
-            @Valid @ModelAttribute JobSearchRequest request
+            @ModelAttribute JobSearchRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.success(
                 jobApplicationService.getJobs(request)

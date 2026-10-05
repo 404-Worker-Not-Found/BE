@@ -1,6 +1,8 @@
 package com.workernotfound.job.domain.job.service;
 
 import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
+import com.workernotfound.job.domain.job.dto.request.UpdatePaymentTermsRequest;
+import com.workernotfound.job.domain.job.dto.response.JobPaymentChangeResponse;
 import com.workernotfound.job.domain.job.dto.request.FundingStatusRequest;
 import com.workernotfound.job.domain.job.dto.response.FundingStatusResponse;
 import com.workernotfound.job.domain.job.dto.response.ApplicationAdmissionResponse;
@@ -24,6 +26,7 @@ public class JobApplicationService {
     private final JobApplicationAdmissionCommandService jobApplicationAdmissionCommandService;
     private final MatchingSeatReservationCommandService matchingSeatReservationCommandService;
     private final JobFundingStatusCommandService jobFundingStatusCommandService;
+    private final JobPaymentChangeCommandService jobPaymentChangeCommandService;
 
     public Long create(Long ownerId, CreateJobRequest request) {
         return jobCommandService.create(ownerId, request);
@@ -35,6 +38,24 @@ public class JobApplicationService {
 
     public JobPaymentOrderResponse getJobPaymentOrder(Long jobId, Long ownerMemberId) {
         return jobFindService.findJobPaymentOrder(jobId, ownerMemberId);
+    }
+
+    public JobPaymentChangeResponse changePaymentTerms(
+            Long jobId,
+            Long ownerMemberId,
+            UpdatePaymentTermsRequest request,
+            String idempotencyKey
+    ) {
+        return toResponse(jobPaymentChangeCommandService.changeTerms(
+                jobId, ownerMemberId, request.toTerms(), idempotencyKey));
+    }
+
+    public JobPaymentChangeResponse retryPayment(Long jobId, Long ownerMemberId, String idempotencyKey) {
+        return toResponse(jobPaymentChangeCommandService.retryPayment(jobId, ownerMemberId, idempotencyKey));
+    }
+
+    private JobPaymentChangeResponse toResponse(JobPaymentChange change) {
+        return JobPaymentChangeResponse.of(change.request(), change.command());
     }
 
     public JobSearchResponse getJobs(JobSearchRequest request) {

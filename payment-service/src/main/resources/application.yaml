@@ -16,6 +16,8 @@ payment:
   toss:
     enabled: ${TOSS_ENABLED:false}
     secret-key: ${TOSS_SECRET_KEY:}
+    # 로컬 PG 대역 서버로 프로세스 간 연동을 확인할 때만 loopback HTTP 주소로 바꾼다.
+    api-base-url: ${TOSS_API_BASE_URL:https://api.tosspayments.com}
   job-service:
     base-url: ${JOB_SERVICE_BASE_URL:http://localhost:8083}
   recovery:
