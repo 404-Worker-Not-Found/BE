@@ -208,6 +208,7 @@ Current implementation state:
 - Initial member-service REST client support has been added.
 - Initial member-service REST client calls include a shared internal secret header for service-to-service APIs.
 - LOCAL signup/login, token reissue, and logout service layer support has been added.
+- Email-code password reset is available for active accounts with LOCAL credentials. Reset codes are atomically consumed once, and password changes revoke every device's refresh tokens in the same DB transaction. Account locks serialize reset with LOCAL login and token issuance/reissue; existing access tokens remain valid until expiration.
 - LOCAL signup requires email verification, SMS verification, password input, and role-specific additional information before final account creation.
 - Signup calls member-service first and compensates by deleting the created member if auth-service persistence fails afterward.
 - Signup service-to-service calls run outside the auth database transaction; auth account, credential or OAuth connection, and refresh token persistence use a separate short transaction.
