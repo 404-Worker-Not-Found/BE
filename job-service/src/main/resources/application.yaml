@@ -44,6 +44,11 @@ job:
     connect-timeout: ${MATCHING_SERVICE_CONNECT_TIMEOUT:3s}
     read-timeout: ${MATCHING_SERVICE_READ_TIMEOUT:5s}
     call-timeout: ${MATCHING_SERVICE_CALL_TIMEOUT:8s}
+  payment-service:
+    base-url: ${PAYMENT_SERVICE_BASE_URL:http://localhost:8085}
+    connect-timeout: ${PAYMENT_SERVICE_CONNECT_TIMEOUT:3s}
+    read-timeout: ${PAYMENT_SERVICE_READ_TIMEOUT:5s}
+    call-timeout: ${PAYMENT_SERVICE_CALL_TIMEOUT:8s}
 
 server:
   port: ${JOB_SERVICE_PORT:8083}
