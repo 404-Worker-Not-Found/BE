@@ -123,4 +123,16 @@ public class JobPost extends BaseEntity {
         this.applicationDeadline = applicationDeadline;
         this.status = JobStatus.OPEN;
     }
+
+    // 모집 완료로 마감할 수 있는 상태다. 이미 CLOSED인 공고는 다시 마감하지 않는다.
+    public boolean isRecruiting() {
+        return status == JobStatus.OPEN || status == JobStatus.MATCHING;
+    }
+
+    public void closeForRecruitmentCompletion() {
+        if (!isRecruiting()) {
+            throw new IllegalStateException("모집 중인 공고만 모집 완료로 마감할 수 있습니다: " + status);
+        }
+        this.status = JobStatus.CLOSED;
+    }
 }

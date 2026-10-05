@@ -8,35 +8,35 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-// 다른 스케줄러가 스케줄링을 켜도 이 설정이 꺼져 있으면 실행되지 않도록 빈 자체를 조건부로 등록한다.
+// 커밋 후 즉시 전송 여부와 관계없이 DB의 미완료 모집 완료 알림 명령을 주기적으로 찾아 전송한다.
 @Slf4j
 @Component
 @RequiredArgsConstructor
 @ConditionalOnProperty(
-        name = "job.matching-seat-reservation.expiry-sweep-enabled",
+        name = "job.recruitment-completion.dispatch-enabled",
         havingValue = "true",
         matchIfMissing = true
 )
-public class MatchingSeatReservationExpiryScheduler {
+public class RecruitmentCompletionDispatchScheduler {
 
-    private final MatchingSeatReservationExpiryService expiryService;
+    private final RecruitmentCompletionDispatcher dispatcher;
 
     @Scheduled(
-            fixedDelayString = "${job.matching-seat-reservation.expiry-sweep-interval}",
-            initialDelayString = "${job.matching-seat-reservation.expiry-sweep-interval}"
+            fixedDelayString = "${job.recruitment-completion.dispatch-interval}",
+            initialDelayString = "${job.recruitment-completion.dispatch-interval}"
     )
-    public void expireOverdueReservations() {
+    public void dispatchDueCommands() {
         try {
-            expiryService.expireOverdueReservations();
+            dispatcher.dispatchDue();
         } catch (RuntimeException exception) {
-            log.warn("모집 자리 예약 만료 회수 실행 실패: type={}", exception.getClass().getName());
+            log.warn("모집 완료 알림 전송 실행 실패: type={}", exception.getClass().getName());
         }
     }
 
     @Configuration(proxyBeanMethods = false)
     @EnableScheduling
     @ConditionalOnProperty(
-            name = "job.matching-seat-reservation.expiry-sweep-enabled",
+            name = "job.recruitment-completion.dispatch-enabled",
             havingValue = "true",
             matchIfMissing = true
     )

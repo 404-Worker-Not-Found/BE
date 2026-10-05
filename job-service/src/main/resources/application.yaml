@@ -26,6 +26,24 @@ job:
     expiry-sweep-batch-size: ${MATCHING_SEAT_RESERVATION_EXPIRY_SWEEP_BATCH_SIZE:100}
   internal:
     secret: ${INTERNAL_API_SECRET}
+  recruitment-completion:
+    dispatch-enabled: ${RECRUITMENT_COMPLETION_DISPATCH_ENABLED:true}
+    dispatch-after-commit: ${RECRUITMENT_COMPLETION_DISPATCH_AFTER_COMMIT:true}
+    dispatch-interval: ${RECRUITMENT_COMPLETION_DISPATCH_INTERVAL:5s}
+    batch-size: ${RECRUITMENT_COMPLETION_DISPATCH_BATCH_SIZE:50}
+    lease-duration: ${RECRUITMENT_COMPLETION_LEASE_DURATION:30s}
+    retry-base-delay: ${RECRUITMENT_COMPLETION_RETRY_BASE_DELAY:2s}
+    retry-max-delay: ${RECRUITMENT_COMPLETION_RETRY_MAX_DELAY:5m}
+    reconcile:
+      enabled: ${RECRUITMENT_COMPLETION_RECONCILE_ENABLED:true}
+      interval: ${RECRUITMENT_COMPLETION_RECONCILE_INTERVAL:10m}
+      initial-delay: ${RECRUITMENT_COMPLETION_RECONCILE_INITIAL_DELAY:30s}
+      batch-size: ${RECRUITMENT_COMPLETION_RECONCILE_BATCH_SIZE:100}
+  matching-service:
+    base-url: ${MATCHING_SERVICE_BASE_URL:http://localhost:8084}
+    connect-timeout: ${MATCHING_SERVICE_CONNECT_TIMEOUT:3s}
+    read-timeout: ${MATCHING_SERVICE_READ_TIMEOUT:5s}
+    call-timeout: ${MATCHING_SERVICE_CALL_TIMEOUT:8s}
 
 server:
   port: ${JOB_SERVICE_PORT:8083}

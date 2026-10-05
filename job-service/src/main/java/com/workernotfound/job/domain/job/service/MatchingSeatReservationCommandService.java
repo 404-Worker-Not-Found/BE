@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>모든 변경은 공고 행 → 예약 행 순서로 잠근다. 같은 공고의 예약·확정·반환·만료 회수가 공고 행 잠금으로
  * 직렬화되므로 {@code CONSUMED 수 + 유효한 RESERVED 수 <= recruitCount}가 유지된다.
+ * 마지막 자리 확정({@code CONSUMED 수 == recruitCount})은 같은 잠금과 트랜잭션에서 공고를 모집 완료로 마감한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -38,6 +39,7 @@ public class MatchingSeatReservationCommandService {
     private final JobPostRepository jobPostRepository;
     private final JobMatchingSeatReservationRepository reservationRepository;
     private final JobWageCalculator jobWageCalculator;
+    private final JobRecruitmentCompletionService recruitmentCompletionService;
     private final MatchingSeatReservationProperties properties;
     private final Clock clock;
 
@@ -87,15 +89,15 @@ public class MatchingSeatReservationCommandService {
 
     @Transactional
     public JobMatchingSeatReservation confirm(Long jobPostId, Long reservationId, String idempotencyKey) {
-        lockJobPost(jobPostId);
+        JobPost jobPost = lockJobPost(jobPostId);
         validateCommandKeyOwner(reservationRepository.findByConfirmIdempotencyKey(idempotencyKey), reservationId);
         JobMatchingSeatReservation reservation = lockReservation(jobPostId, reservationId);
         LocalDateTime now = LocalDateTime.now(clock);
 
         switch (reservation.getStatus()) {
-            // 확정 응답이 유실된 재요청이다. 원래 만료 시각이 지났어도 이미 소비된 자리이므로 거절하지 않는다.
+            // 확정 응답이 유실된 재요청이다. 원래 만료 시각이 지났거나 공고가 이미 모집 완료로 마감됐어도 거절하지 않는다.
             case CONSUMED -> requireRecordedKey(reservation.getConfirmIdempotencyKey(), idempotencyKey);
-            case RESERVED -> consumeUnexpired(reservation, idempotencyKey, now);
+            case RESERVED -> consumeAndCompleteIfFilled(jobPost, reservation, idempotencyKey, now);
             case EXPIRED -> throw new BusinessException(JobErrorCode.SEAT_RESERVATION_EXPIRED);
             case RELEASED -> throw new BusinessException(
                     JobErrorCode.SEAT_RESERVATION_STATE_CONFLICT, "반환된 모집 자리 예약은 확정할 수 없습니다.");
@@ -154,11 +156,18 @@ public class MatchingSeatReservationCommandService {
         return reservation;
     }
 
-    private void consumeUnexpired(JobMatchingSeatReservation reservation, String idempotencyKey, LocalDateTime now) {
+    // 마지막 자리 확정이면 같은 트랜잭션에서 공고 마감·상태 이력·모집 완료 알림 명령까지 저장한다.
+    private void consumeAndCompleteIfFilled(
+            JobPost jobPost,
+            JobMatchingSeatReservation reservation,
+            String idempotencyKey,
+            LocalDateTime now
+    ) {
         if (reservation.isExpiredAt(now)) {
             throw new BusinessException(JobErrorCode.SEAT_RESERVATION_EXPIRED);
         }
         reservation.consume(idempotencyKey, now);
+        recruitmentCompletionService.completeIfFilled(jobPost, now);
     }
 
     private void releaseReserved(JobMatchingSeatReservation reservation, String idempotencyKey, LocalDateTime now) {

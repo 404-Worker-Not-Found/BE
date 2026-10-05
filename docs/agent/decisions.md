@@ -846,7 +846,7 @@ Implication for agents:
 - Do not infer recruitment completion from local application counts or reject other applicants after every single confirmation.
 - Keep the current REST endpoint as an adapter for the semantic `RecruitmentCompleted` contract; a later broker integration must preserve its idempotency and retry behavior.
 - Include the source `jobVersion` in the completion contract so reopen cycles are distinguishable.
-- Do not implement the producer inside `job-service` unless work in the job domain is explicitly in scope.
+- Superseded by "2026-10-04 - Recruitment Completion Producer": the producer is now implemented in `job-service`. Previously: do not implement the producer inside `job-service` unless work in the job domain is explicitly in scope.
 
 ## 2026-09-14 - Matching Domain Event Transport
 
@@ -1124,7 +1124,8 @@ Reason:
 
 Implication for agents:
 - Keep wage calculation in `JobWageCalculator`; do not duplicate it in payment-service. Record break-time, time-band premium, and urgency premium policies as new decisions before changing the formula.
-- Do not treat seat reservation or confirmation as recruitment completion; job status transition and the completion notification remain separate work.
+- Do not treat a seat reservation as recruitment completion.
+- Superseded by "2026-10-04 - Recruitment Completion Producer": the confirmation that consumes the last seat now closes the job and stores the completion command in the same transaction. Previously: seat confirmation was not recruitment completion, and the job status transition and completion notification were separate work.
 
 Related files:
 - `docs/architecture/job-post-design.md`
@@ -1132,6 +1133,93 @@ Related files:
 - `docs/architecture/work-scheduled-design.md`
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/MatchingSeatReservationCommandService.java`
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobWageCalculator.java`
+
+## 2026-10-04 - Recruitment Completion Producer
+
+Decision:
+- job-service completes recruitment when `CONSUMED` seats reach `recruitCount`. Valid `RESERVED` seats only block further reservations and never count toward completion.
+- The last seat confirmation, the `OPEN`/`MATCHING -> CLOSED` transition, the `job_status_histories` row, and the completion command are stored in one local transaction under the existing job-row -> reservation-row lock order. Any failure rolls back the seat confirmation as well.
+- The notification `jobVersion` is the job version after the completion transition. It is obtained by flushing the `@Version` increment inside the same transaction, stored once with a UUID command ID, and never re-read from the current job on retries. `(job_post_id, job_version)` is unique.
+- With no actor column, `job_status_histories.reason` records `actor:reason`, currently `SYSTEM:RECRUITMENT_FILLED`.
+- Delivery uses a database lease: claim in a short transaction, call matching-service outside any transaction, and record the result only when the lease token still matches. An after-commit trigger is an optimization; a scheduler guarantees retries.
+- Commands have no terminal failure state. 409, timeouts, network errors, 429, and 5xx retry with capped exponential backoff. Authentication and contract failures stay `PENDING`, retry at the maximum delay, and log errors for operators.
+- A bounded periodic reconciler closes jobs whose seats were all consumed before this implementation, using the same lock and criteria.
+
+Reason:
+- The matching receiver uses the completion version as its late-application barrier and treats a repeated version as success, so a stable command and version make every retry and lost response converge.
+- The matching Saga that confirmed the last seat may still be finishing locally, so the first notification is expected to receive 409.
+
+Implication for agents:
+- Do not count `RESERVED` seats as completion, and do not commit the job separately to obtain the version.
+- Do not delete commands or mark them successful after retries; do not store response bodies, headers, or secrets.
+- Future close or reopen transitions must increment the job version and write `job_status_histories` in the same way.
+- Make each scheduler bean conditional on its own property, because `@EnableScheduling` from one scheduler enables every `@Scheduled` bean.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `docs/architecture/matching-application-design.md`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobRecruitmentCompletionService.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/RecruitmentCompletionDispatcher.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/RecruitmentCompletionReconciler.java`
+
+## 2026-10-04 - Recruitment Completion Call Deadline
+
+Decision:
+- Enforce a total deadline (`MATCHING_SERVICE_CALL_TIMEOUT`, default 8s) on each recruitment-completion call, from connection start through the end of the response body. Connect and read timeouts remain separate limits for connection setup and response headers, and may not exceed the total.
+- Send this call with the JDK `java.net.http.HttpClient` (HTTP/1.1) as one asynchronous exchange including a bounded body subscriber. When the deadline passes, cancel the exchange so the connection is closed, and record `TIMEOUT`.
+- `maxCallDuration()` returns this enforced deadline. The lease must be at least the deadline plus one second; otherwise startup fails.
+- Accept timeouts only from 1ms to 1h; reject null, zero, negative, sub-millisecond, and larger values at startup.
+
+Reason:
+- `HttpURLConnection` read timeouts bound only the gap between reads. A slow body ran for over 10 seconds with a calculated 400ms limit, and on JDK 17 `disconnect()` from another thread did not close the socket during body reads.
+- Cancelling a JDK `HttpClient` exchange closed the connection before headers, during header and body drip, and after a partial body, without accumulating threads. No new dependency is needed.
+
+Implication for agents:
+- Do not treat per-read timeouts or `Future.get(timeout)` alone as a total call limit; verify that the connection is actually closed with a real-socket test.
+- Keep the lease validation tied to the enforced deadline when changing the HTTP client.
+- Body transfer failures and JSON format errors are classified separately; see "Recruitment Completion Response Classification".
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `job-service/src/main/java/com/workernotfound/job/external/client/matching/MatchingRecruitmentCompletionClient.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/RecruitmentCompletionDispatcher.java`
+
+## 2026-10-05 - Recruitment Completion Response Classification
+
+Decision:
+- Treat failures while receiving the response body as transport failures: a timeout is `TIMEOUT`, and a lost connection or a body shorter than declared is `NETWORK`. They take precedence over an already received HTTP status, which is kept only as diagnostic data.
+- Classify a fully received response by HTTP status as before. An empty, malformed, trailing-content, non-boolean `success`, or over-8KB body is never a success; its remote error code is discarded, but the status classification remains (for example, 503 with invalid JSON is `SERVER_ERROR`).
+- Do not convert unexpected runtime exceptions into communication or contract failures. They surface at the dispatcher boundary, are logged at error level with only the command ID and exception type chain, and the command is retried after its lease expires.
+
+Reason:
+- A body read failure turned into a missing body and was classified as `CONTRACT`, which is non-transient and delayed the first retry from the base delay to the maximum delay.
+
+Implication for agents:
+- Do not catch all `IOException` or `RuntimeException` around response parsing; JSON format errors and transport errors have different meanings.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `job-service/src/main/java/com/workernotfound/job/external/client/matching/MatchingRecruitmentCompletionClient.java`
+
+## 2026-10-05 - Safe Recruitment Completion Error Logs and Internal Secret Format
+
+Decision:
+- At the recruitment-completion execution boundaries (scheduler dispatch and after-commit dispatch), log unexpected exceptions with only the command ID and the exception class chain. Do not pass the original exception, its message, causes, suppressed exceptions, or stack trace to the logger.
+- In job-service, require `job.internal.secret` to be non-empty visible ASCII (0x21-0x7E) and reject other values at startup without trimming or including the value in error messages. `InternalApiProperties.toString()` masks the value.
+
+Reason:
+- The JDK HTTP client includes the entire header value in its `IllegalArgumentException` message, so logging the raw exception exposed the internal secret when the configured value contained a newline.
+- The same value is sent as an HTTP header and compared as UTF-8 bytes by receivers, so whitespace, control, and non-ASCII characters either cannot be sent or fail comparison.
+
+Implication for agents:
+- Do not log raw exceptions at boundaries where unvalidated strings such as request headers can appear in exception messages; log identifiers and exception types instead.
+- Keep error messages and failure reports for secret settings free of the rejected value; verify with captured startup output.
+
+Related files:
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/ExceptionTypeChain.java`
+- `job-service/src/main/java/com/workernotfound/job/global/security/InternalApiProperties.java`
+- `docs/architecture/job-post-design.md`
+
 ## 2026-10-04 - Participant Text Messages
 
 Decision:
