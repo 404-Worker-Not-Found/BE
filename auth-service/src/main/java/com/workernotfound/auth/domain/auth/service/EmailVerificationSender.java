@@ -29,10 +29,10 @@ public class EmailVerificationSender {
 					"text", "인증번호는 " + verificationCode + "입니다. 5분 이내에 입력해 주세요."))
 				.retrieve().body(Map.class);
 			if (response == null || !(response.get("id") instanceof String id) || !StringUtils.hasText(id)) {
-				throw new VerificationDeliveryException("이메일 발송 접수 응답이 올바르지 않습니다.");
+				throw new VerificationDeliveryException("이메일 발송 접수 응답이 올바르지 않습니다.", true);
 			}
 		} catch (RestClientException exception) {
-			throw new VerificationDeliveryException("이메일 발송에 실패했습니다.", exception);
+			throw new VerificationDeliveryException("이메일 발송에 실패했습니다.", exception, true);
 		}
 	}
 }

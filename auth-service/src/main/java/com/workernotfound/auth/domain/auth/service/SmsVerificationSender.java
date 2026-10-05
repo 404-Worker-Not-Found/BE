@@ -39,14 +39,19 @@ public class SmsVerificationSender {
 						"type", "SMS")),
 					"showMessageList", true))
 				.retrieve().body(Map.class);
-			if (response == null || !(response.get("messageList") instanceof List<?> messages)
+			if (response == null) {
+				throw new VerificationDeliveryException("SMS 발송 접수 응답이 비어 있습니다.", true);
+			}
+			if (response.get("failedMessageList") instanceof List<?> failed && !failed.isEmpty()) {
+				throw new VerificationDeliveryException("SMS 발송 접수가 거절되었습니다.");
+			}
+			if (!(response.get("messageList") instanceof List<?> messages)
 					|| messages.size() != 1 || !(messages.get(0) instanceof Map<?, ?> message)
-					|| !"2000".equals(message.get("statusCode"))
-					|| !(response.get("failedMessageList") instanceof List<?> failed) || !failed.isEmpty()) {
-				throw new VerificationDeliveryException("SMS 발송 접수에 실패했습니다.");
+					|| !"2000".equals(message.get("statusCode"))) {
+				throw new VerificationDeliveryException("SMS 발송 접수 응답이 올바르지 않습니다.", true);
 			}
 		} catch (RestClientException exception) {
-			throw new VerificationDeliveryException("SMS 발송에 실패했습니다.", exception);
+			throw new VerificationDeliveryException("SMS 발송에 실패했습니다.", exception, true);
 		}
 	}
 
@@ -60,7 +65,7 @@ public class SmsVerificationSender {
 			return "HMAC-SHA256 apiKey=%s, date=%s, salt=%s, signature=%s"
 				.formatted(properties.solapiApiKey(), date, salt, signature);
 		} catch (java.security.GeneralSecurityException exception) {
-			throw new VerificationDeliveryException("SMS 인증 서명을 생성하지 못했습니다.", exception);
+			throw new VerificationDeliveryException("SMS 인증 서명을 생성하지 못했습니다.", exception, false);
 		}
 	}
 }

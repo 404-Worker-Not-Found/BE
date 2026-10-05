@@ -41,7 +41,10 @@ class VerificationDeliveryTests {
 			.andRespond(withServerError().body("123456 provider details"));
 		assertThatThrownBy(() -> new EmailVerificationSender(builder.build(), properties)
 			.send("person@example.com", "123456"))
-			.isInstanceOf(VerificationDeliveryException.class).hasMessageNotContaining("123456");
+			.isInstanceOf(VerificationDeliveryException.class)
+			.satisfies(exception -> org.assertj.core.api.Assertions.assertThat(
+				((VerificationDeliveryException) exception).isDeliveryUncertain()).isTrue())
+			.hasMessageNotContaining("123456");
 		server.verify();
 	}
 
@@ -66,7 +69,9 @@ class VerificationDeliveryTests {
 			.andRespond(withSuccess("{\"messageList\":[],\"failedMessageList\":[{\"statusCode\":\"3040\"}]}", MediaType.APPLICATION_JSON));
 		assertThatThrownBy(() -> new SmsVerificationSender(builder.build(), properties)
 			.send("01012345678", "123456"))
-			.isInstanceOf(VerificationDeliveryException.class);
+			.isInstanceOf(VerificationDeliveryException.class)
+			.satisfies(exception -> org.assertj.core.api.Assertions.assertThat(
+				((VerificationDeliveryException) exception).isDeliveryUncertain()).isFalse());
 		server.verify();
 	}
 

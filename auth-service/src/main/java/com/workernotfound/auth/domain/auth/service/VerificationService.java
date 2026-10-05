@@ -30,12 +30,13 @@ public class VerificationService {
 		String codeKey = emailCodeKey(purpose, email);
 		validateSendRateLimit(limitKey);
 		String verificationCode = verificationCodeGenerator.generate();
+		saveVerificationCode(codeKey, verificationCode, EMAIL_CODE_TTL);
 		try {
-			saveVerificationCode(codeKey, verificationCode, EMAIL_CODE_TTL);
 			emailVerificationSender.send(email, verificationCode);
-		} catch (RuntimeException exception) {
-			redisTemplate.delete(codeKey);
-			redisTemplate.delete(limitKey);
+		} catch (VerificationDeliveryException exception) {
+			if (!exception.isDeliveryUncertain()) {
+				redisTemplate.delete(codeKey);
+			}
 			throw exception;
 		}
 	}
@@ -45,12 +46,13 @@ public class VerificationService {
 		String codeKey = smsCodeKey(purpose, phoneNumber);
 		validateSendRateLimit(limitKey);
 		String verificationCode = verificationCodeGenerator.generate();
+		saveVerificationCode(codeKey, verificationCode, SMS_CODE_TTL);
 		try {
-			saveVerificationCode(codeKey, verificationCode, SMS_CODE_TTL);
 			smsVerificationSender.send(phoneNumber, verificationCode);
-		} catch (RuntimeException exception) {
-			redisTemplate.delete(codeKey);
-			redisTemplate.delete(limitKey);
+		} catch (VerificationDeliveryException exception) {
+			if (!exception.isDeliveryUncertain()) {
+				redisTemplate.delete(codeKey);
+			}
 			throw exception;
 		}
 	}

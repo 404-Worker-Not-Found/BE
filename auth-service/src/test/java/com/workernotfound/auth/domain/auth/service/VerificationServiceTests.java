@@ -16,25 +16,47 @@ class VerificationServiceTests extends IntegrationTestSupport {
 	@Autowired private StringRedisTemplate redisTemplate;
 
 	@Test
-	void failedEmailDeliveryClearsCodeAndRateLimit() {
+	void rejectedEmailDeliveryClearsCodeButRetainsRateLimit() {
 		String email = "delivery-failure@example.com";
 		doThrow(new VerificationDeliveryException("failed"))
 			.when(emailVerificationSender).send(org.mockito.ArgumentMatchers.eq(email), org.mockito.ArgumentMatchers.anyString());
 		assertThatThrownBy(() -> verificationService.sendEmailVerificationCode(VerificationPurpose.SIGNUP, email))
 			.isInstanceOf(VerificationDeliveryException.class);
 		assertThat(redisTemplate.hasKey("auth:verification:email:SIGNUP:" + email)).isFalse();
-		assertThat(redisTemplate.hasKey("auth:verification:email:send-limit:SIGNUP:" + email)).isFalse();
+		assertThat(redisTemplate.hasKey("auth:verification:email:send-limit:SIGNUP:" + email)).isTrue();
 	}
 
 	@Test
-	void failedSmsDeliveryClearsCodeAndRateLimit() {
+	void rejectedSmsDeliveryClearsCodeButRetainsRateLimit() {
 		String phoneNumber = "01011119999";
 		doThrow(new VerificationDeliveryException("failed"))
 			.when(smsVerificationSender).send(org.mockito.ArgumentMatchers.eq(phoneNumber), org.mockito.ArgumentMatchers.anyString());
 		assertThatThrownBy(() -> verificationService.sendSmsVerificationCode(VerificationPurpose.SIGNUP, phoneNumber))
 			.isInstanceOf(VerificationDeliveryException.class);
 		assertThat(redisTemplate.hasKey("auth:verification:sms:SIGNUP:" + phoneNumber)).isFalse();
-		assertThat(redisTemplate.hasKey("auth:verification:sms:send-limit:SIGNUP:" + phoneNumber)).isFalse();
+		assertThat(redisTemplate.hasKey("auth:verification:sms:send-limit:SIGNUP:" + phoneNumber)).isTrue();
+	}
+
+	@Test
+	void uncertainEmailDeliveryRetainsCodeAndRateLimit() {
+		String email = "uncertain-delivery@example.com";
+		doThrow(new VerificationDeliveryException("timeout", true))
+			.when(emailVerificationSender).send(org.mockito.ArgumentMatchers.eq(email), org.mockito.ArgumentMatchers.anyString());
+		assertThatThrownBy(() -> verificationService.sendEmailVerificationCode(VerificationPurpose.SIGNUP, email))
+			.isInstanceOf(VerificationDeliveryException.class);
+		assertThat(redisTemplate.hasKey("auth:verification:email:SIGNUP:" + email)).isTrue();
+		assertThat(redisTemplate.hasKey("auth:verification:email:send-limit:SIGNUP:" + email)).isTrue();
+	}
+
+	@Test
+	void uncertainSmsDeliveryRetainsCodeAndRateLimit() {
+		String phoneNumber = "01011118888";
+		doThrow(new VerificationDeliveryException("timeout", true))
+			.when(smsVerificationSender).send(org.mockito.ArgumentMatchers.eq(phoneNumber), org.mockito.ArgumentMatchers.anyString());
+		assertThatThrownBy(() -> verificationService.sendSmsVerificationCode(VerificationPurpose.SIGNUP, phoneNumber))
+			.isInstanceOf(VerificationDeliveryException.class);
+		assertThat(redisTemplate.hasKey("auth:verification:sms:SIGNUP:" + phoneNumber)).isTrue();
+		assertThat(redisTemplate.hasKey("auth:verification:sms:send-limit:SIGNUP:" + phoneNumber)).isTrue();
 	}
 
 	@Test
