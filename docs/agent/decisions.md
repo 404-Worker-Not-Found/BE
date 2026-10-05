@@ -1196,3 +1196,20 @@ Related files:
 - `docs/architecture/matching-application-design.md`
 - `work-service`
 - `matching-service`
+
+
+## 2026-10-04 - Durable Work Lifecycle Events
+
+Decision:
+- Store WorkCheckedIn, WorkStarted and WorkCompleted v1 in a work-owned Outbox atomically with status and actor history. The current one-way lifecycle uses revisions 1, 2 and 3 per work.
+- Publish to the separate `work:domain-events` Redis Stream after committing a fenced lease. Retry with the same event ID and payload after failures or lease expiry.
+- Treat delivery as at least once and potentially out of order across replicas. Consumers deduplicate event IDs and use revisions for state projections; event-history consumers retain each distinct event.
+- Pause relay independently from recording, retain pending failures, and never infer historical events during migration.
+- Exclude GPS and payment identifiers from payloads. WorkCompleted reports lifecycle completion; financial settlement and downstream consumers require separate implementations.
+
+Reason:
+- A successful attendance transaction must not lose its downstream notification when Redis is unavailable or a process stops between publish and acknowledgment.
+
+Related files:
+- `docs/architecture/work-scheduled-design.md`
+- `work-service`

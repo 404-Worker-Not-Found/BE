@@ -17,6 +17,13 @@ spring:
     hibernate:
       ddl-auto: validate
 work:
+  outbox:
+    enabled: ${WORK_OUTBOX_ENABLED:true}
+    stream: ${WORK_OUTBOX_STREAM_KEY:work:domain-events}
+    batch-size: 100
+    lease-duration: 30s
+    retry-base-delay: 1s
+    retry-max-delay: 5m
   attendance:
     policy-type: ${WORK_ATTENDANCE_POLICY_TYPE:gps}
     radius-meters: ${WORK_CHECK_IN_RADIUS_METERS:100}
