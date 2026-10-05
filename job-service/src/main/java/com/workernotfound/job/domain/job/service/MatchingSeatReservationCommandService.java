@@ -54,12 +54,12 @@ public class MatchingSeatReservationCommandService {
     ) {
         // 공고 행 잠금을 먼저 잡아야 같은 키의 동시 최초 요청이 앞선 커밋 결과를 조회할 수 있다.
         JobPost jobPost = lockJobPost(jobPostId);
-        accountGates.requireActive(jobPost.getOwnerId(), workerMemberId);
         Optional<JobMatchingSeatReservation> existing = reservationRepository.findByIdempotencyKey(idempotencyKey);
         if (existing.isPresent()) {
             return replayReservation(existing.get(), jobPostId, matchingId, applicationId, workerMemberId);
         }
 
+        accountGates.requireActive(jobPost.getOwnerId(), workerMemberId);
         LocalDateTime now = LocalDateTime.now(clock);
         validateMatchable(jobPost, now);
         // 스케줄러가 늦어도 만료된 예약이 새 예약을 막지 않도록 같은 잠금 안에서 먼저 회수한다.

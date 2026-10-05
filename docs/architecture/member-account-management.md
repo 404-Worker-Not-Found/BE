@@ -98,6 +98,8 @@ RELEASED 잠금은 환불이나 정산 종료의 증거로 취급하지 않는�
 외부 호출은 DB 트랜잭션 밖에서 수행하며 DB 임대 180초로 coordinator 중복 실행을 막는다.
 호출당 연결 2초·읽기 5초, 영속 재시도는 15초부터 최대 300초다.
 각 소유 서비스 URL은 기존 *_SERVICE_BASE_URL 및 NOTIFICATION_SERVICE_BASE_URL로 설정한다.
+이 URL들과 notification의 INTERNAL_API_SECRET은 필수이며, 누락하면 기동을 실패시킨다.
+공유 시크릿은 auth와 모든 참여 서비스에서 동일하게 설정한다. 로컬 URL 예시는 .env.example에만 둔다.
 
 ## 데이터 삭제·보존 기준
 

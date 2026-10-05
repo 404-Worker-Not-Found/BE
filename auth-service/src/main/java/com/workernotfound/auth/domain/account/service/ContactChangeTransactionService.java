@@ -1,5 +1,6 @@
 package com.workernotfound.auth.domain.account.service;
 
+import com.workernotfound.auth.domain.account.dto.ContactChangeRequest.AccountChangeResponse;
 import com.workernotfound.auth.domain.account.dto.*;
 import com.workernotfound.auth.domain.account.entity.*;
 import com.workernotfound.auth.domain.account.entity.enums.MemberStatus;

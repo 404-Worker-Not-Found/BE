@@ -1,5 +1,9 @@
 package com.workernotfound.job.global.account;
 
+import com.workernotfound.job.support.JobPostFixture;
+import org.springframework.jdbc.core.JdbcTemplate;
+import com.workernotfound.job.domain.job.repository.JobPostRepository;
+import com.workernotfound.job.domain.job.service.MatchingSeatReservationCommandService;
 import com.workernotfound.job.global.exception.BusinessException;
 import com.workernotfound.job.support.IntegrationTestSupport;
 import java.util.UUID;
@@ -11,8 +15,23 @@ import org.springframework.transaction.support.TransactionTemplate;
 import static org.assertj.core.api.Assertions.*;
 
 class AccountGateTests extends IntegrationTestSupport {
+    @Autowired MatchingSeatReservationCommandService reservations;
+    @Autowired JobPostRepository jobs;
+    @Autowired JdbcTemplate jdbc;
     @Autowired AccountGateService gates;
     @Autowired PlatformTransactionManager transactionManager;
+    @Test
+    void expiredReservationReplaysAfterWithdrawalPreparationWhileNewReservationIsBlocked() {
+        long worker = 919102L;
+        var job = jobs.saveAndFlush(JobPostFixture.open(JobPostFixture.jobPost().build()));
+        String key = UUID.randomUUID().toString();
+        var first = reservations.reserve(job.getId(), 919102L, 919102L, worker, key);
+        jdbc.update("update job_matching_seat_reservations set status='EXPIRED' where id=?", first.getId());
+        assertThat(gates.transition(worker, UUID.randomUUID().toString(), "prepare").state()).isEqualTo("PREPARED");
+        assertThat(reservations.reserve(job.getId(), 919102L, 919102L, worker, key).getId()).isEqualTo(first.getId());
+        assertThatThrownBy(() -> reservations.reserve(job.getId(), 919103L, 919103L, worker, UUID.randomUUID().toString()))
+                .isInstanceOf(BusinessException.class);
+    }
     @Test
     void releasedAttemptCannotUndoLaterCommittedWithdrawal() {
         long member = 919100L;

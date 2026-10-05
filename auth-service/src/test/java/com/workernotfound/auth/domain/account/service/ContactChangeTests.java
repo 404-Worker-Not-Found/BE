@@ -144,6 +144,16 @@ class ContactChangeDispatcherTests {
         dispatcher.dispatch(id);
         verify(transactions, never()).complete(anyString(), anyBoolean());
     }
+    @Test
+    void uncorrelatedClientErrorsCannotProveAnEarlierAttemptWasNotApplied() {
+        for (var status : java.util.List.of(org.springframework.http.HttpStatus.CONFLICT,
+                org.springframework.http.HttpStatus.NOT_FOUND, org.springframework.http.HttpStatus.FORBIDDEN)) {
+            server.reset();
+            server.expect(anything()).andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withStatus(status));
+            dispatcher.dispatch(id);
+        }
+        verify(transactions, never()).complete(anyString(), anyBoolean());
+    }
     private String body(String member, String success, String accepted) {
         return "{\"success\":" + success + ",\"data\":{\"commandId\":\"" + id
                 + "\",\"memberId\":" + member + ",\"channel\":\"EMAIL\",\"target\":\"new@example.com\",\"accepted\":" + accepted + "}}";

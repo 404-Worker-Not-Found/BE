@@ -44,5 +44,11 @@ public abstract class IntegrationTestSupport {
 		registry.add("auth.jwt.secret", () -> "test-jwt-secret-key-for-auth-service-token-tests");
 		registry.add("auth.member-service.base-url", () -> "http://localhost:8081");
 		registry.add("auth.member-service.internal-secret", () -> "test-internal-secret");
+		registry.add("auth.withdrawal.job-url", () -> "http://localhost:8083");
+		registry.add("auth.withdrawal.matching-url", () -> "http://localhost:8084");
+		registry.add("auth.withdrawal.work-url", () -> "http://localhost:8086");
+		registry.add("auth.withdrawal.chat-url", () -> "http://localhost:8087");
+		registry.add("auth.withdrawal.payment-url", () -> "http://localhost:8085");
+		registry.add("auth.withdrawal.notification-url", () -> "http://localhost:8088");
 	}
 }

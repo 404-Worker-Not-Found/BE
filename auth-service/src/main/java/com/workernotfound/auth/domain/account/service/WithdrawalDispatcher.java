@@ -21,12 +21,12 @@ public class WithdrawalDispatcher {
 	private final ObjectMapper mapper;
     @Value("${auth.member-service.internal-secret}") private String secret;
     @Value("${auth.member-service.base-url}") private String memberUrl;
-    @Value("${auth.withdrawal.job-url:http://localhost:8083}") private String jobUrl;
-    @Value("${auth.withdrawal.matching-url:http://localhost:8084}") private String matchingUrl;
-    @Value("${auth.withdrawal.work-url:http://localhost:8086}") private String workUrl;
-    @Value("${auth.withdrawal.chat-url:http://localhost:8087}") private String chatUrl;
-    @Value("${auth.withdrawal.payment-url:http://localhost:8085}") private String paymentUrl;
-    @Value("${auth.withdrawal.notification-url:http://localhost:8088}") private String notificationUrl;
+    @Value("${auth.withdrawal.job-url}") private String jobUrl;
+    @Value("${auth.withdrawal.matching-url}") private String matchingUrl;
+    @Value("${auth.withdrawal.work-url}") private String workUrl;
+    @Value("${auth.withdrawal.chat-url}") private String chatUrl;
+    @Value("${auth.withdrawal.payment-url}") private String paymentUrl;
+    @Value("${auth.withdrawal.notification-url}") private String notificationUrl;
     private record Participant(String name, String url, String domain) {}
 
     @Scheduled(fixedDelayString="${auth.withdrawal.retry-delay-ms:10000}")

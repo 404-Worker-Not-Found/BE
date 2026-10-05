@@ -34,12 +34,12 @@ server:
 
 auth:
   withdrawal:
-    job-url: ${JOB_SERVICE_BASE_URL:http://localhost:8083}
-    matching-url: ${MATCHING_SERVICE_BASE_URL:http://localhost:8084}
-    work-url: ${WORK_SERVICE_BASE_URL:http://localhost:8086}
-    chat-url: ${CHAT_SERVICE_BASE_URL:http://localhost:8087}
-    payment-url: ${PAYMENT_SERVICE_BASE_URL:http://localhost:8085}
-    notification-url: ${NOTIFICATION_SERVICE_BASE_URL:http://localhost:8088}
+    job-url: ${JOB_SERVICE_BASE_URL}
+    matching-url: ${MATCHING_SERVICE_BASE_URL}
+    work-url: ${WORK_SERVICE_BASE_URL}
+    chat-url: ${CHAT_SERVICE_BASE_URL}
+    payment-url: ${PAYMENT_SERVICE_BASE_URL}
+    notification-url: ${NOTIFICATION_SERVICE_BASE_URL}
   verification:
     delivery:
       email-username: ${AUTH_MAIL_USERNAME:}

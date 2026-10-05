@@ -7,6 +7,7 @@ public record ContactChangeRequest(
     @NotBlank @Size(max = 255) String target,
     @NotBlank @Pattern(regexp = "[0-9]{6}") String verificationCode
 ) {
+    public record AccountChangeResponse(String commandId, String status) {}
     public enum Channel { EMAIL, PHONE }
     @AssertTrue(message = "연락처 형식이 올바르지 않습니다.")
     public boolean isTargetValid() {
