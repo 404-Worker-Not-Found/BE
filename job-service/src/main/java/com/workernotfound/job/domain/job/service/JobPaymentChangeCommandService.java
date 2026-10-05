@@ -165,6 +165,8 @@ public class JobPaymentChangeCommandService {
         return wageCalculator.calculateTotalExpectedWage(wagePerWorker, terms.recruitCount());
     }
 
+    // 현재 시각에 따른 검증은 같은 키의 기존 요청 확인 뒤 새 요청에만 적용한다. 마감이 현재 이후이고 근무 시작 이전이어야 하므로
+    // 지난 근무일도 여기서 거절된다.
     private void validateApplicationDeadline(JobPaymentTerms terms, LocalDateTime now) {
         if (!terms.applicationDeadline().isAfter(now)) {
             throw new BusinessException(JobErrorCode.INVALID_APPLICATION_DEADLINE, "지원 마감 시간은 현재 시간 이후여야 합니다.");

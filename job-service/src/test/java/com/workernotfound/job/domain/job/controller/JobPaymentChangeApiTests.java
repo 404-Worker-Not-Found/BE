@@ -8,13 +8,18 @@ import com.workernotfound.job.domain.job.entity.enums.PaymentOrderCommandStatus;
 import com.workernotfound.job.support.PaymentChangeTestSupport;
 import com.workernotfound.job.support.StubPaymentServer.RecordedRequest;
 import com.workernotfound.job.support.TestAccessTokens;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -89,7 +94,11 @@ class JobPaymentChangeApiTests extends PaymentChangeTestSupport {
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("JOB-400-002"));
         changeTerms(job.jobPostId(), owner, newKey("c"),
                 with(terms(job, 1), "applicationDeadline", now().minusMinutes(1).toString()))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("JOB-400-002"));
+        changeTerms(job.jobPostId(), owner, newKey("c"), with(with(terms(job, 1),
+                "workDate", LocalDate.now().minusDays(1).toString()),
+                "applicationDeadline", LocalDate.now().minusDays(2).atTime(LocalTime.NOON).toString()))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("JOB-400-002"));
         changeTerms(job.jobPostId(), owner, " bad key", terms(job, 2)).andExpect(status().isBadRequest());
         changeTerms(job.jobPostId(), owner, "k".repeat(101), terms(job, 2)).andExpect(status().isBadRequest());
         mockMvc.perform(post("/api/jobs/{id}/payment-order/retries", job.jobPostId())
@@ -188,6 +197,38 @@ class JobPaymentChangeApiTests extends PaymentChangeTestSupport {
 
         assertThat(commandRepository.findByJobPostIdOrderByIssueSequenceAsc(job.jobPostId())).hasSize(2);
         assertNoChangeIssued(other);
+    }
+
+    // 시각에 따라 달라지는 검증은 새 요청에만 적용한다. 마감·근무일이 지난 뒤의 같은 키 재요청도 처음 처리 상태를 돌려준다.
+    @Test
+    void sameKeyReplayAfterDeadlineAndWorkDatePassStillReturnsOriginalRequest() throws Exception {
+        LinkedJob job = createLinkedJob(1);
+        String key = newKey("change");
+        LocalDateTime deadline = LocalDateTime.now().plusSeconds(2);
+        Map<String, Object> body = with(terms(job, 2), "applicationDeadline", deadline.toString());
+        Long changeId = changeId(changeTerms(job.jobPostId(), job.ownerMemberId(), key, body)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING")));
+
+        // 실제 시스템 시각으로 마감을 지나게 한다. 요청 경계의 시각 검증이 재요청을 막지 않는지 확인한다.
+        await().atMost(Duration.ofSeconds(10)).pollInterval(Duration.ofMillis(100))
+                .until(() -> LocalDateTime.now().isAfter(deadline));
+        changeTerms(job.jobPostId(), job.ownerMemberId(), key, body)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.changeId").value(changeId))
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+
+        dispatchChange(changeId);
+        clock.fixAt(jobPost(job.jobPostId()).getWorkDate().plusDays(3).atStartOfDay(ZoneId.systemDefault()).toInstant());
+        changeTerms(job.jobPostId(), job.ownerMemberId(), key, body)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.changeId").value(changeId))
+                .andExpect(jsonPath("$.data.status").value("APPLIED"));
+        // 같은 본문이라도 새 키는 새 요청이므로 지금 시각 기준으로 검증한다.
+        changeTerms(job.jobPostId(), job.ownerMemberId(), newKey("change"), body)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("JOB-400-002"));
+        assertThat(commandRepository.findByJobPostIdOrderByIssueSequenceAsc(job.jobPostId())).hasSize(2);
     }
 
     @Test
