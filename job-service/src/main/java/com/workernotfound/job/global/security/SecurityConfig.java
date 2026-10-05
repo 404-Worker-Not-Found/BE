@@ -51,6 +51,8 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/error"
                         ).permitAll()
+                        // 점주 본인 공고의 결제 주문 조회. 공개 조회 허용보다 먼저 검사한다.
+                        .requestMatchers(HttpMethod.GET, "/api/jobs/*/payment-order").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/api/jobs/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/jobs").hasRole("OWNER")
                         .anyRequest().authenticated()

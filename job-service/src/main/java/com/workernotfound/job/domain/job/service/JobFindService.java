@@ -3,6 +3,7 @@ package com.workernotfound.job.domain.job.service;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
 import com.workernotfound.job.domain.job.dto.response.JobCardResponse;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
+import com.workernotfound.job.domain.job.dto.response.JobPaymentOrderResponse;
 import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
 import com.workernotfound.job.domain.job.entity.IndustryCategory;
 import com.workernotfound.job.domain.job.entity.JobPost;
@@ -10,6 +11,7 @@ import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import com.workernotfound.job.domain.job.entity.enums.UrgencyLevel;
 import com.workernotfound.job.domain.job.exception.JobErrorCode;
 import com.workernotfound.job.domain.job.repository.IndustryCategoryRepository;
+import com.workernotfound.job.domain.job.repository.JobPaymentOrderCommandRepository;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
 import com.workernotfound.job.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -29,17 +31,37 @@ public class JobFindService {
 
     private final JobPostRepository jobPostRepository;
     private final IndustryCategoryRepository industryCategoryRepository;
+    private final JobPaymentOrderCommandRepository paymentOrderCommandRepository;
 
     public JobPost findJobPost(Long jobId) {
         return jobPostRepository.findById(jobId)
                 .orElseThrow(() -> new BusinessException(JobErrorCode.JOB_NOT_FOUND));
     }
 
-    public JobDetailResponse findJobDetail(Long jobId) {
+    // 사용자 상세 조회. 공개 전 공고를 다른 회원에게는 존재하지 않는 공고와 같은 404로 응답한다.
+    // findJobPost는 상태와 관계없이 조회하므로 이 접근 제한을 내부 처리에 적용하지 않는다.
+    public JobDetailResponse findJobDetail(Long jobId, Long viewerMemberId) {
         JobPost post = findJobPost(jobId);
+        if (!post.isVisibleTo(viewerMemberId)) {
+            throw new BusinessException(JobErrorCode.JOB_NOT_FOUND);
+        }
         Map<Long, String> categoryNameMap = buildCategoryNameMap();
         String categoryName = resolveCategoryName(categoryNameMap, post.getCategoryId());
         return JobDetailResponse.of(post, categoryName);
+    }
+
+    // 점주 본인 공고의 결제 주문 생성 상태. 다른 회원의 공고는 존재 여부를 드러내지 않도록 404로 응답한다.
+    public JobPaymentOrderResponse findJobPaymentOrder(Long jobId, Long ownerMemberId) {
+        JobPost post = findJobPost(jobId);
+        if (!post.getOwnerId().equals(ownerMemberId)) {
+            throw new BusinessException(JobErrorCode.JOB_NOT_FOUND);
+        }
+        if (post.getPaymentOrderId() != null) {
+            return JobPaymentOrderResponse.linked(post);
+        }
+        return paymentOrderCommandRepository.findFirstByJobPostIdOrderByIssueSequenceDesc(jobId)
+                .map(command -> JobPaymentOrderResponse.pending(post, command))
+                .orElseGet(() -> JobPaymentOrderResponse.notRequested(post));
     }
 
     public JobSearchResponse findJobs(JobSearchRequest request) {

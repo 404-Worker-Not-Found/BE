@@ -151,9 +151,8 @@ class JobApplicationAdmissionCommandServiceTests extends IntegrationTestSupport 
                 .urgencyLevel(UrgencyLevel.MEDIUM)
                 .applicationDeadline(applicationDeadline)
                 .build();
-        if (status != JobStatus.OPEN) {
-            ReflectionTestUtils.setField(jobPost, "status", status);
-        }
+        // 신규 공고는 결제 대기 상태로 생성되므로 검증할 상태를 항상 명시한다.
+        ReflectionTestUtils.setField(jobPost, "status", status);
         return jobPostRepository.save(jobPost);
     }
 }

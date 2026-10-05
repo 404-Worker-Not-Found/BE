@@ -4,6 +4,7 @@ import com.workernotfound.job.domain.job.controller.docs.JobControllerDocs;
 import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
+import com.workernotfound.job.domain.job.dto.response.JobPaymentOrderResponse;
 import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
 import com.workernotfound.job.domain.job.service.JobApplicationService;
 import com.workernotfound.job.global.response.ApiResponse;
@@ -35,10 +36,24 @@ public class JobController implements JobControllerDocs {
     @Override
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<JobDetailResponse>> getDetail(
+            @AuthenticationPrincipal MemberClaims claims,
+            @PathVariable Long id
+    ) {
+        // 토큰 없는 조회도 허용한다. 비공개 공고의 점주 확인에만 인증된 회원 ID를 쓴다.
+        Long viewerMemberId = claims == null ? null : claims.memberId();
+        return ResponseEntity.ok(ApiResponse.success(
+                jobApplicationService.getJobDetail(id, viewerMemberId)
+        ));
+    }
+
+    @Override
+    @GetMapping("/{id}/payment-order")
+    public ResponseEntity<ApiResponse<JobPaymentOrderResponse>> getPaymentOrder(
+            @AuthenticationPrincipal MemberClaims claims,
             @PathVariable Long id
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                jobApplicationService.getJobDetail(id)
+                jobApplicationService.getJobPaymentOrder(id, claims.memberId())
         ));
     }
 

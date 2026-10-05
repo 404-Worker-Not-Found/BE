@@ -52,7 +52,7 @@ class MatchingSeatReservationSubMicrosecondTtlTests extends IntegrationTestSuppo
     @Test
     void truncatesExpiryAndKeepsSnapshotIdentical() throws Exception {
         clock.fixAt(Instant.now().truncatedTo(ChronoUnit.SECONDS).plusNanos(123_456_789));
-        JobPost jobPost = jobPostRepository.save(JobPostFixture.jobPost().build());
+        JobPost jobPost = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().build()));
         String key = "seat-sub-micro-" + UUID.randomUUID();
 
         JsonNode first = reserve(jobPost.getId(), key);

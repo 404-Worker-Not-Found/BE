@@ -130,7 +130,7 @@ class RecruitmentCompletionBodyFailureDispatchTests extends IntegrationTestSuppo
     }
 
     private RecruitmentCompletionCommand closeJob() {
-        JobPost jobPost = jobPostRepository.save(JobPostFixture.jobPost().recruitCount(1).build());
+        JobPost jobPost = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().recruitCount(1).build()));
         JobMatchingSeatReservation reservation = seatService.reserve(
                 jobPost.getId(), 950_001L, 950_002L, 100L, "seat-" + UUID.randomUUID());
         seatService.confirm(jobPost.getId(), reservation.getId(), "confirm-" + UUID.randomUUID());

@@ -110,6 +110,28 @@ class JobWageCalculatorTests {
         assertInvalidAmount(() -> calculator.calculateTotalExpectedWage(1_000L, 0));
     }
 
+    @Test
+    void acceptsTotalDepositOfExactlyOneHundredWon() {
+        assertThat(calculator.calculateTotalExpectedWage(100L, 1)).isEqualTo(100L);
+        assertThat(calculator.calculateTotalExpectedWage(50L, 2)).isEqualTo(100L);
+    }
+
+    @Test
+    void rejectsTotalDepositBelowOneHundredWonWithoutRoundingUp() {
+        // 1분 × 시급 5,999원 / 60 = 99.98원이므로 1인 금액은 99원으로 내림된다.
+        long perWorker = calculator.calculateWagePerWorker(
+                LocalTime.of(9, 0), LocalTime.of(9, 1), false, 5_999, null);
+        assertThat(perWorker).isEqualTo(99L);
+
+        assertThatThrownBy(() -> calculator.calculateTotalExpectedWage(perWorker, 1))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("100원 이상")
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(JobErrorCode.INVALID_WAGE_AMOUNT);
+        assertInvalidAmount(() -> calculator.calculateTotalExpectedWage(33L, 3));
+        assertThat(calculator.calculateTotalExpectedWage(34L, 3)).isEqualTo(102L);
+    }
+
     private void assertInvalidWorkTime(LocalTime start, LocalTime end, boolean isEndTimeNextDay) {
         assertThatThrownBy(() -> calculator.calculateWagePerWorker(start, end, isEndTimeNextDay, 10_000, null))
                 .isInstanceOf(BusinessException.class)

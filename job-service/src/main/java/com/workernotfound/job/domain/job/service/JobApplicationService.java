@@ -4,6 +4,7 @@ import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.dto.response.ApplicationAdmissionResponse;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
+import com.workernotfound.job.domain.job.dto.response.JobPaymentOrderResponse;
 import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
 import com.workernotfound.job.domain.job.dto.request.MatchingSeatReservationRequest;
 import com.workernotfound.job.domain.job.dto.response.MatchingSeatReservationCommandResponse;
@@ -25,8 +26,12 @@ public class JobApplicationService {
         return jobCommandService.create(ownerId, request);
     }
 
-    public JobDetailResponse getJobDetail(Long jobId) {
-        return jobFindService.findJobDetail(jobId);
+    public JobDetailResponse getJobDetail(Long jobId, Long viewerMemberId) {
+        return jobFindService.findJobDetail(jobId, viewerMemberId);
+    }
+
+    public JobPaymentOrderResponse getJobPaymentOrder(Long jobId, Long ownerMemberId) {
+        return jobFindService.findJobPaymentOrder(jobId, ownerMemberId);
     }
 
     public JobSearchResponse getJobs(JobSearchRequest request) {

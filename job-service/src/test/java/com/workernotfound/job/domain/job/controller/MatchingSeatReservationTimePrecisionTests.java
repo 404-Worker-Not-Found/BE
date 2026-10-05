@@ -173,7 +173,7 @@ class MatchingSeatReservationTimePrecisionTests extends IntegrationTestSupport {
     }
 
     private JobPost saveJob(int recruitCount) {
-        return jobPostRepository.save(JobPostFixture.jobPost().recruitCount(recruitCount).build());
+        return jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().recruitCount(recruitCount).build()));
     }
 
     private String body(long matchingId, long applicationId) {

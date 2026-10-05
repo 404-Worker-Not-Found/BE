@@ -10,7 +10,8 @@ import org.springframework.stereotype.Component;
  * 공고 1인 예정 급여와 전체 예치 예정액을 계산한다.
  *
  * <p>초기 계산 기준: 근무 분 × (기본 시급 + 시간당 추가 시급) / 60을 정수 KRW로 내림한다.
- * 휴게시간은 공고에 입력값이 없어 차감하지 않는다. 전체 예치 예정액은 내림한 1인 금액 × 모집 인원이다.
+ * 휴게시간은 공고에 입력값이 없어 차감하지 않는다. 전체 예치 예정액은 내림한 1인 금액 × 모집 인원이며,
+ * payment-service 주문 최소 금액인 100원 이상이어야 한다. 100원 미만은 올려 맞추지 않고 거절한다.
  */
 @Component
 public class JobWageCalculator {
@@ -19,6 +20,8 @@ public class JobWageCalculator {
     private static final long MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR;
     // payment-service 금액 컬럼 DECIMAL(19,2)의 정수부 최대값이다.
     private static final long MAX_TOTAL_WAGE = 99_999_999_999_999_999L;
+    // payment-service 결제 주문의 최소 금액(KRW)이다.
+    static final long MIN_TOTAL_DEPOSIT = 100;
 
     public long calculateWagePerWorker(JobPost jobPost) {
         return calculateWagePerWorker(
@@ -54,6 +57,16 @@ public class JobWageCalculator {
         if (recruitCount == null || recruitCount <= 0) {
             throw new BusinessException(JobErrorCode.INVALID_WAGE_AMOUNT);
         }
+        long total = multiplyWithinLimit(wagePerWorker, recruitCount);
+        if (total < MIN_TOTAL_DEPOSIT) {
+            throw new BusinessException(
+                    JobErrorCode.INVALID_WAGE_AMOUNT,
+                    "전체 예치 예정액은 " + MIN_TOTAL_DEPOSIT + "원 이상이어야 합니다.");
+        }
+        return total;
+    }
+
+    private long multiplyWithinLimit(long wagePerWorker, Integer recruitCount) {
         try {
             long total = Math.multiplyExact(wagePerWorker, recruitCount.longValue());
             if (total > MAX_TOTAL_WAGE) {

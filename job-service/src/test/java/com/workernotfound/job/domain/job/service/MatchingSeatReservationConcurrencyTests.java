@@ -53,7 +53,7 @@ class MatchingSeatReservationConcurrencyTests extends IntegrationTestSupport {
 
     @Test
     void concurrentReservationsNeverExceedRecruitCount() throws Exception {
-        JobPost jobPost = jobPostRepository.save(JobPostFixture.jobPost().recruitCount(3).build());
+        JobPost jobPost = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().recruitCount(3).build()));
 
         List<Object> results = runConcurrently(index -> () ->
                 service.reserve(jobPost.getId(), 50_000L + index, 60_000L + index, 100L, newKey()));
@@ -69,7 +69,7 @@ class MatchingSeatReservationConcurrencyTests extends IntegrationTestSupport {
 
     @Test
     void concurrentFirstRequestsWithSameKeyCreateOneReservation() throws Exception {
-        JobPost jobPost = jobPostRepository.save(JobPostFixture.jobPost().recruitCount(3).build());
+        JobPost jobPost = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().recruitCount(3).build()));
         String key = newKey();
 
         List<Object> results = runConcurrently(index -> () ->
@@ -87,7 +87,7 @@ class MatchingSeatReservationConcurrencyTests extends IntegrationTestSupport {
     void concurrentReservationsForDifferentJobsDoNotDeadlock() throws Exception {
         List<JobPost> jobPosts = new ArrayList<>();
         for (int index = 0; index < REQUESTS; index++) {
-            jobPosts.add(jobPostRepository.save(JobPostFixture.jobPost().build()));
+            jobPosts.add(jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().build())));
         }
 
         List<Object> results = runConcurrently(index -> () ->

@@ -114,6 +114,15 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
     }
 
     @Test
+    void returnsConflictForPaymentPendingJob() throws Exception {
+        JobPost jobPost = saveJobPost(JobStatus.PAYMENT_PENDING, LocalDateTime.now().plusHours(1));
+
+        requestAdmission(jobPost.getId(), newKey(), 100L)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("JOB-409-001"));
+    }
+
+    @Test
     void returnsConflictAfterApplicationDeadline() throws Exception {
         JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now().minusMinutes(1));
 
@@ -194,9 +203,8 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
                 .urgencyLevel(UrgencyLevel.MEDIUM)
                 .applicationDeadline(applicationDeadline)
                 .build();
-        if (status != JobStatus.OPEN) {
-            ReflectionTestUtils.setField(jobPost, "status", status);
-        }
+        // 신규 공고는 결제 대기 상태로 생성되므로 검증할 상태를 항상 명시한다.
+        ReflectionTestUtils.setField(jobPost, "status", status);
         return jobPostRepository.save(jobPost);
     }
 }

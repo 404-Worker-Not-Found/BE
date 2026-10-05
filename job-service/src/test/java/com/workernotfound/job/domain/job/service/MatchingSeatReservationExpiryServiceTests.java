@@ -105,7 +105,7 @@ class MatchingSeatReservationExpiryServiceTests extends IntegrationTestSupport {
     }
 
     private JobPost saveJob() {
-        return jobPostRepository.save(JobPostFixture.jobPost().build());
+        return jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().build()));
     }
 
     private String newKey() {

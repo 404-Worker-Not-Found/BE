@@ -9,6 +9,7 @@ import com.workernotfound.job.domain.job.repository.JobApplicationAdmissionRepos
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
 import com.workernotfound.job.global.exception.BusinessException;
 import com.workernotfound.job.support.IntegrationTestSupport;
+import com.workernotfound.job.support.JobPostFixture;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.math.BigDecimal;
@@ -218,7 +219,7 @@ class JobApplicationAdmissionClosingRaceTests extends IntegrationTestSupport {
     }
 
     private JobPost saveJobPost() {
-        return jobPostRepository.save(JobPost.builder()
+        return jobPostRepository.save(JobPostFixture.open(JobPost.builder()
                 .businessId(1L)
                 .ownerId(7L)
                 .categoryId(1L)
@@ -236,6 +237,6 @@ class JobApplicationAdmissionClosingRaceTests extends IntegrationTestSupport {
                 .longitude(new BigDecimal("126.9780000"))
                 .urgencyLevel(UrgencyLevel.MEDIUM)
                 .applicationDeadline(LocalDateTime.now().plusHours(1))
-                .build());
+                .build()));
     }
 }

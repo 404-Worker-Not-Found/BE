@@ -57,7 +57,7 @@ class RecruitmentCompletionAfterCommitDispatchTests extends IntegrationTestSuppo
             received.countDown();
             await(release);
         });
-        JobPost jobPost = jobPostRepository.save(JobPostFixture.jobPost().recruitCount(1).build());
+        JobPost jobPost = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().recruitCount(1).build()));
         JobMatchingSeatReservation reservation = seatService.reserve(
                 jobPost.getId(), 800_001L, 800_002L, 100L, "seat-" + UUID.randomUUID());
 
@@ -76,7 +76,7 @@ class RecruitmentCompletionAfterCommitDispatchTests extends IntegrationTestSuppo
     void sendsNothingWhenTheTransactionRollsBack() throws InterruptedException {
         SERVER.reset();
         SERVER.respondByDefault(StubResponse.success());
-        JobPost jobPost = jobPostRepository.save(JobPostFixture.jobPost().recruitCount(1).build());
+        JobPost jobPost = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().recruitCount(1).build()));
         JobMatchingSeatReservation reservation = seatService.reserve(
                 jobPost.getId(), 800_003L, 800_004L, 100L, "seat-" + UUID.randomUUID());
         // 같은 완료 버전의 명령이 이미 있어 확정 트랜잭션이 롤백된다.
