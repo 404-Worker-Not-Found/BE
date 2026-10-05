@@ -12,6 +12,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -23,7 +25,6 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
-import org.mockito.ArgumentCaptor;
 
 @ExtendWith(OutputCaptureExtension.class)
 class VerificationDeliveryTests {
@@ -78,7 +79,7 @@ class VerificationDeliveryTests {
 			.andExpect(header("Authorization", org.hamcrest.Matchers.startsWith("HMAC-SHA256 apiKey=solapi-key,")))
 			.andExpect(jsonPath("$.messages[0].text").value(org.hamcrest.Matchers.containsString("123456")))
 			.andRespond(withSuccess("{\"messageList\":[{\"statusCode\":\"2000\"}],\"failedMessageList\":[]}", MediaType.APPLICATION_JSON));
-		new SmsVerificationSender(builder.build(), properties).send("01012345678", "123456");
+		new SmsVerificationSender(builder.build(), properties, new ObjectMapper()).send("01012345678", "123456");
 		server.verify();
 		org.assertj.core.api.Assertions.assertThat(output.getAll()).doesNotContain("123456");
 	}
@@ -89,7 +90,7 @@ class VerificationDeliveryTests {
 		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
 		server.expect(requestTo("https://api.solapi.com/messages/v4/send-many/detail"))
 			.andRespond(withSuccess("{\"messageList\":[],\"failedMessageList\":[{\"statusCode\":\"3040\"}]}", MediaType.APPLICATION_JSON));
-		assertThatThrownBy(() -> new SmsVerificationSender(builder.build(), properties)
+		assertThatThrownBy(() -> new SmsVerificationSender(builder.build(), properties, new ObjectMapper())
 			.send("01012345678", "123456"))
 			.isInstanceOf(VerificationDeliveryException.class)
 			.satisfies(exception -> org.assertj.core.api.Assertions.assertThat(
@@ -102,12 +103,31 @@ class VerificationDeliveryTests {
 		RestClient.Builder builder = RestClient.builder();
 		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
 		server.expect(requestTo("https://api.solapi.com/messages/v4/send-many/detail"))
-			.andRespond(withBadRequest());
-		assertThatThrownBy(() -> new SmsVerificationSender(builder.build(), properties)
+			.andRespond(withBadRequest().body("{\"errorCode\":\"4000\",\"errorMessage\":\"123456 01012345678\"}")
+				.contentType(MediaType.APPLICATION_JSON));
+		assertThatThrownBy(() -> new SmsVerificationSender(builder.build(), properties, new ObjectMapper())
+			.send("01012345678", "123456"))
+			.isInstanceOf(VerificationDeliveryException.class)
+			.satisfies(exception -> {
+				VerificationDeliveryException deliveryException = (VerificationDeliveryException) exception;
+				org.assertj.core.api.Assertions.assertThat(deliveryException.isDeliveryUncertain()).isFalse();
+				org.assertj.core.api.Assertions.assertThat(deliveryException.getProviderErrorCode()).isEqualTo("4000");
+			})
+			.hasMessageNotContaining("123456");
+		server.verify();
+	}
+
+	@Test
+	void solapiErrorCodeContainingVerificationCodeIsNotRetained() {
+		RestClient.Builder builder = RestClient.builder();
+		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+		server.expect(requestTo("https://api.solapi.com/messages/v4/send-many/detail"))
+			.andRespond(withBadRequest().body("{\"errorCode\":\"ERR123456\"}"));
+		assertThatThrownBy(() -> new SmsVerificationSender(builder.build(), properties, new ObjectMapper())
 			.send("01012345678", "123456"))
 			.isInstanceOf(VerificationDeliveryException.class)
 			.satisfies(exception -> org.assertj.core.api.Assertions.assertThat(
-				((VerificationDeliveryException) exception).isDeliveryUncertain()).isFalse());
+				((VerificationDeliveryException) exception).getProviderErrorCode()).isNull());
 		server.verify();
 	}
 
@@ -116,7 +136,7 @@ class VerificationDeliveryTests {
 		VerificationDeliveryProperties empty = new VerificationDeliveryProperties("", "", "", "", "");
 		assertThatThrownBy(() -> new EmailVerificationSender(mock(JavaMailSender.class), empty)
 			.send("person@example.com", "123456")).isInstanceOf(VerificationDeliveryException.class);
-		assertThatThrownBy(() -> new SmsVerificationSender(RestClient.create(), empty)
+		assertThatThrownBy(() -> new SmsVerificationSender(RestClient.create(), empty, new ObjectMapper())
 			.send("01012345678", "123456")).isInstanceOf(VerificationDeliveryException.class);
 	}
 }

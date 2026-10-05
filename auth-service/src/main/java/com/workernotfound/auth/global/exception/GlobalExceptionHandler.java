@@ -62,6 +62,9 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(VerificationDeliveryException.class)
 	public ResponseEntity<ApiResponse<Void>> handleVerificationDeliveryException(
 			VerificationDeliveryException exception, HttpServletRequest request) {
+		if (exception.getProviderErrorCode() != null) {
+			log.warn("SOLAPI 인증번호 발송 거절: errorCode={}", exception.getProviderErrorCode());
+		}
 		return error(GlobalErrorCode.EXTERNAL_API_ERROR,
 			GlobalErrorCode.EXTERNAL_API_ERROR.getMessage(), request.getRequestURI(), null);
 	}

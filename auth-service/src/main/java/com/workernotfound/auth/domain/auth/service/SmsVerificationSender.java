@@ -1,11 +1,15 @@
 package com.workernotfound.auth.domain.auth.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import lombok.RequiredArgsConstructor;
@@ -18,9 +22,11 @@ import org.springframework.web.client.RestClientException;
 @Component
 @RequiredArgsConstructor
 public class SmsVerificationSender {
+	private static final Pattern SAFE_ERROR_CODE = Pattern.compile("(?:[A-Za-z][A-Za-z0-9_-]{0,31}|[0-9]{4})");
 
 	private final RestClient verificationDeliveryRestClient;
 	private final VerificationDeliveryProperties properties;
+	private final ObjectMapper objectMapper;
 
 	public void send(String phoneNumber, String verificationCode) {
 		if (!StringUtils.hasText(properties.solapiApiKey())
@@ -52,10 +58,27 @@ public class SmsVerificationSender {
 				throw new VerificationDeliveryException("SMS 발송 접수 응답이 올바르지 않습니다.", true);
 			}
 		} catch (HttpClientErrorException exception) {
-			throw new VerificationDeliveryException("SMS 발송이 거절되었습니다.");
+			throw new VerificationDeliveryException("SMS 발송이 거절되었습니다.",
+				providerErrorCode(exception, verificationCode, phoneNumber));
 		} catch (RestClientException exception) {
 			throw new VerificationDeliveryException("SMS 발송에 실패했습니다.", exception, true);
 		}
+	}
+
+	private String providerErrorCode(HttpClientErrorException exception, String verificationCode, String phoneNumber) {
+		try {
+			JsonNode response = objectMapper.readTree(exception.getResponseBodyAsString());
+			if (response == null) return null;
+			JsonNode errorCode = response.path("errorCode");
+			String code = errorCode.isTextual() ? errorCode.asText() : "";
+			if (SAFE_ERROR_CODE.matcher(code).matches()
+					&& !code.contains(verificationCode) && !code.contains(phoneNumber)) {
+				return code;
+			}
+		} catch (JsonProcessingException ignored) {
+			// Invalid provider responses have no safe diagnostic code to log.
+		}
+		return null;
 	}
 
 	private String authorization() {
