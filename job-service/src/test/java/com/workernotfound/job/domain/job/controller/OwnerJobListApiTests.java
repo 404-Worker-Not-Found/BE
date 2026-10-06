@@ -22,6 +22,8 @@ import org.hamcrest.Matchers;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -195,6 +197,70 @@ class OwnerJobListApiTests extends IntegrationTestSupport {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("GLOBAL-400-002"));
         }
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "107374182, 20",
+            "107374183, 20",
+            "2147483647, 1",
+            "2147483647, 2",
+            "2147483647, 100"
+    })
+    void largeOutOfRangePagesReturnEmptyJobsAndScopedTotals(int page, int size) throws Exception {
+        long ownerId = nextOwnerId();
+        saveJob(ownerId, JobStatus.PAYMENT_PENDING);
+        saveJob(ownerId, JobStatus.OPEN);
+        saveJob(ownerId, JobStatus.CLOSED);
+        saveJob(ownerId + 1, JobStatus.CLOSED);
+
+        queryAsOwner(ownerId, get("/api/jobs/me").param("page", String.valueOf(page))
+                        .param("size", String.valueOf(size)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.page").value(page))
+                .andExpect(jsonPath("$.data.size").value(size))
+                .andExpect(jsonPath("$.data.jobs").isEmpty())
+                .andExpect(jsonPath("$.data.totalCount").value(3))
+                .andExpect(jsonPath("$.data.totalPages").value((3 + size - 1) / size));
+        queryAsOwner(ownerId, get("/api/jobs/me").param("page", String.valueOf(page))
+                        .param("size", String.valueOf(size)).param("status", "CLOSED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.jobs").isEmpty())
+                .andExpect(jsonPath("$.data.totalCount").value(1))
+                .andExpect(jsonPath("$.data.totalPages").value(1));
+    }
+
+    @Test
+    void largestPageForOwnerWithoutJobsReturnsEmptyListWithDefaultSize() throws Exception {
+        queryAsOwner(nextOwnerId(), get("/api/jobs/me").param("page", String.valueOf(Integer.MAX_VALUE)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.page").value(Integer.MAX_VALUE))
+                .andExpect(jsonPath("$.data.size").value(20))
+                .andExpect(jsonPath("$.data.jobs").isEmpty())
+                .andExpect(jsonPath("$.data.totalCount").value(0))
+                .andExpect(jsonPath("$.data.totalPages").value(0));
+    }
+
+    @Test
+    void longOffsetQueryKeepsOwnerStatusAndLatestFirstOrder() {
+        long ownerId = nextOwnerId();
+        JobPost older = saveJob(ownerId, JobStatus.OPEN);
+        JobPost closed = saveJob(ownerId, JobStatus.CLOSED);
+        JobPost newer = saveJob(ownerId, JobStatus.OPEN);
+        saveJob(ownerId + 1, JobStatus.OPEN);
+        setRegisteredAt(older, REGISTERED_AT.minusHours(1));
+        setRegisteredAt(closed, REGISTERED_AT);
+        setRegisteredAt(newer, REGISTERED_AT);
+
+        assertThat(jobPostRepository.findByOwnerIdAndOptionalStatusWithOffset(ownerId, null, 2, 0L))
+                .extracting(JobPost::getId).containsExactly(newer.getId(), closed.getId());
+        assertThat(jobPostRepository.findByOwnerIdAndOptionalStatusWithOffset(ownerId, "OPEN", 1, 1L))
+                .singleElement().satisfies(post -> {
+                    assertThat(post.getId()).isEqualTo(older.getId());
+                    assertThat(post.getStoreName()).isEqualTo(older.getStoreName());
+                    assertThat(post.getWorkDate()).isEqualTo(older.getWorkDate());
+                    assertThat(post.getStatus()).isEqualTo(JobStatus.OPEN);
+                });
     }
 
     @Test

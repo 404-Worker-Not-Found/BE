@@ -23,6 +23,7 @@ import com.workernotfound.job.domain.job.repository.JobPostRepository;
 import com.workernotfound.job.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -102,10 +103,22 @@ public class JobFindService {
     }
 
     private Page<JobPost> fetchOwnerJobs(Long ownerMemberId, JobStatus status, PageRequest pageRequest) {
+        if (pageRequest.getOffset() > Integer.MAX_VALUE) {
+            return findOwnerJobsWithLargeOffset(ownerMemberId, status, pageRequest);
+        }
         if (status == null) {
             return jobPostRepository.findByOwnerId(ownerMemberId, pageRequest);
         }
         return jobPostRepository.findByOwnerIdAndStatus(ownerMemberId, status, pageRequest);
+    }
+
+    private Page<JobPost> findOwnerJobsWithLargeOffset(Long ownerMemberId, JobStatus status, PageRequest pageRequest) {
+        List<JobPost> posts = jobPostRepository.findByOwnerIdAndOptionalStatusWithOffset(
+                ownerMemberId, status == null ? null : status.name(), pageRequest.getPageSize(), pageRequest.getOffset());
+        long totalCount = status == null
+                ? jobPostRepository.countByOwnerId(ownerMemberId)
+                : jobPostRepository.countByOwnerIdAndStatus(ownerMemberId, status);
+        return new PageImpl<>(posts, pageRequest, totalCount);
     }
 
     // 페이지에 담긴 공고 ID로 묶어 한 번에 집계한다. 공고마다 따로 세면 N+1 쿼리가 된다.

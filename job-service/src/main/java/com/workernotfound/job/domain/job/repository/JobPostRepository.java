@@ -25,6 +25,25 @@ public interface JobPostRepository extends JpaRepository<JobPost, Long> {
 
     Page<JobPost> findByOwnerIdAndStatus(Long ownerId, JobStatus status, Pageable pageable);
 
+    long countByOwnerId(Long ownerId);
+
+    long countByOwnerIdAndStatus(Long ownerId, JobStatus status);
+
+    // JPA setFirstResult(int)의 한도를 넘는 offset도 MySQL에는 long으로 전달할 수 있다.
+    @Query(value = """
+            select j.* from job_posts j
+            where j.owner_id = :ownerId
+              and (:status is null or j.status = :status)
+            order by j.created_at desc, j.id desc
+            limit :size offset :offset
+            """, nativeQuery = true)
+    List<JobPost> findByOwnerIdAndOptionalStatusWithOffset(
+            @Param("ownerId") Long ownerId,
+            @Param("status") String status,
+            @Param("size") int size,
+            @Param("offset") long offset
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select j from JobPost j where j.id = :id")
     Optional<JobPost> findByIdForUpdate(@Param("id") Long id);
