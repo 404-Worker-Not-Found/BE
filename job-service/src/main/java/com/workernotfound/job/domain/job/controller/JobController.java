@@ -3,11 +3,13 @@ package com.workernotfound.job.domain.job.controller;
 import com.workernotfound.job.domain.job.controller.docs.JobControllerDocs;
 import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
+import com.workernotfound.job.domain.job.dto.request.OwnerJobSearchRequest;
 import com.workernotfound.job.domain.job.dto.request.UpdatePaymentTermsRequest;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentChangeResponse;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentOrderResponse;
 import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
+import com.workernotfound.job.domain.job.dto.response.OwnerJobListResponse;
 import com.workernotfound.job.domain.job.service.JobApplicationService;
 import com.workernotfound.job.global.response.ApiResponse;
 import com.workernotfound.job.global.security.MemberClaims;
@@ -31,6 +33,17 @@ public class JobController implements JobControllerDocs {
     ) {
         return ResponseEntity.ok(ApiResponse.success(
                 jobApplicationService.create(claims.memberId(), request)
+        ));
+    }
+
+    @Override
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<OwnerJobListResponse>> getMyJobs(
+            @AuthenticationPrincipal MemberClaims claims,
+            @ModelAttribute OwnerJobSearchRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                jobApplicationService.getOwnerJobs(claims.memberId(), request)
         ));
     }
 

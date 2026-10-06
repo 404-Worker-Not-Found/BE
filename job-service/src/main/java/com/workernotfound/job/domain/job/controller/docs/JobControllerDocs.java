@@ -2,11 +2,13 @@ package com.workernotfound.job.domain.job.controller.docs;
 
 import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
+import com.workernotfound.job.domain.job.dto.request.OwnerJobSearchRequest;
 import com.workernotfound.job.domain.job.dto.request.UpdatePaymentTermsRequest;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentChangeResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentOrderResponse;
 import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
+import com.workernotfound.job.domain.job.dto.response.OwnerJobListResponse;
 import com.workernotfound.job.global.config.OpenApiConfig;
 import com.workernotfound.job.global.response.ApiResponse;
 import com.workernotfound.job.global.security.MemberClaims;
@@ -42,6 +44,30 @@ public interface JobControllerDocs {
     })
     // 제약은 이 인터페이스에만 둔다. 구현 메서드가 매개변수 제약을 다시 선언하면 메서드 검증이 거절한다.
     ResponseEntity<ApiResponse<Long>> create(MemberClaims claims, @Valid CreateJobRequest request);
+
+    @Operation(
+            summary = "점주 본인 공고 목록",
+            description = "Bearer 토큰 회원(OWNER)이 등록한 공고를 등록 최신순(같으면 ID 내림차순)으로 조회합니다. 결제 대기"
+                    + "(PAYMENT_PENDING)·공개·매칭 중·마감 공고와 예치 차단 공고를 모두 포함하며, status로 한 상태만 거를 수 있습니다. "
+                    + "점주 ID는 토큰으로만 정합니다. page 기본 0, size 기본 20·최대 100이며 범위 밖 페이지는 빈 목록입니다. "
+                    + "confirmedCount는 확정(CONSUMED)된 모집 자리 수이고 applicantCount는 아직 제공하지 않아 null입니다. "
+                    + "결제 진행 상태는 공고 결제 주문 조회 API로 확인합니다.",
+            security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "공고 목록 조회 성공",
+                    content = @Content(schema = @Schema(implementation = OwnerJobListResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 status·page·size", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 요청", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "OWNER가 아님", content = @Content)
+    })
+    ResponseEntity<ApiResponse<OwnerJobListResponse>> getMyJobs(
+            @Parameter(hidden = true) MemberClaims claims,
+            @Valid OwnerJobSearchRequest request
+    );
 
     @Operation(
             summary = "공고 상세 조회",

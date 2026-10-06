@@ -7,6 +7,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
@@ -19,6 +20,14 @@ class SwaggerDocumentationTests extends IntegrationTestSupport {
     void openApiDocsAreAccessible() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void openApiDocsDescribeOwnerJobList() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/jobs/me'].get.summary").value("점주 본인 공고 목록"))
+                .andExpect(jsonPath("$.paths['/api/jobs/me'].get.security").isNotEmpty());
     }
 
     @Test

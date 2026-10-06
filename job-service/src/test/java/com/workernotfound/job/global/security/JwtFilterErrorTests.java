@@ -30,6 +30,21 @@ class JwtFilterErrorTests extends IntegrationTestSupport {
                                         org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("sensitive"))));
     }
 
+    // 점주 본인 공고 목록도 공개 공고 조회 경로(GET /api/jobs/**)와 달리 같은 토큰 처리 경계를 따른다.
+    @Test
+    void engineFailureOnOwnerJobListUsesSafe500() throws Exception {
+        doThrow(new JwtProcessingException(new IllegalStateException("sensitive engine detail")))
+                .when(parser)
+                .parseAccessToken("owner-list-engine-failure");
+        mvc.perform(get("/api/jobs/me").header("Authorization", "Bearer owner-list-engine-failure"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("GLOBAL-500-001"))
+                .andExpect(
+                        content()
+                                .string(
+                                        org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("sensitive"))));
+    }
+
     @Test
     void invalidTokenKeepsProtectedEndpointUnauthorized() throws Exception {
         mvc.perform(get("/api/protected-boundary").header("Authorization", "Bearer invalid"))

@@ -7,6 +7,8 @@ import com.workernotfound.job.domain.job.dto.request.FundingStatusRequest;
 import com.workernotfound.job.domain.job.dto.response.FundingStatusResponse;
 import com.workernotfound.job.domain.job.dto.response.ApplicationAdmissionResponse;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
+import com.workernotfound.job.domain.job.dto.request.OwnerJobSearchRequest;
+import com.workernotfound.job.domain.job.dto.response.OwnerJobListResponse;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentOrderResponse;
 import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
@@ -60,6 +62,10 @@ public class JobApplicationService {
 
     public JobSearchResponse getJobs(JobSearchRequest request) {
         return jobFindService.findJobs(request);
+    }
+
+    public OwnerJobListResponse getOwnerJobs(Long ownerMemberId, OwnerJobSearchRequest request) {
+        return jobFindService.findOwnerJobs(ownerMemberId, request);
     }
 
     public ApplicationAdmissionResponse createApplicationAdmission(
