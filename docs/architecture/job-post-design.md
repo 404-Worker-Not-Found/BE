@@ -105,6 +105,7 @@
 - 점유 수가 `recruitCount` 이상이면 `JOB-409-007`이다.
 - 응답 스냅샷은 발급 당시 공고의 버전, 점주 ID, 근무 일시, `endTimeNextDay`, 공고 좌표 `latitude`/`longitude`, 1인 예정 급여(`lockedAmount`, 정수 KRW), 통화 `KRW`다. 스냅샷과 요청 식별 필드는 `updatable = false`다.
 - 좌표는 공고 행 잠금 안에서 예약 행의 `DECIMAL(10,7)` 스냅샷에 저장하고 응답도 예약 행에서만 읽는다. 요청에는 기준 좌표를 받지 않는다. V16 이전 예약은 두 좌표가 null로 유지되며 현재 공고 좌표로 소급 보정하지 않는다. 같은 예약 키는 공고 변경·예약 만료·반환 후에도 최초 좌표를 반환한다.
+- V16의 `ALTER TABLE`에 대해 대용량 운영 테이블의 실행 알고리즘·잠금 시간·무중단 적용은 검증하지 않았다. 운영 적용 전 대상 MySQL 버전과 데이터 규모에서 쓰기 차단·메타데이터 잠금을 확인하고 배포 시간을 계획해야 한다. MySQL의 CHECK는 `ENFORCED`를 유지하며 PostgreSQL의 `NOT VALID`/`VALIDATE CONSTRAINT` 문법으로 바꾸지 않는다.
 - `expiresAt = reservedAt + MATCHING_SEAT_RESERVATION_TTL`(기본 10분, 지원 접수 승인 TTL과 별도 설정)이며 재요청으로 연장하지 않는다. 시각 정밀도는 아래 [시각 저장 정밀도](#시각-저장-정밀도)를 따른다.
 
 ### 확정
