@@ -5,6 +5,7 @@ import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
 import com.workernotfound.job.domain.job.dto.request.OwnerJobSearchRequest;
 import com.workernotfound.job.domain.job.dto.request.UpdatePaymentTermsRequest;
+import com.workernotfound.job.domain.job.dto.response.JobCloseResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentChangeResponse;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentOrderResponse;
@@ -93,6 +94,18 @@ public class JobController implements JobControllerDocs {
     ) {
         return ResponseEntity.ok(ApiResponse.success(
                 jobApplicationService.retryPayment(id, claims.memberId(), idempotencyKey)
+        ));
+    }
+
+    @Override
+    @PostMapping("/{id}/close")
+    public ResponseEntity<ApiResponse<JobCloseResponse>> close(
+            @AuthenticationPrincipal MemberClaims claims,
+            @PathVariable Long id,
+            @RequestHeader("Idempotency-Key") String idempotencyKey
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                jobApplicationService.closeJob(id, claims.memberId(), idempotencyKey)
         ));
     }
 

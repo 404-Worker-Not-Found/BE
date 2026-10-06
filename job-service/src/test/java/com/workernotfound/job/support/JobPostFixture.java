@@ -41,8 +41,10 @@ public final class JobPostFixture {
         return withStatus(jobPost, JobStatus.OPEN);
     }
 
+    // 결제 대기가 아닌 상태는 공개된 적이 있는 공고로 둔다(V19 이전 공고의 소급 기준과 같다). 공개 전 마감은 실제 마감 경로로 만든다.
     public static JobPost withStatus(JobPost jobPost, JobStatus status) {
         ReflectionTestUtils.setField(jobPost, "status", status);
+        ReflectionTestUtils.setField(jobPost, "published", status != JobStatus.PAYMENT_PENDING);
         return jobPost;
     }
 }

@@ -4,6 +4,7 @@ import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
 import com.workernotfound.job.domain.job.dto.request.OwnerJobSearchRequest;
 import com.workernotfound.job.domain.job.dto.request.UpdatePaymentTermsRequest;
+import com.workernotfound.job.domain.job.dto.response.JobCloseResponse;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentChangeResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentOrderResponse;
@@ -71,8 +72,9 @@ public interface JobControllerDocs {
 
     @Operation(
             summary = "공고 상세 조회",
-            description = "공고 ID로 상세 정보를 조회합니다. 결제 대기(PAYMENT_PENDING) 공고는 Bearer 토큰의 회원이 "
-                    + "점주 본인일 때만 조회되며, 그 밖의 요청은 404입니다."
+            description = "공고 ID로 상세 정보를 조회합니다. 공개된 적 없는 공고(결제 대기 PAYMENT_PENDING 공고와 공개 전에 "
+                    + "마감된 CLOSED 공고)는 Bearer 토큰의 회원이 점주 본인일 때만 조회되며, 그 밖의 요청은 404입니다. 공개된 적 있는 "
+                    + "공고는 마감 뒤에도 인증 없이 조회됩니다."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -152,6 +154,33 @@ public interface JobControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "멱등 키 재사용(JOB-409-004), 재결제할 수 없는 공고(JOB-409-014), 진행 중인 주문 생성(JOB-409-015)", content = @Content)
     })
     ResponseEntity<ApiResponse<JobPaymentChangeResponse>> retryPayment(
+            @Parameter(hidden = true) MemberClaims claims,
+            Long id,
+            @NotBlank @Size(max = 100) @Pattern(regexp = "[!-~]+") String idempotencyKey
+    );
+
+    @Operation(
+            summary = "공고 수동 마감(점주 본인)",
+            description = "점주 본인 공고의 모집을 끝냅니다. OPEN·MATCHING 공고는 CLOSED로 바뀌고 남은 지원과 매칭 제안의 종료를 "
+                    + "matching-service에 알립니다. 결제 대기(PAYMENT_PENDING) 공고는 알림 없이 CLOSED가 됩니다. 이미 확정된 매칭과 "
+                    + "근무는 유지되며, 마감 뒤 도착한 모집 자리 첫 확정은 거절됩니다. 이미 마감된 공고는 바꾸지 않고 "
+                    + "result=ALREADY_CLOSED로 성공합니다. 같은 Idempotency-Key의 같은 공고 요청은 처음 결과를 반환하고, 다른 공고에 "
+                    + "같은 키를 쓰면 409입니다. 미결제 주문 정리, 예치 잔액 환불, 재오픈은 하지 않습니다.",
+            security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "마감 처리(CLOSED), 이미 마감된 공고(ALREADY_CLOSED) 또는 같은 키의 처음 결과",
+                    content = @Content(schema = @Schema(implementation = JobCloseResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Idempotency-Key 누락·형식 오류", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 요청", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "OWNER가 아님", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "공고 없음 또는 본인 공고 아님", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "멱등 키 재사용(JOB-409-004)", content = @Content)
+    })
+    ResponseEntity<ApiResponse<JobCloseResponse>> close(
             @Parameter(hidden = true) MemberClaims claims,
             Long id,
             @NotBlank @Size(max = 100) @Pattern(regexp = "[!-~]+") String idempotencyKey

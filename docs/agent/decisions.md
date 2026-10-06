@@ -1503,3 +1503,38 @@ Decision:
 Related files:
 - `docs/architecture/member-account-management.md`
 - `auth-service`, `member-service`, `job-service`, `matching-service`, `work-service`, `payment-service`, `chat-service`, `notification-service`
+
+## 2026-10-06 - Job Manual Close and Deadline-based Transitions
+
+Decision:
+- Time-based job transitions (a time equal to the boundary counts as passed; the current time is read from the `Clock` bean after the job-row lock):
+  - `PAYMENT_PENDING` past the application deadline -> `CLOSED` (`SYSTEM:APPLICATION_DEADLINE_PASSED`), no matching-service notification.
+  - `OPEN` past the application deadline -> `MATCHING` (`SYSTEM:APPLICATION_DEADLINE_PASSED`), never notified. A notification would make matching-service reject the existing applicants, who must still be matchable in `MATCHING`.
+  - `OPEN`/`MATCHING` past work start (`workDate + startTime`) -> `CLOSED` (`SYSTEM:WORK_STARTED`), notified. An `OPEN` job past both boundaries closes directly with one history row.
+- Owners close their own jobs with `POST /api/jobs/{id}/close` (`OWNER` JWT, `Idempotency-Key`). `OPEN`/`MATCHING` -> `CLOSED` (`OWNER:MANUAL_CLOSE`) is notified; `PAYMENT_PENDING` -> `CLOSED` is not. Other owners' jobs are 404, the same as the other owner APIs. The same key returns the first stored result (V18 `job_close_requests`); a key reused for another job or owner is `JOB-409-004`. The key column uses `utf8mb4_0900_bin`, so lookups and the unique constraint treat keys that differ only in case (or trailing spaces) as different keys.
+- A new key on an already `CLOSED` job returns 200 `ALREADY_CLOSED` without changing the job, history, or notifications. The owner's intent is already met, and a close that loses a race to automatic close or recruitment completion must not look like a failure.
+- Notified closes reuse the recruitment-completion command and its delivery: the status change, a flush to fix the `@Version`, the history row, and the command with that post-close version are stored in the caller's transaction. Recruitment completion shares the same recorder without behavior changes.
+- After a close, the first confirmation of a `RESERVED` seat is rejected with `JOB-409-005`, like a funding block. Same-key retries of `CONSUMED` seats still succeed first, and seat release still works as Saga compensation. Closing does not touch application admissions.
+- A per-job scheduler (`JOB_SCHEDULE_TRANSITION_*`, default `1m` interval, `30s` initial delay, batch `100`) reads candidate IDs with cursors and re-evaluates each job in its own transaction under the row lock. V17 adds `(status, application_deadline)` and `(status, work_date, start_time)` indexes.
+- Existing rules still apply on closed jobs: payment-terms changes and re-payment are rejected (`JOB-409-014`), a pending change's new order is not linked (`JOB_STATE_CHANGED`), the initial order is still linked, and a later `funded=true` is `PUBLICATION_SKIPPED(JOB_CLOSED)` with refund review.
+- Detail visibility is decided by whether the job was ever published (`job_posts.published`, set by `PAYMENT_PENDING -> OPEN` and never cleared), not by the current status. A job closed before publication stays visible only to its owner (others and anonymous requests get 404); a job closed after publication stays public. V19 backfills existing non-`PAYMENT_PENDING` jobs as published, except those with a `PAYMENT_PENDING -> CLOSED` history.
+- Out of scope: cleanup of unpaid orders, refund of remaining deposits, reopening, job deletion, and admission status changes (#66).
+
+Reason:
+- The user confirmed these transitions and notification rules in issue #95 on 2026-10-06, and chose a 1-minute scheduler interval.
+- matching-service already blocks applications at or below the notified version and compensates any 4xx confirmation rejection, so no matching-service change is needed.
+
+Implication for agents:
+- Never notify matching-service for `OPEN -> MATCHING`.
+- Put new job status transitions on `JobPost` (throwing `IllegalStateException` from disallowed states) and record them through `JobStatusChangeRecorder` in the same transaction.
+- Seat confirmation does not check work start directly. Between work start and the next scheduler run, a valid `RESERVED` seat can still be confirmed; changing that needs a new decision.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `docs/architecture/mvp-domain-flow.md`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobCloseCommandService.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobScheduleTransitionService.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobStatusChangeRecorder.java`
+- `job-service/src/main/resources/db/migration/V17__add_schedule_transition_indexes_to_job_posts.sql`
+- `job-service/src/main/resources/db/migration/V18__create_job_close_requests.sql`
+- `job-service/src/main/resources/db/migration/V19__add_published_to_job_posts.sql`

@@ -78,6 +78,9 @@
 - 새 공고는 필수 정보와 예치 조건을 충족한 뒤 `OPEN`으로 공개한다.
 - `OPEN` 상태에서만 신규 지원을 받는다.
 - 조기 마감이나 지원 마감 시각 도달 시 신규 지원을 막는다.
+- 지원 마감 시각이 지나면 `OPEN` 공고는 `MATCHING`이 된다. 신규 지원은 막지만 기존 지원자의 매칭과 모집 완료는 계속되므로 matching-service에 모집 종료를 알리지 않는다.
+- 근무 시작 시각이 지나거나 점주가 수동 마감하면 `OPEN`·`MATCHING` 공고는 `CLOSED`가 되고 `RecruitmentCompleted` 의미의 알림으로 남은 지원과 매칭 제안을 종료한다. 마감 뒤 도착한 모집 자리 확정은 거절되어 매칭 확정 Saga가 보상한다.
+- 예치 전에 지원 마감이 지났거나 점주가 마감한 `PAYMENT_PENDING` 공고는 지원자가 없으므로 알림 없이 `CLOSED`가 된다. 세부 기준은 [공고 설계](./job-post-design.md#공고-마감과-지원-마감-전이)를 따른다.
 - 매칭 후보가 모두 거절하거나 만료되면 조건을 확인한 뒤 `OPEN`으로 되돌릴 수 있다.
 - 공고 상태를 바꿀 때 상태 이력을 남긴다.
 
@@ -226,7 +229,7 @@
 
 이 표는 의미 계약을 정의한다. 메시지 브로커, Outbox, REST 후속 호출 등 전달 방식은 구현 단계에서 정한다.
 
-현재 `matching-service`는 `POST /api/applications/internal/jobs/{jobPostId}/recruitment-completion` REST 계약으로 `RecruitmentCompleted` 의미를 수신한다. `job-service`가 모집 완료를 판단해 공고 버전, 안정적인 명령 ID와 내부 secret으로 호출하며, 처리 중인 확정 Saga 때문에 409를 받으면 같은 명령 ID로 재시도한다. `matching-service`는 완료 버전을 영구 저장해 같은 버전에서 늦게 저장되는 지원을 차단하고, 더 높은 버전으로 재오픈된 공고의 지원은 허용한다. 이벤트 전달 방식이 정해지면 동일한 멱등·상태 전이 규칙을 유지한 채 어댑터를 교체할 수 있다.
+현재 `matching-service`는 `POST /api/applications/internal/jobs/{jobPostId}/recruitment-completion` REST 계약으로 `RecruitmentCompleted` 의미를 수신한다. `job-service`가 모집 완료, 근무 시작에 따른 마감, 점주 수동 마감 때 마감 후 공고 버전, 안정적인 명령 ID와 내부 secret으로 호출하며, 처리 중인 확정 Saga 때문에 409를 받으면 같은 명령 ID로 재시도한다. `matching-service`는 완료 버전을 영구 저장해 같은 버전에서 늦게 저장되는 지원을 차단하고, 더 높은 버전으로 재오픈된 공고의 지원은 허용한다. 이벤트 전달 방식이 정해지면 동일한 멱등·상태 전이 규칙을 유지한 채 어댑터를 교체할 수 있다.
 
 리뷰 작성과 신뢰 점수 갱신은 `member-service`의 한 로컬 트랜잭션에서 처리한다. `member-service`는 변경된 신뢰 점수를 저장한 뒤 `TrustScoreUpdated`를 발행하고, `matching-service`는 이 이벤트만 소비한다.
 

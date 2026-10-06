@@ -10,6 +10,9 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -62,6 +65,37 @@ public interface JobPostRepository extends JpaRepository<JobPost, Long> {
             """)
     List<Long> findFilledIdsByStatusInAfter(
             @Param("statuses") Collection<JobStatus> statuses,
+            @Param("afterId") Long afterId,
+            Pageable pageable
+    );
+
+    // 지원 마감이 지난 공고 중 afterId 다음 ID. 잠그지 않고 후보만 고르며 idx_job_posts_status_deadline을 탄다.
+    @Query("""
+            select j.id from JobPost j
+            where j.status in :statuses
+              and j.applicationDeadline <= :now
+              and j.id > :afterId
+            order by j.id
+            """)
+    List<Long> findDeadlinePassedIdsByStatusInAfter(
+            @Param("statuses") Collection<JobStatus> statuses,
+            @Param("now") LocalDateTime now,
+            @Param("afterId") Long afterId,
+            Pageable pageable
+    );
+
+    // 근무 시작(work_date + start_time)이 지난 공고 중 afterId 다음 ID. idx_job_posts_status_work_start를 탄다.
+    @Query("""
+            select j.id from JobPost j
+            where j.status in :statuses
+              and (j.workDate < :today or (j.workDate = :today and j.startTime <= :time))
+              and j.id > :afterId
+            order by j.id
+            """)
+    List<Long> findWorkStartedIdsByStatusInAfter(
+            @Param("statuses") Collection<JobStatus> statuses,
+            @Param("today") LocalDate today,
+            @Param("time") LocalTime time,
             @Param("afterId") Long afterId,
             Pageable pageable
     );
