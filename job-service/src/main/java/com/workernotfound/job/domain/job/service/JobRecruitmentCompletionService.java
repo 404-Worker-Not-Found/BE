@@ -1,22 +1,16 @@
 package com.workernotfound.job.domain.job.service;
 
 import com.workernotfound.job.domain.job.entity.JobPost;
-import com.workernotfound.job.domain.job.entity.JobStatusHistory;
 import com.workernotfound.job.domain.job.entity.RecruitmentCompletionCommand;
 import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import com.workernotfound.job.domain.job.entity.enums.MatchingSeatReservationStatus;
-import com.workernotfound.job.domain.job.event.RecruitmentCompletionCommandCreatedEvent;
 import com.workernotfound.job.domain.job.repository.JobMatchingSeatReservationRepository;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
-import com.workernotfound.job.domain.job.repository.JobStatusHistoryRepository;
-import com.workernotfound.job.domain.job.repository.RecruitmentCompletionCommandRepository;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.Optional;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,9 +29,7 @@ public class JobRecruitmentCompletionService {
 
     private final JobPostRepository jobPostRepository;
     private final JobMatchingSeatReservationRepository reservationRepository;
-    private final JobStatusHistoryRepository historyRepository;
-    private final RecruitmentCompletionCommandRepository commandRepository;
-    private final ApplicationEventPublisher eventPublisher;
+    private final JobStatusChangeRecorder statusChangeRecorder;
     private final Clock clock;
 
     /**
@@ -62,24 +54,8 @@ public class JobRecruitmentCompletionService {
         }
         JobStatus fromStatus = lockedJobPost.getStatus();
         lockedJobPost.closeForRecruitmentCompletion();
-        // @Version은 flush 때 증가한다. 공고를 따로 커밋하지 않고 같은 트랜잭션에서 flush해 완료 전이의 버전을 확정한다.
-        jobPostRepository.flush();
-        LocalDateTime changedAt = RecruitmentCompletionCommand.toStoredTime(now);
-        historyRepository.save(JobStatusHistory.builder()
-                .jobPostId(lockedJobPost.getId())
-                .fromStatus(fromStatus)
-                .toStatus(JobStatus.CLOSED)
-                .reason(RECRUITMENT_FILLED_REASON)
-                .createdAt(changedAt)
-                .build());
-        RecruitmentCompletionCommand command = commandRepository.save(RecruitmentCompletionCommand.builder()
-                .commandId(UUID.randomUUID().toString())
-                .jobPostId(lockedJobPost.getId())
-                .jobVersion(lockedJobPost.getVersion())
-                .nextAttemptAt(changedAt)
-                .build());
-        eventPublisher.publishEvent(new RecruitmentCompletionCommandCreatedEvent(command.getId()));
-        return Optional.of(command);
+        return Optional.of(statusChangeRecorder.recordRecruitmentEnd(
+                lockedJobPost, fromStatus, RECRUITMENT_FILLED_REASON, now));
     }
 
     private boolean isFilled(JobPost jobPost) {
