@@ -28,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
@@ -63,6 +64,9 @@ class JobCloseApiTests extends IntegrationTestSupport {
 
     @Autowired
     private JwtProperties jwtProperties;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private ExecutorService executor;
 
@@ -211,6 +215,57 @@ class JobCloseApiTests extends IntegrationTestSupport {
             assertThat(historyRepository.findByJobPostIdOrderByIdAsc(untouched.getId())).isEmpty();
             assertThat(commandRepository.findByJobPostId(untouched.getId())).isEmpty();
         }
+    }
+
+    @Test
+    void keysDifferingOnlyInCaseAreDifferentRequestsOnSameJob() throws Exception {
+        JobPost jobPost = saveJob(JobStatus.OPEN);
+        String upper = "Close-Case-" + UUID.randomUUID().toString().toUpperCase();
+        String lower = upper.toLowerCase();
+
+        close(jobPost.getId(), jobPost.getOwnerId(), upper)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("CLOSED"));
+        // 대소문자만 다른 키는 처음 요청의 재요청이 아니라 새 요청이다. 이미 마감된 공고라 ALREADY_CLOSED다.
+        close(jobPost.getId(), jobPost.getOwnerId(), lower)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("ALREADY_CLOSED"));
+        close(jobPost.getId(), jobPost.getOwnerId(), upper)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("CLOSED"));
+
+        assertThat(closeRequestRepository.findByIdempotencyKey(upper)).get()
+                .satisfies(request -> assertThat(request.getIdempotencyKey()).isEqualTo(upper));
+        assertThat(closeRequestRepository.findByIdempotencyKey(lower)).get()
+                .satisfies(request -> assertThat(request.getIdempotencyKey()).isEqualTo(lower));
+        assertSingleHistory(jobPost, JobStatus.OPEN);
+    }
+
+    @Test
+    void keysDifferingOnlyInCaseDoNotConflictAcrossJobs() throws Exception {
+        JobPost first = saveJob(JobStatus.OPEN);
+        JobPost second = saveJob(JobStatus.OPEN, first.getOwnerId());
+        String upper = "Close-Case-" + UUID.randomUUID().toString().toUpperCase();
+
+        close(first.getId(), first.getOwnerId(), upper).andExpect(status().isOk());
+        // 조회와 유일 제약 모두 다른 키로 보므로 409가 아니고 두 번째 공고도 마감된다.
+        close(second.getId(), second.getOwnerId(), upper.toLowerCase())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("CLOSED"))
+                .andExpect(jsonPath("$.data.jobPostId").value(second.getId()));
+
+        assertThat(reload(first).getStatus()).isEqualTo(JobStatus.CLOSED);
+        assertThat(reload(second).getStatus()).isEqualTo(JobStatus.CLOSED);
+    }
+
+    @Test
+    void idempotencyKeyColumnComparesExactBytes() {
+        String collation = jdbcTemplate.queryForObject("""
+                SELECT COLLATION_NAME FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'job_close_requests' AND COLUMN_NAME = 'idempotency_key'
+                """, String.class);
+
+        assertThat(collation).isEqualTo("utf8mb4_0900_bin");
     }
 
     @Test

@@ -263,7 +263,7 @@
 `POST /api/jobs/{id}/close`(`OWNER` Bearer JWT, 본문 없음).
 
 - 권한: 점주는 JWT `memberId`로만 확인한다. 토큰이 없으면 401, `OWNER`가 아니면 403, 다른 점주의 공고와 없는 공고는 존재 여부를 드러내지 않도록 같은 404 `JOB-404-001`이다(결제 조건 변경과 같다).
-- `Idempotency-Key`는 1~100자의 공백 없는 ASCII이며 필수다. 공고 행 잠금과 점주 확인 뒤, 업무 상태 확인보다 먼저 같은 키의 요청을 찾는다. 같은 키·같은 공고·같은 점주면 저장된 처음 결과(`job_close_requests`)를 그대로 돌려준다. 같은 키를 다른 공고나 다른 점주의 요청에 쓰면 409 `JOB-409-004`다. 서로 다른 공고에 같은 키를 쓴 동시 요청은 `uk_job_close_requests_idempotency_key`가 막고 롤백 뒤 `GlobalExceptionHandler`가 같은 코드로 변환한다.
+- `Idempotency-Key`는 1~100자의 공백 없는 ASCII이며 필수다. 공고 행 잠금과 점주 확인 뒤, 업무 상태 확인보다 먼저 같은 키의 요청을 찾는다. 같은 키·같은 공고·같은 점주면 저장된 처음 결과(`job_close_requests`)를 그대로 돌려준다. 같은 키를 다른 공고나 다른 점주의 요청에 쓰면 409 `JOB-409-004`다. 서로 다른 공고에 같은 키를 쓴 동시 요청은 `uk_job_close_requests_idempotency_key`가 막고 롤백 뒤 `GlobalExceptionHandler`가 같은 코드로 변환한다. 키 컬럼은 `utf8mb4_0900_bin`(대소문자 구분, NO PAD)이라 조회와 유일 제약 모두 바이트가 같은 키만 같은 키로 본다. `Close-A`와 `close-a`는 다른 요청이다.
 - 이미 `CLOSED`인 공고에 새 키로 요청하면 공고·이력·알림을 바꾸지 않고 200 `result=ALREADY_CLOSED`(`previousStatus=CLOSED`)다. 점주가 원하는 "더 이상 모집하지 않음"은 이미 이뤄졌고, 자동 마감이나 모집 완료와의 경쟁에서 진 요청이 실패처럼 보이지 않게 한다. 요청 기록은 남겨 같은 키의 재요청과 키 재사용 판단에 쓴다.
 - 응답: `jobPostId`, `result`(`CLOSED`: 이 요청이 마감함, `ALREADY_CLOSED`), `previousStatus`(처리 당시 상태), `status`(항상 `CLOSED`), `processedAt`.
 
@@ -612,7 +612,7 @@ payment-service는 200 success만 전송 완료로 보고 그 밖의 응답은 �
 - `job_payment_fundings`(V11): 공고 FK, 주문 ID(유일), 마지막 적용 `funding_revision`, 예치 여부, 적용 시각. 연결된 주문의 알림만 생성·갱신한다.
 - `job_payment_refund_reviews`(V12): 공고 FK, 주문 ID(유일), 처음 검토 대상이 된 수신 기록 FK(유일), 사유. 생성 후 바꾸지 않는다.
 - `job_payment_change_requests`(V13): 공고 FK, 점주 ID, 점주 요청 `Idempotency-Key`(유일), 요청 종류, 발급한 명령 FK(유일), 처리 상태(`PENDING`/`APPLIED`/`REJECTED`), 적용할 결제 조건 스냅샷(근무일·시작/종료 시각·익일 여부·기본 시급·추가 시급·모집 인원·지원 마감), 종료 사유·시각. 요청 식별 필드와 조건 스냅샷은 생성 후 바꾸지 않는다. `job_payment_order_commands.status`에는 교체 거절 종료 `REJECTED`가 추가됐다.
-- `job_close_requests`(V18): 점주 수동 마감 요청. 공고 FK, 점주 ID, `Idempotency-Key`(유일), 처리 결과(`CLOSED`/`ALREADY_CLOSED`), 처리 당시 공고 상태, 처리 시각. 모든 컬럼은 생성 후 바꾸지 않는다.
+- `job_close_requests`(V18): 점주 수동 마감 요청. 공고 FK, 점주 ID, `Idempotency-Key`(유일, `utf8mb4_0900_bin`), 처리 결과(`CLOSED`/`ALREADY_CLOSED`), 처리 당시 공고 상태, 처리 시각. 모든 컬럼은 생성 후 바꾸지 않는다.
 - `job_funding_status_receipts`(V11): 검증을 통과한 예치 상태 알림의 영구 수신 기록. 멱등 키(유일), 공고 FK, 요청 필드 전체(주문 ID, 결제용 버전, 점주, 정수 금액, 통화, revision, 예치 여부), 처리 결과·공개 생략 사유, 처리 직후 공고 상태·차단 여부, 환불 검토 필요 여부, 수신 시각. `(order_id, funding_revision)` 유일 제약과 환불 검토 조회용 `(refund_review_required, received_at)` 인덱스를 둔다. 모든 컬럼은 생성 후 바꾸지 않는다.
 
 사업장·점주·알바생 ID와 결제 주문 ID는 다른 서비스의 원본이므로 물리 FK 없이 외부 ID로만 저장한다.
@@ -659,6 +659,7 @@ payment-service는 200 success만 전송 완료로 보고 그 밖의 응답은 �
 - 재오픈과 그 이력 기록. 재오픈은 버전을 올려 이전 완료 알림과 구분해야 한다.
 - 마감 공고의 미결제 주문 정리와 남은 예치 잔액 환불, 공고 삭제
 - 근무 시작 뒤 자동 마감 전까지(최대 스케줄러 한 주기) 유효한 `RESERVED` 자리의 확정을 막을지 여부
+- 기존 멱등 키 컬럼(`job_application_admissions`, `job_matching_seat_reservations`의 예약·확정·반환 키, `job_funding_status_receipts`, `job_payment_change_requests`)은 테이블 기본 `utf8mb4_unicode_ci`라 대소문자만 다른 키를 같은 키로 본다. 운영 데이터의 충돌 여부를 확인한 뒤 바이트 비교 collation으로 바꾸는 마이그레이션이 필요하다
 - 확정된 자리의 취소·환불 정책
 - 지원 승인 `CONSUMED` 처리
 - member-service 연동을 통한 사업장 소유권 검증
