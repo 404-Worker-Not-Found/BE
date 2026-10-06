@@ -68,7 +68,7 @@ class MatchingSeatReservationApiTests extends IntegrationTestSupport {
         JobPost jobPost = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().build()));
         String key = newKey();
         String id = reservationId(reserve(jobPost.getId(), key, body(101L, 201L, 100L)));
-        // V15 이전에 발급된 예약의 저장 형태를 재현한다. 현재 공고에는 좌표가 있다.
+        // V16 이전에 발급된 예약의 저장 형태를 재현한다. 현재 공고에는 좌표가 있다.
         jdbc.update("UPDATE job_matching_seat_reservations SET latitude = NULL, longitude = NULL WHERE id = ?", id);
 
         reserve(jobPost.getId(), key, body(101L, 201L, 100L))
