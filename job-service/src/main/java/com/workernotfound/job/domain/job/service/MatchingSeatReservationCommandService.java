@@ -170,8 +170,9 @@ public class MatchingSeatReservationCommandService {
         if (reservation.isExpiredAt(now)) {
             throw new BusinessException(JobErrorCode.SEAT_RESERVATION_EXPIRED);
         }
-        // 공고 행 잠금 아래에서 예치 차단을 확인한다. 차단 뒤의 최초 확정은 거절하고, Saga가 4xx 거절로 보고 자리를 반환·보상한다.
-        // 이미 CONSUMED인 예약의 같은 키 재요청은 이 검사 전에 성공하므로 차단이 확정 결과를 되돌리지 않는다.
+        // 공고 행 잠금 아래에서 마감과 예치 차단을 확인한다. 그 뒤의 최초 확정은 거절하고, Saga가 4xx 거절로 보고 자리를 반환·보상한다.
+        // 이미 CONSUMED인 예약의 같은 키 재요청은 이 검사 전에 성공하므로 마감·차단이 확정 결과를 되돌리지 않는다.
+        validateStillRecruiting(jobPost);
         validateFundingNotBlocked(jobPost);
         reservation.consume(idempotencyKey, now);
         recruitmentCompletionService.completeIfFilled(jobPost, now);
@@ -223,6 +224,13 @@ public class MatchingSeatReservationCommandService {
         // 지원 마감이 아니라 근무 시작 시각을 자리 예약 기한으로 사용한다.
         if (!jobPost.getWorkDate().atTime(jobPost.getStartTime()).isAfter(now)) {
             throw new BusinessException(JobErrorCode.WORK_ALREADY_STARTED);
+        }
+    }
+
+    // 수동 마감·근무 시작으로 마감된 공고에는 남은 RESERVED 자리를 확정하지 않는다. 모집 완료로 마감된 공고에는 유효한 RESERVED가 남지 않는다.
+    private void validateStillRecruiting(JobPost jobPost) {
+        if (!jobPost.isRecruiting()) {
+            throw new BusinessException(JobErrorCode.JOB_NOT_MATCHABLE, "마감된 공고라 모집 자리를 확정할 수 없습니다.");
         }
     }
 

@@ -221,4 +221,34 @@ public class JobPost extends BaseEntity {
         }
         this.status = JobStatus.CLOSED;
     }
+
+    // 지원 마감이 지나 신규 지원을 멈춘다. 기존 지원자의 자리 예약·확정과 모집 완료는 MATCHING에서도 계속된다.
+    public void stopApplicationsAfterDeadline() {
+        if (status != JobStatus.OPEN) {
+            throw new IllegalStateException("지원을 받는 공고만 지원 마감으로 매칭 단계로 바꿀 수 있습니다: " + status);
+        }
+        this.status = JobStatus.MATCHING;
+    }
+
+    public void closeForWorkStart() {
+        if (!isRecruiting()) {
+            throw new IllegalStateException("모집 중인 공고만 근무 시작으로 마감할 수 있습니다: " + status);
+        }
+        this.status = JobStatus.CLOSED;
+    }
+
+    // 예치 전에 지원 마감이 지나 공개할 수 없게 된 결제 대기 공고를 마감한다.
+    public void closeUnpublishedAfterDeadline() {
+        if (status != JobStatus.PAYMENT_PENDING) {
+            throw new IllegalStateException("결제 대기 공고만 지원 마감으로 마감할 수 있습니다: " + status);
+        }
+        this.status = JobStatus.CLOSED;
+    }
+
+    public void closeByOwner() {
+        if (status == JobStatus.CLOSED) {
+            throw new IllegalStateException("이미 마감된 공고입니다.");
+        }
+        this.status = JobStatus.CLOSED;
+    }
 }
