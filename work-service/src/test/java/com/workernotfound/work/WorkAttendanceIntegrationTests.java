@@ -137,6 +137,27 @@ class WorkAttendanceIntegrationTests extends IntegrationTestSupport {
   }
 
   @Test
+  void outsideRadiusRejectsWithoutChangingStoredJobLocationOrAttendance() throws Exception {
+    var request = request(true, false);
+    Long id = create(request, true);
+    mvc.perform(post("/api/works/me/" + id + "/check-in")
+        .header("Authorization", token(request.workerMemberId(), "WORKER"))
+        .contentType("application/json").content("{\"latitude\":37.51,\"longitude\":127.0}"))
+        .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("WORK-409-007"));
+    assertThat(jdbc.queryForObject("SELECT latitude FROM works WHERE id = ?", BigDecimal.class, id))
+        .isEqualByComparingTo(request.latitude());
+    assertThat(jdbc.queryForObject("SELECT longitude FROM works WHERE id = ?", BigDecimal.class, id))
+        .isEqualByComparingTo(request.longitude());
+    assertThat(jdbc.queryForObject("SELECT status FROM works WHERE id = ?", String.class, id)).isEqualTo("SCHEDULED");
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM work_status_histories WHERE work_id = ? AND next_status = 'CHECKED_IN'",
+        Long.class, id)).isZero();
+    mvc.perform(post("/api/works/me/" + id + "/check-in")
+        .header("Authorization", token(request.workerMemberId(), "WORKER"))
+        .contentType("application/json").content(mapper.writeValueAsString(gps())))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("CHECKED_IN"));
+  }
+
+  @Test
   void permissionsRequireConfirmedMatchingAndCorrectParticipantRole() throws Exception {
     var request = request(true, false);
     Long pending = create(request, false);

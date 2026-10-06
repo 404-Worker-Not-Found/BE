@@ -82,6 +82,8 @@ public class MatchingSeatReservationCommandService {
                 .startTime(jobPost.getStartTime())
                 .endTime(jobPost.getEndTime())
                 .endTimeNextDay(jobPost.isEndTimeNextDay())
+                .latitude(jobPost.getLatitude())
+                .longitude(jobPost.getLongitude())
                 .lockedAmount(jobWageCalculator.calculateWagePerWorker(jobPost))
                 .currency(CURRENCY_KRW)
                 .reservedAt(reservedAt)

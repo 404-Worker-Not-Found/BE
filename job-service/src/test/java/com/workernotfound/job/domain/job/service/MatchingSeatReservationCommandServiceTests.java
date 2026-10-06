@@ -11,6 +11,7 @@ import com.workernotfound.job.global.exception.BusinessException;
 import com.workernotfound.job.support.IntegrationTestSupport;
 import com.workernotfound.job.support.JobPostFixture;
 import com.workernotfound.job.support.MutableClock;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -68,6 +69,8 @@ class MatchingSeatReservationCommandServiceTests extends IntegrationTestSupport 
         // 4시간 30분 × (10,000 + 2,000)원
         assertThat(reservation.getLockedAmount()).isEqualTo(54_000L);
         assertThat(reservation.getCurrency()).isEqualTo("KRW");
+        assertThat(reservation.getLatitude()).isEqualByComparingTo(jobPost.getLatitude());
+        assertThat(reservation.getLongitude()).isEqualByComparingTo(jobPost.getLongitude());
         assertThat(reservation.getReservedAt()).isEqualTo(JobMatchingSeatReservation.toStoredTime(LocalDateTime.now(clock)));
         assertThat(reservation.getExpiresAt()).isEqualTo(reservation.getReservedAt().plusMinutes(10));
     }
@@ -88,6 +91,8 @@ class MatchingSeatReservationCommandServiceTests extends IntegrationTestSupport 
         assertThat(second.getStartTime()).isEqualTo(LocalTime.of(9, 0));
         assertThat(second.getLockedAmount()).isEqualTo(90_000L);
         assertThat(second.getExpiresAt()).isEqualTo(first.getExpiresAt());
+        assertThat(second.getLatitude()).isEqualByComparingTo("37.5665000");
+        assertThat(second.getLongitude()).isEqualByComparingTo("126.9780000");
     }
 
     @Test
@@ -232,6 +237,8 @@ class MatchingSeatReservationCommandServiceTests extends IntegrationTestSupport 
         ReflectionTestUtils.setField(jobPost, "startTime", LocalTime.of(10, 0));
         ReflectionTestUtils.setField(jobPost, "baseHourlyWage", 20_000);
         ReflectionTestUtils.setField(jobPost, "workDate", LocalDate.now().plusDays(3));
+        ReflectionTestUtils.setField(jobPost, "latitude", new BigDecimal("35.1796"));
+        ReflectionTestUtils.setField(jobPost, "longitude", new BigDecimal("129.0756"));
         jobPostRepository.saveAndFlush(jobPost);
     }
 

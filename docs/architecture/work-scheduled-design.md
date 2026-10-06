@@ -66,7 +66,7 @@
 - 확정되지 않은 근무, 다른 회원 근무, 허용되지 않은 역할은 404다. 좌표 입력 오류는 400, 위치 미등록·허용 시간/거리 초과·잘못된 상태는 409다.
 - 성공 응답은 WorkResponse이며 기존 조회에도 장소 좌표와 `checkedInAt`, `startedAt`, `completedAt`이 포함된다. 같은 단계 재요청은 현재 상태와 최초 시각을 반환하고 이력을 추가하지 않는다. 이후 단계까지 진행되었어도 앞 단계 재요청은 되돌리지 않는다.
 - work 행 잠금 아래 상태와 actor 이력을 같은 트랜잭션으로 기록한다. 동시 출근은 한 번만 반영하고 이력 기록 실패 시 상태 변경도 롤백한다. 참여자 명령은 work 행만 잠그므로 기존 matching-slot → work 잠금과 역전하지 않는다.
-- 기준 좌표는 내부 예정 근무 생성 당시의 공고 스냅샷이다. 알바생이 보낸 GPS 좌표는 거리 판정에만 사용하고 DB에는 판정 거리와 정책 ID만 남긴다. 클라이언트 GPS의 진위 검증이나 위치 위조 탐지는 이 범위에 포함하지 않는다.
+- 기준 좌표는 job-service의 자리 예약 발급 당시 저장된 공고 좌표다. matching-service가 확정 Saga에 보존하고 내부 예정 근무 생성 요청으로 전달하면 work-service가 근무 행에 저장한다. 참여자 API는 기준 좌표를 받거나 갱신하지 않는다. 알바생이 보낸 GPS 좌표는 거리 판정에만 사용하고 DB에는 판정 거리와 정책 ID만 남긴다. 클라이언트 GPS의 진위 검증이나 위치 위조 탐지는 이 범위에 포함하지 않는다.
 - 기존 좌표 없는 근무를 임의 위치로 보정하지 않는다. 조회는 유지하되 GPS 출근은 `WORK-409-005`로 거부한다. 기존 생성 명령 fingerprint는 명시적 v1 형식으로 유지하고 좌표가 있는 요청만 v2로 계산해 재시도 호환성을 보장한다.
 - 예정 종료 시간이 시작 이하이면 다음 날 종료로 해석한다. 날짜·시각은 정책 시간대의 로컬 일정이며 기본 `Asia/Seoul`이다. 저장된 일정에 맞는 시간대를 운영 중 임의 변경하지 않는다.
 
@@ -108,3 +108,16 @@ Relay는 발행 후보를 최대 100개 조회하고 각 이벤트에 30초 임�
 Redis 전송 뒤 DB 성공 표시 전에 중단되면 동일 이벤트가 두 번 발행될 수 있다. 소비자는 Stream ID 대신 `eventId`로 중복을 제거하고 envelope와 payload의 ID·타입·버전·revision을 검증해야 한다. 여러 relay 인스턴스의 발행 순서는 보장하지 않으므로 상태 프로젝션은 근무별 revision으로 역전을 차단한다. 각 이력이 필요한 소비자는 낮은 revision을 무조건 버리지 말고 eventId별 저장으로 처리한다.
 
 `WORK_OUTBOX_ENABLED=false`는 relay만 멈추고 이벤트 저장은 계속한다. `WORK_OUTBOX_STREAM_KEY`로 발행 Stream을 지정한다. `work.outbox.batch-size`, `lease-duration`, `retry-base-delay`, `retry-max-delay`, `poll-delay-ms`, `initial-delay-ms`는 Spring 설정으로 조정할 수 있다. 실패 로그에는 이벤트 ID와 예외 타입만 남긴다. Outbox와 Stream은 자동 삭제/trim하지 않는다. 후속 알림·이력·정산 소비자는 아직 이 Stream에 연결하지 않았다.
+
+
+### 공고 기반 서비스 연결 검증 (2026-10-06)
+
+member/job/matching/payment/work/chat을 각각 실제 Java 프로세스로 실행하고, 일회용 MySQL 8.4의 서비스별 스키마와 전용 Redis를 연결했다. 외부 국세청 사업자 확인 및 Toss 결제 승인만 로컬 HTTP 대역을 사용했으며, 인증은 실행마다 생성한 테스트용 서명 키와 JWT를 사용했다. 운영 보안 설정은 변경하지 않았다.
+
+- 회원 내부 생성 → `POST /api/jobs` → 주문 연결 → payment 주문 승인·예치 → funding-status 수신·`OPEN` 공개를 확인했다.
+- `POST /api/applications` → 점주 수동 선택 → 알바생 `PATCH /api/matchings/{matchingId}/accept`로 `CONFIRMED`를 확인했다. 자리 소비, 결제 잠금, 예정 근무 및 채팅방 생성은 실제 서비스 HTTP 계약을 사용했다.
+- 실제 matching Outbox → Redis Stream → work 소비를 거친 뒤 참여자 근무 상세 조회가 가능해졌다. 예약·Saga·근무 행의 기준 좌표는 모두 `37.5665000 / 126.9780000`이었다.
+- 기준점에서 약 1.1km 떨어진 GPS는 409 `WORK-409-007`이고 근무는 `SCHEDULED`를 유지했다. 기준점 GPS는 `CHECKED_IN`으로 성공했고 반복 요청은 최초 `checkedInAt`을 유지했다.
+- 좌표 없는 기존 근무의 409 `WORK-409-005`, 공고 변경 후 예약 재시도의 최초 좌표 유지, 결과 불명 이후 Saga의 동일 좌표·명령 키 재시도는 서비스 통합·계약 테스트로 검증했다. 기존 데이터 업그레이드의 실제 운영 실행은 수행하지 않았다.
+
+실제 회원가입·로그인, 실제 국세청/Toss, 제품 프런트엔드와 모바일 GPS 측정·위조 탐지, 운영 배포는 검증하지 않았다. job-service의 기존 `StubBusinessValidator`에 의한 사업장 소유권 확인은 아직 실제 member-service 연동이 아니며 이 연결 검증도 이를 입증하지 않는다. 검증 종료 후 전용 프로세스·컨테이너와 테스트 비밀값을 제거했다.

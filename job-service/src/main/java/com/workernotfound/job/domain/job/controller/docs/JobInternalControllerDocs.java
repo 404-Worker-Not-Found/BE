@@ -53,7 +53,8 @@ public interface JobInternalControllerDocs {
             summary = "매칭 모집 자리 예약",
             description = "공고가 OPEN 또는 MATCHING이고 근무 시작 전이며 남은 모집 자리가 있을 때 한 자리를 예약합니다. "
                     + "같은 Idempotency-Key의 동일 요청은 상태와 관계없이 발급 당시 스냅샷을 그대로 반환합니다. "
-                    + "lockedAmount는 1인 예정 급여(정수 KRW)입니다."
+                    + "latitude/longitude는 저장된 공고의 예약 당시 좌표이며 출근 기준으로 전달됩니다. "
+                    + "좌표 없는 기존 예약은 null 쌍을 유지합니다. lockedAmount는 1인 예정 급여(정수 KRW)입니다."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(

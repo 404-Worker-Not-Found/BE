@@ -13,6 +13,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -85,6 +86,12 @@ public class JobMatchingSeatReservation extends BaseEntity {
     @Column(nullable = false, updatable = false)
     private boolean endTimeNextDay;
 
+    @Column(updatable = false, precision = 10, scale = 7)
+    private BigDecimal latitude;
+
+    @Column(updatable = false, precision = 10, scale = 7)
+    private BigDecimal longitude;
+
     @Column(nullable = false, updatable = false)
     private Long lockedAmount;
 
@@ -121,6 +128,8 @@ public class JobMatchingSeatReservation extends BaseEntity {
             LocalTime startTime,
             LocalTime endTime,
             boolean endTimeNextDay,
+            BigDecimal latitude,
+            BigDecimal longitude,
             Long lockedAmount,
             String currency,
             LocalDateTime reservedAt,
@@ -137,6 +146,8 @@ public class JobMatchingSeatReservation extends BaseEntity {
         this.startTime = startTime;
         this.endTime = endTime;
         this.endTimeNextDay = endTimeNextDay;
+        this.latitude = latitude;
+        this.longitude = longitude;
         this.lockedAmount = lockedAmount;
         this.currency = currency;
         this.status = MatchingSeatReservationStatus.RESERVED;

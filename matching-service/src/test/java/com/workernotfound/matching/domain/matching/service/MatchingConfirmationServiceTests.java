@@ -157,6 +157,14 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 
 		assertThat(confirmed.getStatus()).isEqualTo(MatchingStatus.CONFIRMED);
 		assertThat(sagaRepository.findByMatchingId(matching.getId()).orElseThrow().getAttempt()).isEqualTo(1);
+		ArgumentCaptor<ScheduledWorkRequest> requests = ArgumentCaptor.forClass(ScheduledWorkRequest.class);
+		ArgumentCaptor<String> keys = ArgumentCaptor.forClass(String.class);
+		verify(client, times(2)).createScheduledWork(requests.capture(), keys.capture());
+		assertThat(requests.getAllValues().get(1)).isEqualTo(requests.getAllValues().get(0));
+		assertThat(requests.getValue().latitude()).isEqualByComparingTo("37.5");
+		assertThat(requests.getValue().longitude()).isEqualByComparingTo("127.0");
+		assertThat(keys.getAllValues().get(1)).isEqualTo(keys.getAllValues().get(0));
+		verify(client).reserveSeat(anyLong(), any(), anyString());
 		verify(client, never()).releasePayment(anyString(), anyString());
 		verify(client, never()).releaseSeat(anyLong(), anyString(), anyString());
 	}
