@@ -1517,6 +1517,7 @@ Decision:
 - After a close, the first confirmation of a `RESERVED` seat is rejected with `JOB-409-005`, like a funding block. Same-key retries of `CONSUMED` seats still succeed first, and seat release still works as Saga compensation. Closing does not touch application admissions.
 - A per-job scheduler (`JOB_SCHEDULE_TRANSITION_*`, default `1m` interval, `30s` initial delay, batch `100`) reads candidate IDs with cursors and re-evaluates each job in its own transaction under the row lock. V17 adds `(status, application_deadline)` and `(status, work_date, start_time)` indexes.
 - Existing rules still apply on closed jobs: payment-terms changes and re-payment are rejected (`JOB-409-014`), a pending change's new order is not linked (`JOB_STATE_CHANGED`), the initial order is still linked, and a later `funded=true` is `PUBLICATION_SKIPPED(JOB_CLOSED)` with refund review.
+- Detail visibility is decided by whether the job was ever published (`job_posts.published`, set by `PAYMENT_PENDING -> OPEN` and never cleared), not by the current status. A job closed before publication stays visible only to its owner (others and anonymous requests get 404); a job closed after publication stays public. V19 backfills existing non-`PAYMENT_PENDING` jobs as published, except those with a `PAYMENT_PENDING -> CLOSED` history.
 - Out of scope: cleanup of unpaid orders, refund of remaining deposits, reopening, job deletion, and admission status changes (#66).
 
 Reason:
@@ -1536,3 +1537,4 @@ Related files:
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobStatusChangeRecorder.java`
 - `job-service/src/main/resources/db/migration/V17__add_schedule_transition_indexes_to_job_posts.sql`
 - `job-service/src/main/resources/db/migration/V18__create_job_close_requests.sql`
+- `job-service/src/main/resources/db/migration/V19__add_published_to_job_posts.sql`

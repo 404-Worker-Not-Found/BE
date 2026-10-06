@@ -72,8 +72,9 @@ public interface JobControllerDocs {
 
     @Operation(
             summary = "공고 상세 조회",
-            description = "공고 ID로 상세 정보를 조회합니다. 결제 대기(PAYMENT_PENDING) 공고는 Bearer 토큰의 회원이 "
-                    + "점주 본인일 때만 조회되며, 그 밖의 요청은 404입니다."
+            description = "공고 ID로 상세 정보를 조회합니다. 공개된 적 없는 공고(결제 대기 PAYMENT_PENDING 공고와 공개 전에 "
+                    + "마감된 CLOSED 공고)는 Bearer 토큰의 회원이 점주 본인일 때만 조회되며, 그 밖의 요청은 404입니다. 공개된 적 있는 "
+                    + "공고는 마감 뒤에도 인증 없이 조회됩니다."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(

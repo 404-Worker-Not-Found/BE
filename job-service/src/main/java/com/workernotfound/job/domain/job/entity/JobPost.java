@@ -98,6 +98,11 @@ public class JobPost extends BaseEntity {
     @Column(nullable = false)
     private boolean fundingBlocked;
 
+    // 검증된 예치 확인으로 공개된 적이 있는지. 한 번 공개되면 마감돼도 바뀌지 않는다. 공개된 적 없이 마감된 공고는 상태가
+    // CLOSED여도 결제 대기 공고처럼 점주 본인에게만 보인다.
+    @Column(nullable = false)
+    private boolean published;
+
     @Builder
     private JobPost(
             Long businessId,
@@ -203,11 +208,12 @@ public class JobPost extends BaseEntity {
             throw new IllegalStateException("결제 대기 공고만 예치 확인으로 공개할 수 있습니다: " + status);
         }
         this.status = JobStatus.OPEN;
+        this.published = true;
     }
 
-    // 결제 대기 공고는 인증된 점주 본인에게만 보인다. 공개 이후 상태의 조회 정책은 바꾸지 않는다.
+    // 공개된 적이 없는 공고(결제 대기, 공개 전 마감)는 인증된 점주 본인에게만 보인다. 공개 이후의 조회 정책은 바꾸지 않는다.
     public boolean isVisibleTo(Long viewerMemberId) {
-        return status != JobStatus.PAYMENT_PENDING || ownerId.equals(viewerMemberId);
+        return published || ownerId.equals(viewerMemberId);
     }
 
     // 모집 완료로 마감할 수 있는 상태다. 이미 CLOSED인 공고는 다시 마감하지 않는다.
