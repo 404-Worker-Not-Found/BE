@@ -20,7 +20,9 @@ public record MatchingSeatReservationResponse(
         BigDecimal lockedAmount,
         String currency,
         LocalDateTime reservedAt,
-        LocalDateTime expiresAt
+        LocalDateTime expiresAt,
+        BigDecimal latitude,
+        BigDecimal longitude
 ) {
     // 공고를 다시 읽지 않는다. 예약에 저장된 발급 당시 스냅샷만 사용해야 재요청 응답이 같다.
     public static MatchingSeatReservationResponse of(JobMatchingSeatReservation reservation) {
@@ -36,7 +38,9 @@ public record MatchingSeatReservationResponse(
                 BigDecimal.valueOf(reservation.getLockedAmount()),
                 reservation.getCurrency(),
                 reservation.getReservedAt(),
-                reservation.getExpiresAt()
+                reservation.getExpiresAt(),
+                reservation.getLatitude(),
+                reservation.getLongitude()
         );
     }
 }

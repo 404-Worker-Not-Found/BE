@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
@@ -31,6 +32,9 @@ class MatchingSeatReservationApiTests extends IntegrationTestSupport {
 
     @Autowired
     private JobPostRepository jobPostRepository;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @Test
     void reservesSeatWithContractFields() throws Exception {
@@ -53,8 +57,25 @@ class MatchingSeatReservationApiTests extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.endTimeNextDay").value(true))
                 .andExpect(jsonPath("$.data.lockedAmount").value(22_500))
                 .andExpect(jsonPath("$.data.currency").value("KRW"))
+                .andExpect(jsonPath("$.data.latitude").value(37.5665))
+                .andExpect(jsonPath("$.data.longitude").value(126.978))
                 .andExpect(jsonPath("$.data.reservedAt").value(notNullValue()))
                 .andExpect(jsonPath("$.data.expiresAt").value(notNullValue()));
+    }
+
+    @Test
+    void legacyReservationReplaysNullCoordinatesWithoutReadingCurrentJob() throws Exception {
+        JobPost jobPost = jobPostRepository.save(JobPostFixture.open(JobPostFixture.jobPost().build()));
+        String key = newKey();
+        String id = reservationId(reserve(jobPost.getId(), key, body(101L, 201L, 100L)));
+        // V16 이전에 발급된 예약의 저장 형태를 재현한다. 현재 공고에는 좌표가 있다.
+        jdbc.update("UPDATE job_matching_seat_reservations SET latitude = NULL, longitude = NULL WHERE id = ?", id);
+
+        reserve(jobPost.getId(), key, body(101L, 201L, 100L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reservationId").value(id))
+                .andExpect(jsonPath("$.data.latitude").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.longitude").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test

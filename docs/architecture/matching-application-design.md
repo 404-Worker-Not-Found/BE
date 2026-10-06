@@ -109,7 +109,7 @@
 | Header | `Idempotency-Key: {seat reservation command id}` |
 | Body | `matchingId`, `applicationId`, `workerMemberId` |
 
-`job-service`는 공고 행 잠금으로 공고가 매칭 가능한 상태(`OPEN`·`MATCHING`)이고 근무 시작 전인지, `confirmed + reserved < recruitCount`인지 확인한다. 성공 응답에는 `reservationId`(문자열), `jobPostId`, `ownerMemberId`, `jobVersion`, `reservedAt`, `expiresAt`을 포함한다. 예약은 `RESERVED`, `CONSUMED`, `RELEASED`, `EXPIRED` 상태를 보관하고 같은 멱등 키에는 상태와 관계없이 발급 당시 스냅샷을 그대로 반환한다. 확정(`.../{reservationId}/confirm`)과 해제(`.../{reservationId}/release`)는 예약 명령과 구분되는 각각의 안정적인 멱등 키를 사용한다. 이미 소비된 자리의 같은 키 확정 재시도는 성공하고, 만료로 회수된 자리의 해제는 성공한다. 세부 규칙은 [공고 설계](./job-post-design.md#모집-자리-예약)를 따른다.
+`job-service`는 공고 행 잠금으로 공고가 매칭 가능한 상태(`OPEN`·`MATCHING`)이고 근무 시작 전인지, `confirmed + reserved < recruitCount`인지 확인한다. 성공 응답에는 `reservationId`(문자열), `jobPostId`, `ownerMemberId`, `jobVersion`, `reservedAt`, `expiresAt`, 발급 당시 공고 좌표 `latitude`/`longitude`를 포함한다. 좌표는 저장된 예약 스냅샷 → 확정 Saga → 내부 예정 근무 생성 요청으로 전달한다. 예정 근무 생성 결과가 불명확하면 같은 명령 키와 저장된 좌표로 재시도하며 공고를 다시 조회하지 않는다. 기존 예약의 null 좌표 쌍은 호환을 위해 허용하되 GPS 출근은 거절한다. 예약은 `RESERVED`, `CONSUMED`, `RELEASED`, `EXPIRED` 상태를 보관하고 같은 멱등 키에는 상태와 관계없이 발급 당시 스냅샷을 그대로 반환한다. 확정(`.../{reservationId}/confirm`)과 해제(`.../{reservationId}/release`)는 예약 명령과 구분되는 각각의 안정적인 멱등 키를 사용한다. 이미 소비된 자리의 같은 키 확정 재시도는 성공하고, 만료로 회수된 자리의 해제는 성공한다. 세부 규칙은 [공고 설계](./job-post-design.md#모집-자리-예약)를 따른다.
 
 `matching-service`에는 이 계약과 payment/work/chat 계약을 호출하는 클라이언트 및 확정 Saga가 구현되어 있다. `job-service`의 자리 예약·확정·반환, `work-service`의 예정 근무 생성·취소, `chat-service`의 채팅방 생성·종료, `payment-service`의 예치 잔액 기반 잠금·해제 계약이 구현되어 있다. 토스 테스트 예치 반영과 `job-service`의 비공개 생성·주문 생성·예치 상태 수신 후 공개가 구현되어 있다. 예치가 없는 공고(V10 이전 공고)의 수락은 결제 잠금 단계에서 거절되고 보상된다. 외부 계약이 준비되지 않았는데도 `PENDING`을 확정 상태로 바꾸거나 임시 성공 응답을 사용하지 않는다.
 

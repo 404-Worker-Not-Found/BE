@@ -4,7 +4,10 @@ import com.workernotfound.matching.external.client.confirmation.MatchingConfirma
 import com.workernotfound.matching.external.client.confirmation.dto.PaymentLockRequest;
 import com.workernotfound.matching.external.client.confirmation.dto.SeatReservationRequest;
 import com.workernotfound.matching.external.client.confirmation.dto.SeatReservationResponse;
+import com.workernotfound.matching.external.client.confirmation.dto.ScheduledWorkRequest;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -12,6 +15,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -32,7 +36,7 @@ class MatchingConfirmationClientTests {
 				"{\"success\":true,\"status\":200,\"code\":\"SUCCESS\",\"message\":\"ok\","
 					+ "\"data\":{\"reservationId\":\"seat-1\",\"jobPostId\":10,\"jobVersion\":1,\"ownerMemberId\":100,"
 					+ "\"workDate\":\"2026-09-20\",\"startTime\":\"09:00:00\",\"endTime\":\"18:00:00\",\"endTimeNextDay\":false,"
-					+ "\"lockedAmount\":120000.00,\"currency\":\"KRW\","
+					+ "\"lockedAmount\":120000.00,\"currency\":\"KRW\",\"latitude\":37.5665000,\"longitude\":126.9780000,"
 					+ "\"reservedAt\":\"2026-09-14T10:00:00\",\"expiresAt\":\"2026-09-14T10:05:00\"}}",
 				MediaType.APPLICATION_JSON
 			));
@@ -46,7 +50,30 @@ class MatchingConfirmationClientTests {
 		assertThat(response.reservationId()).isEqualTo("seat-1");
 		assertThat(response.jobVersion()).isEqualTo(1L);
 		assertThat(response.endTimeNextDay()).isFalse();
+		assertThat(response.latitude()).isEqualByComparingTo("37.5665000");
+		assertThat(response.longitude()).isEqualByComparingTo("126.9780000");
 		jobServer.verify();
+	}
+
+	@Test
+	void sendsStoredCoordinatesToScheduledWorkContract() {
+		RestClient.Builder workBuilder = internalBuilder("http://work-service");
+		MockRestServiceServer server = MockRestServiceServer.bindTo(workBuilder).build();
+		MatchingConfirmationClient client = client(RestClient.builder(), RestClient.builder(), workBuilder, RestClient.builder());
+		server.expect(requestTo("http://work-service/api/works/internal/scheduled"))
+			.andExpect(method(HttpMethod.POST))
+			.andExpect(header("X-Internal-Secret", "test-secret"))
+			.andExpect(header("Idempotency-Key", "work-command"))
+			.andExpect(content().json(
+				"{\"latitude\":37.5665000,\"longitude\":126.9780000}"))
+			.andRespond(withSuccess("{\"success\":true,\"status\":200,\"code\":\"SUCCESS\",\"message\":\"ok\",\"data\":{\"workId\":\"1\"}}", MediaType.APPLICATION_JSON));
+		var response = client.createScheduledWork(
+			new ScheduledWorkRequest(
+				1L, 10L, 100L, 20L, "payment-1", LocalDate.of(2026, 10, 6),
+				LocalTime.of(9, 0), LocalTime.of(18, 0), false,
+				new BigDecimal("37.5665000"), new BigDecimal("126.9780000")), "work-command");
+		assertThat(response.workId()).isEqualTo("1");
+		server.verify();
 	}
 
 	@Test
