@@ -28,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -60,6 +61,9 @@ class JobScheduleTransitionReconcileTests extends IntegrationTestSupport {
 
     @Autowired
     private MutableClock clock;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private ExecutorService executor;
 
@@ -201,6 +205,27 @@ class JobScheduleTransitionReconcileTests extends IntegrationTestSupport {
 
         assertRolledBack(failing, JobStatus.OPEN, failingVersion);
         assertThat(reload(other).getStatus()).isEqualTo(JobStatus.MATCHING);
+    }
+
+    @Test
+    void candidateQueriesCanUseStatusTimeIndexes() {
+        // 저장소 쿼리와 같은 조건이다. 옵티마이저의 실제 선택은 데이터 양에 따라 다르므로 후보 인덱스에 포함되는지만 확인한다.
+        assertThat(possibleKeys("""
+                SELECT id FROM job_posts
+                WHERE status IN ('PAYMENT_PENDING', 'OPEN') AND application_deadline <= NOW(6) AND id > 0
+                ORDER BY id LIMIT 100
+                """)).contains("idx_job_posts_status_deadline");
+        assertThat(possibleKeys("""
+                SELECT id FROM job_posts
+                WHERE status IN ('OPEN', 'MATCHING')
+                  AND (work_date < CURDATE() OR (work_date = CURDATE() AND start_time <= CURTIME()))
+                  AND id > 0
+                ORDER BY id LIMIT 100
+                """)).contains("idx_job_posts_status_work_start");
+    }
+
+    private String possibleKeys(String query) {
+        return jdbcTemplate.queryForObject("EXPLAIN " + query, (row, index) -> row.getString("possible_keys"));
     }
 
     private void reconcileUntilIdle() {
