@@ -1,22 +1,31 @@
 package com.workernotfound.job.domain.job.service;
 
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
+import com.workernotfound.job.domain.job.dto.request.OwnerJobSearchRequest;
 import com.workernotfound.job.domain.job.dto.response.JobCardResponse;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentChangeResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentOrderResponse;
 import com.workernotfound.job.domain.job.dto.response.JobSearchResponse;
+import com.workernotfound.job.domain.job.dto.response.OwnerJobCardResponse;
+import com.workernotfound.job.domain.job.dto.response.OwnerJobListResponse;
 import com.workernotfound.job.domain.job.entity.IndustryCategory;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import com.workernotfound.job.domain.job.entity.enums.UrgencyLevel;
 import com.workernotfound.job.domain.job.exception.JobErrorCode;
 import com.workernotfound.job.domain.job.repository.IndustryCategoryRepository;
+import com.workernotfound.job.domain.job.repository.JobConsumedSeatCount;
+import com.workernotfound.job.domain.job.repository.JobMatchingSeatReservationRepository;
 import com.workernotfound.job.domain.job.repository.JobPaymentChangeRequestRepository;
 import com.workernotfound.job.domain.job.repository.JobPaymentOrderCommandRepository;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
 import com.workernotfound.job.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,10 +40,15 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class JobFindService {
 
+    private static final int DEFAULT_PAGE = 0;
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final Sort OWNER_JOB_SORT = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
+
     private final JobPostRepository jobPostRepository;
     private final IndustryCategoryRepository industryCategoryRepository;
     private final JobPaymentOrderCommandRepository paymentOrderCommandRepository;
     private final JobPaymentChangeRequestRepository paymentChangeRequestRepository;
+    private final JobMatchingSeatReservationRepository seatReservationRepository;
 
     public JobPost findJobPost(Long jobId) {
         return jobPostRepository.findById(jobId)
@@ -73,6 +87,48 @@ public class JobFindService {
                 .map(request -> JobPaymentChangeResponse.of(
                         request, paymentOrderCommandRepository.findById(request.getCommandId()).orElseThrow()))
                 .orElse(null);
+    }
+
+    // 점주 본인 공고 목록. 결제 대기·예치 차단·마감 공고를 모두 포함하고 DB 조건과 페이지 쿼리로 조회한다.
+    public OwnerJobListResponse findOwnerJobs(Long ownerMemberId, OwnerJobSearchRequest request) {
+        int page = request.page() != null ? request.page() : DEFAULT_PAGE;
+        int size = request.size() != null ? request.size() : DEFAULT_PAGE_SIZE;
+        Page<JobPost> posts = fetchOwnerJobs(ownerMemberId, request.status(), PageRequest.of(page, size, OWNER_JOB_SORT));
+        Map<Long, Long> consumedCounts = countConsumedSeats(posts.getContent());
+
+        List<OwnerJobCardResponse> cards = posts.getContent().stream()
+                .map(post -> OwnerJobCardResponse.of(post, consumedCounts.getOrDefault(post.getId(), 0L)))
+                .toList();
+        return new OwnerJobListResponse(page, size, posts.getTotalElements(), posts.getTotalPages(), cards);
+    }
+
+    private Page<JobPost> fetchOwnerJobs(Long ownerMemberId, JobStatus status, PageRequest pageRequest) {
+        if (pageRequest.getOffset() > Integer.MAX_VALUE) {
+            return findOwnerJobsWithLargeOffset(ownerMemberId, status, pageRequest);
+        }
+        if (status == null) {
+            return jobPostRepository.findByOwnerId(ownerMemberId, pageRequest);
+        }
+        return jobPostRepository.findByOwnerIdAndStatus(ownerMemberId, status, pageRequest);
+    }
+
+    private Page<JobPost> findOwnerJobsWithLargeOffset(Long ownerMemberId, JobStatus status, PageRequest pageRequest) {
+        List<JobPost> posts = jobPostRepository.findByOwnerIdAndOptionalStatusWithOffset(
+                ownerMemberId, status == null ? null : status.name(), pageRequest.getPageSize(), pageRequest.getOffset());
+        long totalCount = status == null
+                ? jobPostRepository.countByOwnerId(ownerMemberId)
+                : jobPostRepository.countByOwnerIdAndStatus(ownerMemberId, status);
+        return new PageImpl<>(posts, pageRequest, totalCount);
+    }
+
+    // 페이지에 담긴 공고 ID로 묶어 한 번에 집계한다. 공고마다 따로 세면 N+1 쿼리가 된다.
+    private Map<Long, Long> countConsumedSeats(List<JobPost> posts) {
+        if (posts.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> jobPostIds = posts.stream().map(JobPost::getId).toList();
+        return seatReservationRepository.countConsumedByJobPostIdIn(jobPostIds).stream()
+                .collect(Collectors.toMap(JobConsumedSeatCount::getJobPostId, JobConsumedSeatCount::getConsumedCount));
     }
 
     public JobSearchResponse findJobs(JobSearchRequest request) {

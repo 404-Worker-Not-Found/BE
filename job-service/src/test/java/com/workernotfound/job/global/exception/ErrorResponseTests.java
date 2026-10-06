@@ -78,8 +78,30 @@ class ErrorResponseTests {
                 .andExpect(jsonPath("$.code").value("GLOBAL-406-001"));
     }
 
+    // 요청 파라미터 바인딩의 형 변환 실패는 내부 타입 이름과 입력 원문 대신 고정 문구로 응답한다.
+    @Test
+    void bindingConversionFailureUsesSafeReason() throws Exception {
+        mvc.perform(get("/test/binding").param("count", "sensitive-value"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("GLOBAL-400-002"))
+                .andExpect(jsonPath("$.reasons.count").value("유효하지 않은 값입니다."))
+                .andExpect(
+                        content()
+                                .string(
+                                        org.hamcrest.Matchers.allOf(
+                                                org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("sensitive")),
+                                                org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("java.lang")))));
+    }
+
+    record BindingInput(Integer count) {}
+
     @RestController
     static class Endpoints {
+        @GetMapping("/test/binding")
+        Object binding(@jakarta.validation.Valid @ModelAttribute BindingInput input) {
+            return input;
+        }
+
         @GetMapping("/test/bug")
         String bug() {
             throw new IllegalArgumentException("sensitive details");
