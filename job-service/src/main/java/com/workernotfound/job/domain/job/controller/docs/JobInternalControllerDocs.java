@@ -98,8 +98,8 @@ public interface JobInternalControllerDocs {
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "409",
-                    description = "다른 예약에 키 재사용(JOB-409-004), 예약 만료(JOB-409-009), "
-                            + "반환된 예약 또는 다른 키로 이미 확정됨(JOB-409-010)",
+                    description = "다른 예약에 키 재사용(JOB-409-004), 마감·예치 차단 공고의 최초 확정(JOB-409-005), "
+                            + "예약 만료(JOB-409-009), 반환된 예약 또는 다른 키로 이미 확정됨(JOB-409-010)",
                     content = @Content
             )
     })
