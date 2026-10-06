@@ -2,6 +2,7 @@ package com.workernotfound.job.domain.job.service;
 
 import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.dto.request.UpdatePaymentTermsRequest;
+import com.workernotfound.job.domain.job.dto.response.JobCloseResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentChangeResponse;
 import com.workernotfound.job.domain.job.dto.request.FundingStatusRequest;
 import com.workernotfound.job.domain.job.dto.response.FundingStatusResponse;
@@ -29,6 +30,7 @@ public class JobApplicationService {
     private final MatchingSeatReservationCommandService matchingSeatReservationCommandService;
     private final JobFundingStatusCommandService jobFundingStatusCommandService;
     private final JobPaymentChangeCommandService jobPaymentChangeCommandService;
+    private final JobCloseCommandService jobCloseCommandService;
 
     public Long create(Long ownerId, CreateJobRequest request) {
         return jobCommandService.create(ownerId, request);
@@ -54,6 +56,10 @@ public class JobApplicationService {
 
     public JobPaymentChangeResponse retryPayment(Long jobId, Long ownerMemberId, String idempotencyKey) {
         return toResponse(jobPaymentChangeCommandService.retryPayment(jobId, ownerMemberId, idempotencyKey));
+    }
+
+    public JobCloseResponse closeJob(Long jobId, Long ownerMemberId, String idempotencyKey) {
+        return JobCloseResponse.of(jobCloseCommandService.close(jobId, ownerMemberId, idempotencyKey));
     }
 
     private JobPaymentChangeResponse toResponse(JobPaymentChange change) {
