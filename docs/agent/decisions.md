@@ -1445,6 +1445,32 @@ Related files:
 - `job-service/src/main/resources/db/migration/V13__create_job_payment_change_requests.sql`
 - `payment-service/src/test/java/com/workernotfound/payment/OrderReplacementTests.java`
 
+## 2026-10-06 - Job Owner List Query
+
+Decision:
+- Owners list their own jobs at `GET /api/jobs/me`. Only the `OWNER` role is allowed and the owner is the JWT `memberId`; no request value selects the owner. Security checks this path before the public `GET /api/jobs/**` rule.
+- The list includes `PAYMENT_PENDING`, `OPEN`, `MATCHING`, `CLOSED`, and funding-blocked jobs, with an optional single `status` filter. It sorts by `created_at DESC, id DESC` and pages with the search rules (default page 0, size 20, max 100).
+- Filtering, sorting, and paging run in the database, backed by the V15 `idx_job_posts_owner_created (owner_id, created_at, id)` index. Public search behavior is unchanged.
+- Each card shows `confirmedCount`, the number of `CONSUMED` seat reservations, aggregated in one grouped query per page. `applicantCount` stays `null` until the applicant-count projection (#66). Payment progress is not in the card; owners use `GET /api/jobs/{id}/payment-order`.
+- Request-binding conversion failures (`@ModelAttribute` type mismatches such as an unknown `status`) return 400 `GLOBAL-400-002` with the fixed reason `유효하지 않은 값입니다.` instead of Spring's raw message.
+
+Reason:
+- Owners need private and closed jobs in a management view, while public search shows only recruitable jobs.
+- Owner jobs grow without bound, so in-memory filtering like search would not scale and per-job count queries would create N+1 reads.
+- Raw conversion messages exposed internal class names, which the error-handling rule forbids.
+
+Implication for agents:
+- Do not accept an owner ID from the request for owner-scoped queries.
+- Keep `/api/jobs/me` ahead of the public `GET /api/jobs/**` matcher, and keep the card aggregation batched per page.
+- Do not add payment progress or applicant counts to this card without a new decision.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobFindService.java`
+- `job-service/src/main/java/com/workernotfound/job/global/security/SecurityConfig.java`
+- `job-service/src/main/java/com/workernotfound/job/global/exception/GlobalExceptionHandler.java`
+- `job-service/src/main/resources/db/migration/V15__add_owner_index_to_job_posts.sql`
+
 ## 2026-10-06 - Member Profile and Verified Contact Changes
 
 Decision:

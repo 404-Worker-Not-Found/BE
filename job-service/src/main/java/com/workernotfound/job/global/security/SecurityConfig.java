@@ -53,6 +53,8 @@ public class SecurityConfig {
                         ).permitAll()
                         // 점주 본인 공고의 결제 주문 조회. 공개 조회 허용보다 먼저 검사한다.
                         .requestMatchers(HttpMethod.GET, "/api/jobs/*/payment-order").hasRole("OWNER")
+                        // 점주 본인 공고 목록. /api/jobs/{id} 공개 조회 허용에 포함되지 않도록 먼저 검사한다.
+                        .requestMatchers(HttpMethod.GET, "/api/jobs/me").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/api/jobs/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/jobs").hasRole("OWNER")
                         // 점주 본인 공고의 결제 조건 변경과 재결제. 소유자는 서비스가 JWT 회원 ID로 확인한다.

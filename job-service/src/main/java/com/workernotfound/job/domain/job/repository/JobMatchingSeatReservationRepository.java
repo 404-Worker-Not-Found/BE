@@ -28,6 +28,16 @@ public interface JobMatchingSeatReservationRepository extends JpaRepository<JobM
 
     long countByJobPostIdAndStatusIn(Long jobPostId, Collection<MatchingSeatReservationStatus> statuses);
 
+    // 페이지에 담긴 공고들의 확정 인원을 한 번에 센다. 확정 예약이 없는 공고는 결과에 없다.
+    @Query("""
+            select r.jobPostId as jobPostId, count(r) as consumedCount
+            from JobMatchingSeatReservation r
+            where r.jobPostId in :jobPostIds
+              and r.status = com.workernotfound.job.domain.job.entity.enums.MatchingSeatReservationStatus.CONSUMED
+            group by r.jobPostId
+            """)
+    List<JobConsumedSeatCount> countConsumedByJobPostIdIn(@Param("jobPostIds") Collection<Long> jobPostIds);
+
     // 결제 조건을 바꿀 수 있는지 확인한다. 자리 예약이 한 번이라도 있었던 공고는 이미 매칭이 진행된 적이 있다.
     boolean existsByJobPostId(Long jobPostId);
 

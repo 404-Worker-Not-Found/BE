@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -49,16 +50,21 @@ public class GlobalExceptionHandler {
                         .collect(
                                 Collectors.toMap(
                                         fieldError -> fieldError.getField(),
-                                        fieldError ->
-                                                fieldError.getDefaultMessage() == null
-                                                        ? "유효하지 않은 값입니다."
-                                                        : fieldError.getDefaultMessage(),
+                                        GlobalExceptionHandler::safeFieldMessage,
                                         (first, second) -> first));
         return error(
                 GlobalErrorCode.VALIDATION_ERROR,
                 GlobalErrorCode.VALIDATION_ERROR.getMessage(),
                 request.getRequestURI(),
                 reasons);
+    }
+
+    // 형 변환 실패(바인딩 실패)의 기본 메시지는 내부 타입 이름과 입력 원문을 담으므로 고정 문구로 바꾼다.
+    private static String safeFieldMessage(FieldError fieldError) {
+        if (fieldError.isBindingFailure() || fieldError.getDefaultMessage() == null) {
+            return "유효하지 않은 값입니다.";
+        }
+        return fieldError.getDefaultMessage();
     }
 
     @ExceptionHandler(HandlerMethodValidationException.class)
