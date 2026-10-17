@@ -27,6 +27,12 @@ auth:
 job:
   application-admission:
     ttl: ${APPLICATION_ADMISSION_TTL:5m}
+  # 만료 시각이 지난 RESERVED 지원 접수 승인을 EXPIRED로 바꾼다. 늦게 도착한 만료 전 지원은 이후에도 CONSUMED로 바뀐다.
+  application-admission-expiry:
+    enabled: ${APPLICATION_ADMISSION_EXPIRY_ENABLED:true}
+    interval: ${APPLICATION_ADMISSION_EXPIRY_INTERVAL:1m}
+    initial-delay: ${APPLICATION_ADMISSION_EXPIRY_INITIAL_DELAY:30s}
+    batch-size: ${APPLICATION_ADMISSION_EXPIRY_BATCH_SIZE:100}
   # matching-service ApplicationSubmitted를 job-service 전용 그룹(job-admission-consumption-v1)으로 소비한다.
   admission-events:
     enabled: ${JOB_ADMISSION_EVENTS_ENABLED:true}
