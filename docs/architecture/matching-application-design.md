@@ -206,7 +206,7 @@
 | 409 | `APPLICATION_DEADLINE_PASSED` | 지원 마감으로 응답 |
 | 409 | `ADMISSION_EXPIRED` | 공고 조건을 다시 확인해 새 명령 ID로 재시도 |
 
-`job-service`에 이 계약과 승인 저장 구조가 구현되어 있다. 오류 응답의 `code`는 서비스 공통 형식(`JOB-404-001`, `JOB-409-001`~`003`)을 사용하며 `matching-service`는 위 표의 이름과 함께 이 코드를 인식한다. 같은 멱등 키를 다른 공고·회원 요청에 재사용하면 `JOB-409-004`로 거절한다. `ApplicationSubmitted` 내용으로 승인을 `CONSUMED`로 바꾸는 처리 로직은 job-service에 구현되어 있으며(발생 시각 `occurredAt < expiresAt` 기준, [공고 설계](./job-post-design.md#지원-접수-승인-사용-완료)), Redis Stream 소비자 연결은 아직 구현되지 않았다.
+`job-service`에 이 계약과 승인 저장 구조가 구현되어 있다. 오류 응답의 `code`는 서비스 공통 형식(`JOB-404-001`, `JOB-409-001`~`003`)을 사용하며 `matching-service`는 위 표의 이름과 함께 이 코드를 인식한다. 같은 멱등 키를 다른 공고·회원 요청에 재사용하면 `JOB-409-004`로 거절한다. `ApplicationSubmitted` 내용으로 승인을 `CONSUMED`로 바꾸는 처리 로직은 job-service에 구현되어 있으며(발생 시각 `occurredAt < expiresAt` 기준, [공고 설계](./job-post-design.md#지원-접수-승인-사용-완료)), job-service 전용 consumer group `job-admission-consumption-v1`이 `matching:domain-events`의 `ApplicationSubmitted`를 소비해 호출한다([ApplicationSubmitted 이벤트 소비](./job-post-design.md#applicationsubmitted-이벤트-소비)). 현재 matching-service는 지원의 `appliedAt`(= 이벤트 `occurredAt`)에 승인의 `admittedAt`을 넣으므로, 이 발생 시각은 지원 저장 시각이 아니라 승인 발급 시각이다.
 
 ## 상태 전이 동시성
 
