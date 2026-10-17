@@ -4,6 +4,7 @@ import com.workernotfound.payment.domain.settlement.exception.InvalidSettlementE
 import com.workernotfound.payment.domain.settlement.repository.MatchingEventReceiptRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -11,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>같은 eventId의 동시 처리는 매칭 slot 잠금과 eventId 유일 제약으로 막는다. 늦은 처리는 {@code ALREADY_RECORDED}를 얻은 뒤
  * 수신 기록 저장에서 롤백되고, 다음 pending 재수신에서 중복으로 판단된다.
+ *
+ * <p>근무 완료 수신과 같이 READ COMMITTED로 실행해 slot 잠금 뒤의 조회가 동시에 커밋된 정산 대상을 보게 한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -18,7 +21,7 @@ public class MatchConfirmedReceiptService {
   private final MatchingEventReceiptRepository receipts;
   private final SettlementTargetService targets;
 
-  @Transactional
+  @Transactional(isolation = Isolation.READ_COMMITTED)
   public SettlementEventOutcome receive(MatchConfirmation confirmation) {
     String fingerprint = confirmation.fingerprint();
     var receipt = receipts.findByEventId(confirmation.eventId());

@@ -327,6 +327,27 @@ class SettlementEventConsumerTests extends IntegrationTestSupport {
     assertNotPending(WORK_STREAM, WorkCompletedEventConsumer.GROUP, record);
   }
 
+  // eventId가 다른 같은 근무 완료가 동시에 처리돼도 늦은 쪽은 앞선 정산을 보고 ALREADY_RESERVED로 기록한다.
+  @Test
+  void concurrentCompletionsWithDifferentEventIdsRecordAlreadyReserved() throws Exception {
+    Locked locked = confirmedTarget("100", "60");
+    WorkCompletion first = completion(locked);
+    WorkCompletion second = completion(locked);
+    var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      var results = executor.invokeAll(List.<java.util.concurrent.Callable<String>>of(
+          () -> workReceipts.receive(first, 3).result(), () -> workReceipts.receive(second, 3).result()));
+      List<String> outcomes = new java.util.ArrayList<>();
+      for (var result : results) outcomes.add(result.get(30, TimeUnit.SECONDS));
+
+      assertThat(outcomes).containsExactlyInAnyOrder("RESERVED", "ALREADY_RESERVED");
+    } finally {
+      executor.shutdownNow();
+    }
+    assertThat(settlementCount(locked.work())).isEqualTo(1);
+    assertBalance(locked.job(), "0", "60");
+  }
+
   // 늦게 온 앞 단계 이벤트나 다른 eventId의 완료가 이미 진행된 정산을 과거 상태로 되돌리지 않는다.
   @Test
   void lateOrRepeatedEventsNeverRegressProgressedSettlement() {
@@ -543,6 +564,11 @@ class SettlementEventConsumerTests extends IntegrationTestSupport {
     matchingConsumer.poll();
     assertThat(targetCount(locked.matching())).isEqualTo(1);
     return locked;
+  }
+
+  WorkCompletion completion(Locked locked) {
+    return new WorkCompletion(UUID.randomUUID().toString(), locked.work(), locked.matching(), locked.job(), OWNER,
+        WORKER, COMPLETED_AT);
   }
 
   WorkEvent completed(Locked locked) {

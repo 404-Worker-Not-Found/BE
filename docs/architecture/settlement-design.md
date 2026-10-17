@@ -162,6 +162,7 @@ WorkCompleted v1에는 결제 ID와 금액이 없다(2026-10-04 결정으로 wor
 - `MatchConfirmedReceiptService`: 정산 대상과 `payment_matching_event_receipts`(eventId 유일, fingerprint, 결과)를 한 트랜잭션에 저장한다.
 - `WorkCompletedReceiptService`: 정산 생성·잠금 이관·예치 금액 이동·이력과 `payment_work_event_receipts`(eventId 유일, fingerprint, 결과, 정산 ID)를 한 트랜잭션에 저장한다. 수신 기록 저장이 실패하면 정산과 금액 이동도 롤백된다.
 - 같은 eventId 재전달은 fingerprint가 같으면 저장된 결과를 돌려주고 상태를 바꾸지 않는다. 동시 재전달은 매칭 slot 잠금으로 직렬화되고, 늦은 쪽은 수신 기록 유일 제약으로 롤백된 뒤 다음 재수신에서 중복으로 ACK된다.
+- 두 수신 서비스는 READ COMMITTED로 실행한다. 수신 기록 조회가 slot 잠금보다 먼저 일어나므로 REPEATABLE READ면 잠금 전 스냅샷이 고정되어, 동시에 커밋된 같은 근무의 정산을 보지 못하고 `WORK_CONFLICT`로 잘못 기록한다. 상호 배제는 slot·예치·잠금 행 잠금과 유일 제약이 맡는다.
 - 다른 eventId의 같은 근무 완료는 정산 근무 유일 제약과 재요청 비교로 `ALREADY_RESERVED`가 되고 자기 수신 기록만 남긴다.
 - 수신 기록이 있는 eventId와 이미 생성된 정산은 다시 처리해도 상태를 바꾸지 않는다. 늦게 온 출근·시작 이벤트나 재전달된 완료가 보류·지급 등 진행된 정산을 `RESERVED`로 되돌리지 않는다.
 - fingerprint는 각 값의 길이와 콜론을 붙인 정규 문자열의 SHA-256이다. `MatchConfirmed:v1` 접두어와 eventId·매칭·revision·근무·잠금·공고·참여자·금액(뒤 0 제거)·통화·확정 시각, `WorkCompleted:v1` 접두어와 eventId·근무·revision·매칭·공고·참여자·완료 시각을 쓴다.

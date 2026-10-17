@@ -4,6 +4,7 @@ import com.workernotfound.payment.domain.settlement.exception.InvalidSettlementE
 import com.workernotfound.payment.domain.settlement.repository.WorkEventReceiptRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -13,6 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
  * 수신 기록 저장에서 롤백되고, 다음 pending 재수신에서 중복으로 판단된다. eventId가 다른 같은 근무 완료는 정산의 근무 유일 제약과
  * 재요청 비교로 {@code ALREADY_RESERVED}가 된다. 이미 진행된 정산(보류·지급 등)의 상태는 바꾸지 않는다.
  *
+ * <p>READ COMMITTED로 실행한다. 수신 기록 조회가 첫 일반 조회라서 REPEATABLE READ면 매칭 slot 잠금을 얻기 전의 스냅샷이 고정되고,
+ * 동시에 커밋된 같은 근무의 정산을 보지 못해 {@code WORK_CONFLICT}로 잘못 기록한다. 상호 배제는 slot·예치·잠금 행 잠금이 맡는다.
+ *
  * <p>DB 장애 같은 일시 오류와 선행 MatchConfirmed 미도착은 예외로 전파되어 아무것도 기록하지 않는다.
  */
 @Service
@@ -21,7 +25,7 @@ public class WorkCompletedReceiptService {
   private final WorkEventReceiptRepository receipts;
   private final SettlementReservationService reservations;
 
-  @Transactional
+  @Transactional(isolation = Isolation.READ_COMMITTED)
   public SettlementEventOutcome receive(WorkCompletion completion, long revision) {
     String fingerprint = completion.fingerprint(revision);
     var receipt = receipts.findByEventId(completion.eventId());
