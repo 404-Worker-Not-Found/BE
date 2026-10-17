@@ -1542,7 +1542,7 @@ Related files:
 ## 2026-10-17 - Application Admission Consumption
 
 Decision:
-- job-service marks an application admission `CONSUMED` from `ApplicationSubmitted` content (`admissionId`, `jobPostId`, `workerMemberId`, envelope `occurredAt`) through `JobApplicationAdmissionConsumptionService.consume`. The Redis Stream consumer is not connected yet.
+- job-service marks an application admission `CONSUMED` from `ApplicationSubmitted` content (`admissionId`, `jobPostId`, `workerMemberId`, envelope `occurredAt`) through `JobApplicationAdmissionConsumptionService.consume`. The Redis Stream consumer is connected by the 2026-10-17 ApplicationSubmitted Stream Consumer decision.
 - `occurredAt` is the event occurrence time (when matching-service stored the application); the reception time is when job-service processes the event. Only the occurrence time is used. `consumedAt` is `occurredAt` truncated to microseconds, and the reception time is not stored on the admission.
 - An admission is consumed only when `occurredAt < expiresAt` (equal counts as expired). Both `RESERVED` and `EXPIRED` become `CONSUMED`. A later or equal submission and an already `CONSUMED` admission are left unchanged.
 - Lock the admission row by ID before validating. A missing `admissionId` or `occurredAt`, a missing admission, and a job post or worker mismatch (including null) are permanent rejections, checked before the `CONSUMED` state.
@@ -1562,3 +1562,32 @@ Related files:
 - `docs/architecture/job-post-design.md`
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobApplicationAdmissionConsumptionService.java`
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/AdmissionConsumptionResult.java`
+
+## 2026-10-17 - ApplicationSubmitted Stream Consumer
+
+Decision:
+- job-service consumes `ApplicationSubmitted` v1 from `matching:domain-events` with the dedicated `job-admission-consumption-v1` group and one shared logical consumer (`job-admission-consumption`) across replicas. The group starts at `0-0`, so events published before the consumer existed are processed. The Stream is never trimmed.
+- Process only envelopes with `eventType=ApplicationSubmitted` and `aggregateType=APPLICATION`; acknowledge every other event type or aggregate type (including missing fields) without processing.
+- Validate the envelope against the payload (`eventId`, `eventType`, `aggregateId`=`applicationId`, `revision`, `version=1`, `occurredAt` equal or within the payload's sub-microsecond truncation/rounding) and use the envelope `occurredAt`. Missing `admissionId`/`jobPostId`/`workerMemberId`, or `occurredAt` missing from both, are passed through as permanent rejections.
+- Store an eventId-unique receipt (`job_admission_event_receipts`) with the event content and `AdmissionConsumptionResult` in the same transaction as the admission change, and acknowledge only after commit. A repeated eventId returns the stored result without changing the admission. A concurrent duplicate waits on the admission row lock, gets `ALREADY_CONSUMED`, rolls back on the eventId unique constraint, and is acknowledged as a duplicate on the next redelivery.
+- Record and acknowledge permanent rejections with an error log, and after-expiry submissions with a warning log. Keep transient failures and post-commit ACK failures pending.
+- Follow the existing work/chat/notification rule for uninterpretable target events and same-eventId content conflicts: do not record them, log an error, and leave them pending. Do not ACK them automatically and do not add a retry limit; they wait for a fix or operator ACK.
+- Recover pending deliveries every poll with a rotating cursor before reading new records, like the existing matching event consumers.
+
+Reason:
+- At-least-once delivery requires durable deduplication and recovery after a committed update loses its acknowledgment.
+- Acknowledging only committed definitive outcomes keeps database outages from being treated as handled, while recorded rejections stop retrying contract violations that cannot change.
+- Matching the existing consumers keeps malformed-event handling and recovery behavior predictable across services.
+
+Implication for agents:
+- Keep the admission change, result, and receipt in one transaction and ACK after commit.
+- Do not ACK uninterpretable `ApplicationSubmitted` records automatically; changing that policy needs an explicit decision for all matching event consumers.
+- matching-service currently publishes the admission's `admittedAt` as `ApplicationSubmitted.occurredAt`, not the application save time, so `SUBMITTED_AFTER_EXPIRY` does not occur on the real path. Resolving that is a separate contract change in matching-service or the consumption rule; do not change it implicitly.
+- Expiry cleanup and the applicant-count projection remain out of scope for this consumer.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `job-service/src/main/java/com/workernotfound/job/external/redis/ApplicationSubmittedEventConsumer.java`
+- `job-service/src/main/java/com/workernotfound/job/external/redis/ApplicationSubmittedEventParser.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobAdmissionEventReceiptService.java`
+- `job-service/src/main/resources/db/migration/V20__create_job_admission_event_receipts.sql`
