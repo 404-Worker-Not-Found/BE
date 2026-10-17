@@ -196,11 +196,34 @@ class JobApplicationAdmissionExpiryTests extends IntegrationTestSupport {
     }
 
     @Test
+    void retriesFailedAdmissionWhileNewOverdueAdmissionsKeepArriving() throws Exception {
+        fixAt(expiresAt);
+        reconcileUntilIdle();
+        JobApplicationAdmission failing = saveAdmission(expiresAt);
+        for (int index = 0; index < 3; index++) {
+            saveAdmission(expiresAt);
+        }
+        JobApplicationAdmissionExpiryReconciler smallBatch = smallBatchReconciler(2);
+
+        withExpiryUpdateBlocked(List.of(failing), smallBatch::reconcile);
+        assertStatus(failing, ApplicationAdmissionStatus.RESERVED);
+
+        // 매 실행 전에 배치 크기만큼 추가해 빈 페이지를 기다리는 커서는 돌아오지 못하게 한다.
+        for (int run = 0; run < 5; run++) {
+            saveAdmission(expiresAt);
+            saveAdmission(expiresAt);
+            smallBatch.reconcile();
+        }
+
+        assertStatus(failing, ApplicationAdmissionStatus.EXPIRED);
+    }
+
+    @Test
     void candidateQueryCanUseStatusExpiresIndex() {
         // 저장소 쿼리와 같은 조건이다. 옵티마이저의 실제 선택은 데이터 양에 따라 다르므로 후보 인덱스에 포함되는지만 확인한다.
         String possibleKeys = jdbcTemplate.queryForObject("""
                 EXPLAIN SELECT id FROM job_application_admissions
-                WHERE status = 'RESERVED' AND expires_at <= NOW(6) AND id > 0
+                WHERE status = 'RESERVED' AND expires_at <= NOW(6) AND id > 0 AND id <= 9223372036854775807
                 ORDER BY id LIMIT 100
                 """, (row, index) -> row.getString("possible_keys"));
 

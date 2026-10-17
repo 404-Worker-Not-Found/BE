@@ -1599,7 +1599,7 @@ Decision:
 - Do not use a range `UPDATE`. Select candidate IDs without locking (V21 `(status, expires_at)` index, `now` truncated to microseconds), then lock each admission by primary key in its own transaction and re-check status and expiry with the `Clock` time read after the lock.
 - Serialize with `ApplicationSubmitted` consumption through the same admission-row lock only. Never lock the job row, so the lock order never crosses admission issuance.
 - `EXPIRED` is not final. A late `ApplicationSubmitted` with `occurredAt < expiresAt` still changes `EXPIRED` to `CONSUMED` with `consumedAt = occurredAt`. `CONSUMED` admissions are never changed by the batch.
-- A failure of one admission is logged and rolls back only that admission. It stays `RESERVED` and is retried on a later run. A rotating ID cursor (reset when a batch is not full) keeps repeatedly failing admissions from starving later ones. No retry limit or failure record is added.
+- A failure of one admission is logged and rolls back only that admission. It stays `RESERVED` and is retried on the next sweep. At sweep start, fix the maximum admission ID as an upper bound; select subsequent batches only through that ID. Reset the cursor and upper bound when the bound is reached or a batch is not full. This guarantees a wrap even under continuous arrivals while keeping failing admissions from starving later ones. Serialize runs within one instance to keep the cursor and bound consistent. No retry limit or failure record is added.
 - Do not store an expiry timestamp column. The same-key admission retry contract (`JOB-409-003` unless `RESERVED` and unexpired) is unchanged and does not depend on the batch having run.
 
 Reason:

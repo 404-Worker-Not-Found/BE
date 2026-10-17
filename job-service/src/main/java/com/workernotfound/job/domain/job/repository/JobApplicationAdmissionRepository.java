@@ -22,17 +22,22 @@ public interface JobApplicationAdmissionRepository extends JpaRepository<JobAppl
     // 결제 조건을 바꿀 수 있는지 확인한다. 지원 승인이 한 번이라도 발급된 공고는 이미 공개된 적이 있다.
     boolean existsByJobPostId(Long jobPostId);
 
-    // 만료 시각이 지난 RESERVED 승인 중 afterId 다음 ID. 잠그지 않고 후보만 고르며 idx_job_application_admissions_status_expires를 탄다.
+    @Query("select coalesce(max(a.id), 0) from JobApplicationAdmission a")
+    long findMaxId();
+
+    // 순회 시작 때 고정한 upperId까지만 조회해 새 승인이 계속 들어와도 기존 실패 건을 다시 찾는다.
     @Query("""
             select a.id from JobApplicationAdmission a
             where a.status = com.workernotfound.job.domain.job.entity.enums.ApplicationAdmissionStatus.RESERVED
               and a.expiresAt <= :now
               and a.id > :afterId
+              and a.id <= :upperId
             order by a.id
             """)
     List<Long> findOverdueReservedIdsAfter(
             @Param("now") LocalDateTime now,
             @Param("afterId") Long afterId,
+            @Param("upperId") Long upperId,
             Pageable pageable
     );
 }
