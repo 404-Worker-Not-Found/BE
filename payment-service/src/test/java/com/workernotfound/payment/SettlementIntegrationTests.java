@@ -10,6 +10,7 @@ import com.workernotfound.payment.domain.payment.repository.PaymentDepositReposi
 import com.workernotfound.payment.domain.payment.service.PaymentApplicationService;
 import com.workernotfound.payment.domain.settlement.repository.SettlementHistoryRepository;
 import com.workernotfound.payment.domain.settlement.service.*;
+import com.workernotfound.payment.global.account.AccountGateService;
 import com.workernotfound.payment.global.exception.BusinessException;
 import com.workernotfound.payment.support.IntegrationTestSupport;
 import java.math.BigDecimal;
@@ -33,6 +34,7 @@ class SettlementIntegrationTests extends IntegrationTestSupport {
   @Autowired PaymentApplicationService payments;
   @Autowired PaymentDepositRepository deposits;
   @Autowired JdbcTemplate jdbc;
+  @Autowired AccountGateService gates;
   @MockitoSpyBean SettlementHistoryRepository histories;
 
   record Fixture(long job, long matching, long paymentId, WorkCompletion completion) {}
@@ -302,6 +304,19 @@ class SettlementIntegrationTests extends IntegrationTestSupport {
     assertBalance(fixture.job(), "0", "60");
     assertThat(lockAttempt(fixture.job(), otherMatching, "40")).isEqualTo("LOCKED");
     assertBalance(fixture.job(), "40", "60");
+  }
+
+  @Test
+  void unpaidSettlementKeepsBlockingWorkerWithdrawal() {
+    long job = deposit("100");
+    long matching = IDS.incrementAndGet();
+    long worker = IDS.incrementAndGet();
+    payments.lock(key(), new PaymentLockRequest(matching, job, 20L, worker, new BigDecimal("60"), "KRW"));
+    assertThat(gates.transition(worker, key(), "prepare").state()).isEqualTo("REJECTED");
+
+    var completion = new WorkCompletion(key(), IDS.incrementAndGet(), matching, job, 20L, worker, COMPLETED_AT);
+    assertThat(settlements.reserve(completion).outcome()).isEqualTo(RESERVED);
+    assertThat(gates.transition(worker, key(), "prepare").state()).isEqualTo("REJECTED");
   }
 
   String releaseAttempt(long paymentId) {
