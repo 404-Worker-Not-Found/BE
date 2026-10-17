@@ -6,6 +6,13 @@ spring:
     username: ${PAYMENT_DATASOURCE_USERNAME}
     password: ${PAYMENT_DATASOURCE_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      # 근무·매칭 이벤트 Stream은 발행 서비스와 같은 matching Redis를 쓴다.
+      host: ${MATCHING_REDIS_HOST:localhost}
+      port: ${MATCHING_REDIS_PORT:6381}
+      timeout: 2s
+      connect-timeout: 2s
   jpa:
     open-in-view: false
     hibernate:
@@ -23,6 +30,14 @@ payment:
   settlement:
     # 근무 완료 후 자동 지급 요청이 가능해질 때까지의 대기 기간
     payout-delay: ${PAYMENT_SETTLEMENT_PAYOUT_DELAY:24h}
+  settlement-events:
+    # MatchConfirmed로 정산 대상을 기록하고 WorkCompleted로 정산을 예약한다. 두 소비자를 함께 켜고 끈다.
+    enabled: ${PAYMENT_SETTLEMENT_EVENTS_ENABLED:true}
+    matching-stream: ${MATCHING_OUTBOX_STREAM_KEY:matching:domain-events}
+    work-stream: ${WORK_OUTBOX_STREAM_KEY:work:domain-events}
+    poll-interval: ${PAYMENT_SETTLEMENT_EVENTS_POLL_INTERVAL:1s}
+    initial-delay: ${PAYMENT_SETTLEMENT_EVENTS_INITIAL_DELAY:0s}
+    batch-size: ${PAYMENT_SETTLEMENT_EVENTS_BATCH_SIZE:100}
   recovery:
     enabled: true
     interval: 30s
