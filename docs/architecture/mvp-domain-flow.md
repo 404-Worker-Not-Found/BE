@@ -162,6 +162,7 @@
 - job-service는 비공개 저장, 결제 주문 생성, 예치 상태 수신에 따른 공개와 예치 차단을 구현했다. 계약은 `docs/architecture/toss-deposit-design.md`, 세부는 `docs/architecture/job-post-design.md`의 예치 상태 수신을 따른다.
 - 매칭 확정은 예치 금액 잠금과 함께 처리한다.
 - `COMPLETED` 근무만 정상 정산할 수 있다.
+- 위 표는 초기 개념 모델이다. 근로자 정산의 실제 상태·금액 불변식·잠금 해제 규칙은 `docs/architecture/settlement-design.md`를 따른다.
 - 취소, 실패, 노쇼의 환불 금액 정책은 결제 연동 전에 확정한다.
 - 결제 요청, 웹훅, 정산, 환불은 멱등 키로 중복 처리를 막는다.
 - 실패 상태에는 원래 요청의 멱등 키와 마지막 실패 원인을 보관하고 같은 키로 재시도한다.
