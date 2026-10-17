@@ -92,7 +92,7 @@ matching-service의 `ApplicationSubmitted`가 전달하는 지원 저장 사실�
 
 - 시각 정의: `occurredAt`은 matching-service가 지원을 저장한 시각(이벤트 발생 시각)이고, 수신 시각은 job-service가 이벤트를 받아 처리한 시각이다. 판단과 저장에는 발생 시각만 쓴다. `consumedAt`은 발생 시각을 저장 정밀도(마이크로초)로 절삭한 값이며 수신 시각은 승인에 저장하지 않는다. 따라서 전달이 늦어지거나 재전송돼도 결과와 `consumedAt`이 같고, `CONSUMED` 승인은 항상 `consumedAt < expiresAt`이다. 두 서비스의 `LocalDateTime`은 같은 시간대를 쓴다고 가정한다.
 - 순서: `admissionId`나 `occurredAt`이 없으면 거절한다. 승인 행을 `PESSIMISTIC_WRITE`로 잠근 뒤 승인이 없으면 거절하고, 공고 ID·알바생 회원 ID가 승인과 다르거나 비어 있으면 상태와 관계없이 거절한다. 그다음 이미 `CONSUMED`면 상태와 `consumedAt`을 바꾸지 않는다. `occurredAt < expiresAt`이면 `RESERVED`·`EXPIRED`를 모두 `CONSUMED`로 바꾸고, 같거나 늦으면 상태를 바꾸지 않는다.
-- 결과: `CONSUMED`, `ALREADY_CONSUMED`, `SUBMITTED_AFTER_EXPIRY`와 영구 거절 `REJECTED_MISSING_ADMISSION_ID`, `REJECTED_MISSING_OCCURRED_AT`, `REJECTED_ADMISSION_NOT_FOUND`, `REJECTED_JOB_POST_MISMATCH`, `REJECTED_WORKER_MISMATCH`(`isRejected()`)를 반환한다. 반환된 결과는 같은 이벤트를 다시 처리해도 바뀌지 않으므로 소비자가 기록하고 처리를 끝낼 수 있다.
+- 결과: `CONSUMED`, `ALREADY_CONSUMED`, `SUBMITTED_AFTER_EXPIRY`와 영구 거절 `REJECTED_MISSING_ADMISSION_ID`, `REJECTED_MISSING_OCCURRED_AT`, `REJECTED_ADMISSION_NOT_FOUND`, `REJECTED_JOB_POST_MISMATCH`, `REJECTED_WORKER_MISMATCH`(`isRejected()`)를 반환한다. 반환된 결과는 재시도해도 다른 판단으로 바뀌지 않으므로 소비자가 기록하고 처리를 끝낼 수 있다. 같은 이벤트를 다시 처리하면 `CONSUMED` 대신 `ALREADY_CONSUMED`가 나오지만 승인 상태와 `consumedAt`은 더 바뀌지 않는다.
 - 일시 오류: DB 장애, 잠금 대기 초과 같은 예외는 결과로 바꾸지 않고 전파한다. 소비자는 그 이벤트를 재시도한다. 처리는 호출자 트랜잭션에 참여하므로 이후 단계가 실패해 롤백되면 사용 완료도 함께 취소된다.
 - 잠금: 승인 행만 잠그고 공고 행은 잠그지 않는다. 승인 발급은 공고 행을 잠근 뒤 새 승인을 저장할 뿐 기존 승인 행을 잠그지 않으므로 잠금 순서가 엇갈리지 않는다. 같은 승인의 동시 처리는 승인 행 잠금으로 직렬화되어 먼저 커밋한 처리만 `consumedAt`을 정한다.
 - 발급 계약: 같은 키의 승인 재요청은 그대로다. `CONSUMED`·`EXPIRED` 승인이나 만료 시각이 지난 승인의 재요청은 `JOB-409-003`이다.
