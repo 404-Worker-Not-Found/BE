@@ -192,7 +192,7 @@
 
 `job-service`는 공고 행을 잠그거나 같은 효과의 조건부 갱신을 사용해 `OPEN` 상태와 `applicationDeadline > now`를 확인한 뒤 승인을 저장한다. 승인 생성 시각을 지원 접수의 선형화 시점으로 사용한다. 승인 직후 공고가 닫혀도 만료 전에 저장한 지원은 유효하다.
 
-같은 멱등 키의 재요청에는 같은 승인과 공고 스냅샷을 반환한다. `matching-service`는 `admissionId`를 지원 레코드에 저장하고 중복 사용을 막는다. 지원 저장이 실패하면 승인은 만료되며 모집 인원에는 영향을 주지 않는다. `ApplicationSubmitted`의 발생 시각이 승인 만료 시각 이전이면 이벤트 전달이 늦어져도 `job-service`는 승인을 사용 완료로 변경할 수 있다.
+같은 멱등 키의 재요청에는 같은 승인과 공고 스냅샷을 반환한다. `matching-service`는 `admissionId`를 지원 레코드에 저장하고 중복 사용을 막는다. 지원 저장이 실패하면 승인은 만료되며 모집 인원에는 영향을 주지 않는다. 사용이 확인되지 않은 채 만료 시각이 지난 승인은 `job-service`의 만료 배치가 `EXPIRED`로 바꾼다. `EXPIRED`는 최종 상태가 아니며, `ApplicationSubmitted`의 발생 시각이 승인 만료 시각 이전이면 이벤트 전달이 늦어져 배치가 먼저 만료시켰더라도 `job-service`는 승인을 사용 완료로 변경한다.
 
 `job-service`의 승인 레코드는 최소한 승인 ID, 공고 ID, 알바생 회원 ID, 멱등 키, 공고 버전, `RESERVED`·`CONSUMED`·`EXPIRED` 상태, 승인·만료·사용 시각을 보관한다. 응답에 포함하는 공고 스냅샷(점주 회원 ID, 업종 ID, 근무 일시, 위도·경도)도 발급 당시 값으로 함께 보관한다. 응답을 만들 때 공고를 다시 읽으면 재요청 응답이 공고 버전과 어긋나므로 저장된 스냅샷만 사용한다. 공고 ID에는 서비스 내부 FK를 사용하고 알바생 회원 ID는 EXT로 저장한다. 멱등 키와 승인 ID에는 각각 유일 제약을 둔다.
 
@@ -206,7 +206,7 @@
 | 409 | `APPLICATION_DEADLINE_PASSED` | 지원 마감으로 응답 |
 | 409 | `ADMISSION_EXPIRED` | 공고 조건을 다시 확인해 새 명령 ID로 재시도 |
 
-`job-service`에 이 계약과 승인 저장 구조가 구현되어 있다. 오류 응답의 `code`는 서비스 공통 형식(`JOB-404-001`, `JOB-409-001`~`003`)을 사용하며 `matching-service`는 위 표의 이름과 함께 이 코드를 인식한다. 같은 멱등 키를 다른 공고·회원 요청에 재사용하면 `JOB-409-004`로 거절한다. `ApplicationSubmitted` 내용으로 승인을 `CONSUMED`로 바꾸는 처리 로직은 job-service에 구현되어 있으며(발생 시각 `occurredAt < expiresAt` 기준, [공고 설계](./job-post-design.md#지원-접수-승인-사용-완료)), job-service 전용 consumer group `job-admission-consumption-v1`이 `matching:domain-events`의 `ApplicationSubmitted`를 소비해 호출한다([ApplicationSubmitted 이벤트 소비](./job-post-design.md#applicationsubmitted-이벤트-소비)). 현재 matching-service는 지원의 `appliedAt`(= 이벤트 `occurredAt`)에 승인의 `admittedAt`을 넣으므로, 이 발생 시각은 지원 저장 시각이 아니라 승인 발급 시각이다.
+`job-service`에 이 계약과 승인 저장 구조가 구현되어 있다. 오류 응답의 `code`는 서비스 공통 형식(`JOB-404-001`, `JOB-409-001`~`003`)을 사용하며 `matching-service`는 위 표의 이름과 함께 이 코드를 인식한다. 같은 멱등 키를 다른 공고·회원 요청에 재사용하면 `JOB-409-004`로 거절한다. `ApplicationSubmitted` 내용으로 승인을 `CONSUMED`로 바꾸는 처리 로직은 job-service에 구현되어 있으며(발생 시각 `occurredAt < expiresAt` 기준, [공고 설계](./job-post-design.md#지원-접수-승인-사용-완료)), job-service 전용 consumer group `job-admission-consumption-v1`이 `matching:domain-events`의 `ApplicationSubmitted`를 소비해 호출한다([ApplicationSubmitted 이벤트 소비](./job-post-design.md#applicationsubmitted-이벤트-소비)). 만료 승인 정리는 job-service 스케줄러가 승인 행 잠금으로 소비와 직렬화해 처리한다([지원 접수 승인 만료](./job-post-design.md#지원-접수-승인-만료)). 상태 전환 전체는 [지원 접수 승인 상태 전환](./job-post-design.md#지원-접수-승인-상태-전환)을 따른다. 현재 matching-service는 지원의 `appliedAt`(= 이벤트 `occurredAt`)에 승인의 `admittedAt`을 넣으므로, 이 발생 시각은 지원 저장 시각이 아니라 승인 발급 시각이다.
 
 ## 상태 전이 동시성
 
@@ -277,7 +277,7 @@ Redis 기록 성공과 MySQL의 `PUBLISHED` 변경 사이에 장애가 나면 �
 
 `ApplicationSubmitted`와 `ApplicationCanceled`에는 `revision`을 포함한 공통 이벤트 필드와 함께 `applicationId`, `admissionId`, `jobPostId`, `workerMemberId`, 지원 상태, 상태 변경 시각을 넣는다. 공통 `revision`은 지원 집계의 상태 버전이며 별도의 `applicationRevision`을 추가하지 않는다. 최초 지원 이벤트는 `revision=1`이고 상태가 바뀔 때마다 1 증가한다.
 
-`job-service`는 저장된 마지막 지원 `revision`보다 큰 이벤트만 반영한다. 같은 `revision`의 재전송은 `eventId`로 한 번만 처리하고 더 작은 `revision`은 무시한다. 이 기준으로 지원자 수 projection의 중복·역순 갱신을 막는다. projection 복구 방식은 공고 계약을 구현할 때 함께 확정한다.
+지원자 수 projection은 아직 구현하지 않았고 `job-service`의 `applicantCount`는 `null`이다. 구현할 때 `job-service`는 지원별로 저장된 마지막 `revision`보다 큰 이벤트만 반영하고, 같은 `revision`의 재전송은 바꾸지 않으며 더 작은 `revision`은 무시한다. 세는 지원 상태(`APPLIED`), 재지원 처리, 초기 반영과 재구축(이 서비스의 공고별 지원 상태 스냅샷 내부 계약 추가)은 [지원자 수 projection 기준](./job-post-design.md#지원자-수-projection-기준미구현)을 따른다.
 
 ## 아직 없는 점수 데이터의 후속 연동
 
