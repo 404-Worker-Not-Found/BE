@@ -28,7 +28,7 @@
 
 ## 상태와 후속 작업
 
-상태 이름은 `SCHEDULED`, `CHECKED_IN`, `IN_PROGRESS`, `COMPLETED`, `CANCELED`, `FAILED`, `NO_SHOW`다. 근무 상태 전이는 `SCHEDULED -> CHECKED_IN -> IN_PROGRESS -> COMPLETED`와 미확정 근무의 `SCHEDULED -> CANCELED` 보상을 처리한다. 매칭 확정은 상태 전이와 별개로 `confirmed_at`과 `confirmation_revision`에 기록한다. 노쇼 처리, 사용자 취소, 근무 이벤트의 후속 소비자 연결과 정산은 후속 작업이다. 현재 완료 API는 결제 해제나 정산을 호출하지 않는다.
+상태 이름은 `SCHEDULED`, `CHECKED_IN`, `IN_PROGRESS`, `COMPLETED`, `CANCELED`, `FAILED`, `NO_SHOW`다. 근무 상태 전이는 `SCHEDULED -> CHECKED_IN -> IN_PROGRESS -> COMPLETED`와 미확정 근무의 `SCHEDULED -> CANCELED` 보상을 처리한다. 매칭 확정은 상태 전이와 별개로 `confirmed_at`과 `confirmation_revision`에 기록한다. 노쇼 처리와 사용자 취소는 후속 작업이다. 완료 API는 결제 해제나 정산을 직접 호출하지 않는다. payment-service가 `WorkCompleted`를 소비해 정산을 예약한다([정산 설계](settlement-design.md)).
 
 자정을 넘는 근무도 일정 스냅샷으로 보관한다. 생성 요청의 `endTimeNextDay`는 선택이다. 없거나 null이면 요청 역직렬화 시점에 시각으로 채운다(종료 시각이 시작 시각 이하이면 true). 이 필드가 없던 이전 형식의 재시도가 저장된 명령을 조회하기 전에 400으로 거절되면, matching Saga가 확정적 실패로 보고 보상하면서 이미 만든 근무를 취소하지 못하기 때문이다. 명시적으로 전달한 값은 같은 규칙과 일치해야 하며 어긋나면 400이다. 시작·종료 시각이 없으면 채우지 않고 Bean Validation이 400으로 거절한다. `works.end_time_next_day`(V3)에 저장하고 본인 근무 조회 응답에 포함한다. V3 이전 행은 `end_time <= start_time`으로 채웠다. 익일 여부가 시각으로 결정되므로 생성 명령 지문은 필드 추가 전 형식을 그대로 유지한다. 따라서 이전 형식 요청, 같은 의미의 명시 요청, null 요청은 같은 키에서 같은 `workId`를 반환하고, 이전 버전이 저장한 명령의 재시도도 충돌하지 않는다. `MatchConfirmed` v1 이벤트는 바꾸지 않았으며, 일정 의미가 필요한 소비자는 같은 규칙으로 익일 여부를 판단한다. 과거 날짜를 일괄 거부하면 복구 명령이 실패할 수 있으므로 현재 시각에 따른 만료 조건을 추가하지 않는다.
 
@@ -107,7 +107,7 @@ Relay는 발행 후보를 최대 100개 조회하고 각 이벤트에 30초 임�
 
 Redis 전송 뒤 DB 성공 표시 전에 중단되면 동일 이벤트가 두 번 발행될 수 있다. 소비자는 Stream ID 대신 `eventId`로 중복을 제거하고 envelope와 payload의 ID·타입·버전·revision을 검증해야 한다. 여러 relay 인스턴스의 발행 순서는 보장하지 않으므로 상태 프로젝션은 근무별 revision으로 역전을 차단한다. 각 이력이 필요한 소비자는 낮은 revision을 무조건 버리지 말고 eventId별 저장으로 처리한다.
 
-`WORK_OUTBOX_ENABLED=false`는 relay만 멈추고 이벤트 저장은 계속한다. `WORK_OUTBOX_STREAM_KEY`로 발행 Stream을 지정한다. `work.outbox.batch-size`, `lease-duration`, `retry-base-delay`, `retry-max-delay`, `poll-delay-ms`, `initial-delay-ms`는 Spring 설정으로 조정할 수 있다. 실패 로그에는 이벤트 ID와 예외 타입만 남긴다. Outbox와 Stream은 자동 삭제/trim하지 않는다. 후속 알림·이력·정산 소비자는 아직 이 Stream에 연결하지 않았다.
+`WORK_OUTBOX_ENABLED=false`는 relay만 멈추고 이벤트 저장은 계속한다. `WORK_OUTBOX_STREAM_KEY`로 발행 Stream을 지정한다. `work.outbox.batch-size`, `lease-duration`, `retry-base-delay`, `retry-max-delay`, `poll-delay-ms`, `initial-delay-ms`는 Spring 설정으로 조정할 수 있다. 실패 로그에는 이벤트 ID와 예외 타입만 남긴다. Outbox와 Stream은 자동 삭제/trim하지 않는다. notification-service(`notification-work-v1`)와 payment-service 정산(`payment-settlement-work-v1`, WorkCompleted만) 소비자가 이 Stream에 연결되어 있다.
 
 
 ### 공고 기반 서비스 연결 검증 (2026-10-06)

@@ -1615,7 +1615,7 @@ Reason:
 
 Implication for agents:
 - Do not call an external payout provider or fabricate payout success until fees, deductions, the payee account contract, and the payout request contract are decided.
-- Do not treat `WorkCompleted` as a payout command. The Stream consumer must store an eventId receipt with the reservation result in one transaction, ACK after commit, and retry on exceptions.
+- Do not treat `WorkCompleted` as a payout command. The Stream consumer must store an eventId receipt with the reservation result in one transaction, ACK after commit, and retry on exceptions. The consumer is connected by the 2026-10-18 Settlement Event Consumers decision.
 - When #107 adds refunds, extend `PaymentDeposit.availableAmount()` and `ck_deposit_balance` with refund amounts instead of decreasing `deposited_amount`.
 - When #104 handles canceled or no-show work, release or refund only `LOCKED` locks; handle `TRANSFERRED` locks through settlement transitions.
 
@@ -1624,3 +1624,32 @@ Related files:
 - `docs/architecture/payment-lock-design.md`
 - `payment-service/src/main/java/com/workernotfound/payment/domain/settlement/service/SettlementReservationService.java`
 - `payment-service/src/main/resources/db/migration/V4__create_payment_settlements.sql`
+
+## 2026-10-18 - Settlement Event Consumers
+
+Decision:
+- payment-service identifies the settlement lock through matching-service's existing `MatchConfirmed` v1 contract, which carries the confirmed `workId`, `paymentId`, `lockedAmount`, and `currency`. It does not add payment IDs to work events, call another service for the lock, read another service's database, or settle whichever lock the matching slot currently holds.
+- `MatchConfirmed` (`payment-settlement-matching-v1`, consumer `payment-settlement-matching`) records a settlement target per matching only when the `paymentId` is the matching's active lock and the matching, job, owner, worker, amount, and currency all match that lock. Earlier Saga attempts' `RELEASED` locks are rejected (`LOCK_NOT_FOUND`). Targets are never updated; a different confirmation for the same matching is `TARGET_CONFLICT`.
+- `WorkCompleted` (`payment-settlement-work-v1`, consumer `payment-settlement-work`) reserves the target lock only when the work and participants match the target and the target lock is still the matching's active lock. It never substitutes another lock.
+- Both groups start at `0-0`, share one logical consumer across replicas, recover pending deliveries with a rotating cursor, never trim the Stream, and are switched together by `PAYMENT_SETTLEMENT_EVENTS_ENABLED`.
+- The receipt (eventId unique, fingerprint, result) commits in the same transaction as the target or the settlement and amount transfer, and ACK happens after commit. Repeated eventIds replay the stored result; same eventId with different content stays pending.
+- Failure classes: recorded mismatches and missing business fields are permanent rejections, recorded and acknowledged with an error log; uninterpretable envelopes, unsupported versions, and WorkCompleted revision or status violations stay pending without a record; a completion whose confirmation has not arrived stays pending with a warning until the target exists; a completion whose confirmation was rejected is recorded as `CONFIRMATION_REJECTED`; transient and post-commit ACK failures stay pending.
+- Consuming WorkCompleted only creates `RESERVED` or `ON_HOLD(FUNDING_BLOCKED)` settlements. It never requests or records a payout.
+
+Reason:
+- matching-service owns the confirmation Saga and already publishes the confirmed payment ID and lock amount. Reusing that contract keeps the 2026-10-04 rule that work events exclude payment identifiers and avoids a new synchronous dependency.
+- Choosing the slot's current lock could settle a lock from another Saga attempt after an unexpected release or replacement.
+- The matching and work Streams are delivered independently, so a completion can legitimately arrive before its confirmation and must not be rejected permanently.
+
+Implication for agents:
+- Do not settle a lock that is not the recorded settlement target, and do not overwrite targets.
+- Keep the receipt, target or settlement, and amount transfer in one transaction and ACK after commit.
+- If `MatchConfirmed` or `WorkCompleted` v1 changes, update the payment parsers and the producer-format fixture together.
+- A cross-process E2E of the settlement consumers has not been run.
+
+Related files:
+- `docs/architecture/settlement-design.md`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/settlement/service/SettlementTargetService.java`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/settlement/service/WorkCompletedReceiptService.java`
+- `payment-service/src/main/java/com/workernotfound/payment/external/redis/SettlementStreamConsumer.java`
+- `payment-service/src/main/resources/db/migration/V5__create_payment_settlement_targets.sql`
