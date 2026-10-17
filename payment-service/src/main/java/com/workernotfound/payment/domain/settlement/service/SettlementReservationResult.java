@@ -12,7 +12,9 @@ public record SettlementReservationResult(Outcome outcome, Long settlementId) {
     LOCK_NOT_FOUND,
     LOCK_MISMATCH,
     WORK_CONFLICT,
-    UNSUPPORTED_AMOUNT
+    UNSUPPORTED_AMOUNT,
+    // 같은 매칭의 MatchConfirmed가 정산 대상으로 기록되지 못하고 거절됐다.
+    CONFIRMATION_REJECTED
   }
 
   public static SettlementReservationResult rejected(Outcome outcome) {

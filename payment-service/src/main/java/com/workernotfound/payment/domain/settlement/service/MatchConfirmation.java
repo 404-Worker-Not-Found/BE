@@ -24,4 +24,10 @@ public record MatchConfirmation(String eventId, Long matchingId, Long revision, 
         && Stream.of(matchingId, revision, workId, paymentLockId, jobPostId, ownerMemberId, workerMemberId)
             .allMatch(id -> id != null && id > 0);
   }
+
+  public String fingerprint() {
+    String amount = lockedAmount == null ? null : lockedAmount.stripTrailingZeros().toPlainString();
+    return EventFingerprint.of("MatchConfirmed:v1", eventId, matchingId, revision, workId, paymentLockId,
+        jobPostId, ownerMemberId, workerMemberId, amount, currency, confirmedAt);
+  }
 }
