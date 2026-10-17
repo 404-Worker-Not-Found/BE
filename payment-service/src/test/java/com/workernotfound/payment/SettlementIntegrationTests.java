@@ -8,6 +8,7 @@ import com.workernotfound.payment.domain.payment.entity.PaymentDeposit;
 import com.workernotfound.payment.domain.payment.exception.PaymentErrorCode;
 import com.workernotfound.payment.domain.payment.repository.PaymentDepositRepository;
 import com.workernotfound.payment.domain.payment.service.PaymentApplicationService;
+import com.workernotfound.payment.domain.settlement.exception.SettlementTargetNotReadyException;
 import com.workernotfound.payment.domain.settlement.repository.SettlementHistoryRepository;
 import com.workernotfound.payment.domain.settlement.service.*;
 import com.workernotfound.payment.global.account.AccountGateService;
@@ -31,6 +32,7 @@ class SettlementIntegrationTests extends IntegrationTestSupport {
   static final LocalDateTime COMPLETED_AT = LocalDateTime.of(2026, 10, 18, 18, 0, 0, 123_456_789);
 
   @Autowired SettlementReservationService settlements;
+  @Autowired SettlementTargetService targets;
   @Autowired PaymentApplicationService payments;
   @Autowired PaymentDepositRepository deposits;
   @Autowired JdbcTemplate jdbc;
@@ -58,11 +60,23 @@ class SettlementIntegrationTests extends IntegrationTestSupport {
     return new WorkCompletion(key(), IDS.incrementAndGet(), matching, job, 20L, 30L, COMPLETED_AT);
   }
 
+  MatchConfirmation confirmation(WorkCompletion completion, long paymentId, String amount) {
+    return new MatchConfirmation(key(), completion.matchingId(), 4L, completion.workId(), paymentId,
+        completion.jobPostId(), 20L, 30L, new BigDecimal(amount), "KRW", COMPLETED_AT.minusHours(9));
+  }
+
+  // matching-service가 확정한 근무와 잠금을 정산 대상으로 기록한다.
+  WorkCompletion confirmed(long job, long matching, long paymentId, String amount) {
+    WorkCompletion completion = completion(job, matching);
+    assertThat(targets.record(confirmation(completion, paymentId, amount))).isEqualTo(SettlementTargetResult.RECORDED);
+    return completion;
+  }
+
   Fixture locked(String deposit, String amount) {
     long job = deposit(deposit);
     long matching = IDS.incrementAndGet();
     long paymentId = lock(job, matching, amount);
-    return new Fixture(job, matching, paymentId, completion(job, matching));
+    return new Fixture(job, matching, paymentId, confirmed(job, matching, paymentId, amount));
   }
 
   Map<String, Object> balance(long job) {
@@ -164,7 +178,8 @@ class SettlementIntegrationTests extends IntegrationTestSupport {
 
     assertThat(settlements.reserve(otherWorker).outcome()).isEqualTo(LOCK_MISMATCH);
     assertThat(settlements.reserve(otherJob).outcome()).isEqualTo(LOCK_MISMATCH);
-    assertThat(settlements.reserve(unknownMatching).outcome()).isEqualTo(LOCK_NOT_FOUND);
+    assertThatThrownBy(() -> settlements.reserve(unknownMatching))
+        .isInstanceOf(SettlementTargetNotReadyException.class);
     assertThat(settlements.reserve(missingTime).outcome()).isEqualTo(INVALID_COMPLETION);
     assertThat(settlements.reserve(missingEvent).outcome()).isEqualTo(INVALID_COMPLETION);
     assertThat(settlements.reserve(otherWorker).isRejected()).isTrue();
@@ -228,7 +243,7 @@ class SettlementIntegrationTests extends IntegrationTestSupport {
     payments.release(firstRelease, firstPayment);
     String secondCreate = key();
     long secondPayment = Long.parseLong(payments.lock(secondCreate, request).paymentId());
-    settlements.reserve(completion(job, matching));
+    settlements.reserve(confirmed(job, matching, secondPayment, "60"));
 
     payments.release(firstRelease, firstPayment);
     assertThat(payments.lock(firstCreate, request).paymentId()).isEqualTo(String.valueOf(firstPayment));
@@ -314,9 +329,109 @@ class SettlementIntegrationTests extends IntegrationTestSupport {
     payments.lock(key(), new PaymentLockRequest(matching, job, 20L, worker, new BigDecimal("60"), "KRW"));
     assertThat(gates.transition(worker, key(), "prepare").state()).isEqualTo("REJECTED");
 
+    long paymentId = jdbc.queryForObject("SELECT id FROM payment_locks WHERE matching_id = ?", Long.class, matching);
     var completion = new WorkCompletion(key(), IDS.incrementAndGet(), matching, job, 20L, worker, COMPLETED_AT);
+    targets.record(new MatchConfirmation(key(), matching, 4L, completion.workId(), paymentId, job, 20L, worker,
+        new BigDecimal("60"), "KRW", COMPLETED_AT));
     assertThat(settlements.reserve(completion).outcome()).isEqualTo(RESERVED);
     assertThat(gates.transition(worker, key(), "prepare").state()).isEqualTo("REJECTED");
+  }
+
+  @Test
+  void completionBeforeConfirmationIsRetryableAndChangesNothing() {
+    long job = deposit("100");
+    long matching = IDS.incrementAndGet();
+    long paymentId = lock(job, matching, "60");
+    WorkCompletion completion = completion(job, matching);
+
+    assertThatThrownBy(() -> settlements.reserve(completion)).isInstanceOf(SettlementTargetNotReadyException.class);
+    assertThat(lockStatus(paymentId)).isEqualTo("LOCKED");
+    assertThat(settlementCount(paymentId)).isZero();
+
+    targets.record(confirmation(completion, paymentId, "60"));
+    assertThat(settlements.reserve(completion).outcome()).isEqualTo(RESERVED);
+    assertBalance(job, "0", "60");
+  }
+
+  // 이전 Saga 시도에서 해제된 잠금은 확정 대상이 될 수 없고, 활성 잠금이 그 자리를 대신 정산하지도 않는다.
+  @Test
+  void earlierSagaAttemptLockIsNeverSettled() {
+    long job = deposit("100");
+    long matching = IDS.incrementAndGet();
+    long earlier = lock(job, matching, "60");
+    payments.release(key(), earlier);
+    long current = lock(job, matching, "60");
+    WorkCompletion completion = completion(job, matching);
+
+    assertThat(targets.record(confirmation(completion, earlier, "60"))).isEqualTo(SettlementTargetResult.LOCK_NOT_FOUND);
+    assertThatThrownBy(() -> settlements.reserve(completion)).isInstanceOf(SettlementTargetNotReadyException.class);
+    assertThat(targets.record(confirmation(completion, current, "60"))).isEqualTo(SettlementTargetResult.RECORDED);
+    var result = settlements.reserve(completion);
+
+    assertThat(result.outcome()).isEqualTo(RESERVED);
+    assertThat(jdbc.queryForObject("SELECT payment_lock_id FROM payment_settlements WHERE id = ?", Long.class,
+        result.settlementId())).isEqualTo(current);
+    assertThat(lockStatus(earlier)).isEqualTo("RELEASED");
+    assertThat(settlementCount(earlier)).isZero();
+    assertBalance(job, "0", "60");
+  }
+
+  @Test
+  void confirmationMustMatchOwnedLock() {
+    long job = deposit("100");
+    long matching = IDS.incrementAndGet();
+    long paymentId = lock(job, matching, "60");
+    WorkCompletion completion = completion(job, matching);
+    var base = confirmation(completion, paymentId, "60");
+    var otherAmount = confirmation(completion, paymentId, "50");
+    var otherWorker = new MatchConfirmation(key(), matching, 4L, completion.workId(), paymentId, job, 20L, 31L,
+        new BigDecimal("60"), "KRW", COMPLETED_AT);
+    var otherJob = new MatchConfirmation(key(), matching, 4L, completion.workId(), paymentId, job + 1, 20L, 30L,
+        new BigDecimal("60"), "KRW", COMPLETED_AT);
+    var otherCurrency = new MatchConfirmation(key(), matching, 4L, completion.workId(), paymentId, job, 20L, 30L,
+        new BigDecimal("60"), "USD", COMPLETED_AT);
+    var unknownMatching = new MatchConfirmation(key(), IDS.incrementAndGet(), 4L, IDS.incrementAndGet(), paymentId,
+        job, 20L, 30L, new BigDecimal("60"), "KRW", COMPLETED_AT);
+    var missingWork = new MatchConfirmation(key(), matching, 4L, null, paymentId, job, 20L, 30L,
+        new BigDecimal("60"), "KRW", COMPLETED_AT);
+
+    assertThat(targets.record(otherAmount)).isEqualTo(SettlementTargetResult.LOCK_MISMATCH);
+    assertThat(targets.record(otherWorker)).isEqualTo(SettlementTargetResult.LOCK_MISMATCH);
+    assertThat(targets.record(otherJob)).isEqualTo(SettlementTargetResult.LOCK_MISMATCH);
+    assertThat(targets.record(otherCurrency)).isEqualTo(SettlementTargetResult.LOCK_MISMATCH);
+    assertThat(targets.record(unknownMatching)).isEqualTo(SettlementTargetResult.LOCK_NOT_FOUND);
+    assertThat(targets.record(missingWork)).isEqualTo(SettlementTargetResult.INVALID_CONFIRMATION);
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment_settlement_targets WHERE matching_id IN (?, ?)",
+        Long.class, matching, unknownMatching.matchingId())).isZero();
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment_matching_slots WHERE matching_id = ?",
+        Long.class, unknownMatching.matchingId())).isZero();
+
+    assertThat(targets.record(base)).isEqualTo(SettlementTargetResult.RECORDED);
+    var redelivered = new MatchConfirmation(key(), matching, 5L, completion.workId(), paymentId, job, 20L, 30L,
+        new BigDecimal("60.00"), "KRW", COMPLETED_AT.plusSeconds(1));
+    var otherWork = new MatchConfirmation(key(), matching, 4L, IDS.incrementAndGet(), paymentId, job, 20L, 30L,
+        new BigDecimal("60"), "KRW", COMPLETED_AT);
+    assertThat(targets.record(redelivered)).isEqualTo(SettlementTargetResult.ALREADY_RECORDED);
+    assertThat(targets.record(otherWork)).isEqualTo(SettlementTargetResult.TARGET_CONFLICT);
+    assertThat(jdbc.queryForMap("SELECT work_id, matching_revision, source_event_id FROM payment_settlement_targets"
+        + " WHERE matching_id = ?", matching)).containsEntry("work_id", completion.workId())
+        .containsEntry("matching_revision", 4L).containsEntry("source_event_id", base.eventId());
+  }
+
+  // 대상과 다른 근무·참여자의 근무 완료는 대상 잠금을 정산하지 않는다.
+  @Test
+  void completionMustMatchConfirmedTarget() {
+    Fixture fixture = locked("100", "60");
+    var completion = fixture.completion();
+    var otherWork = completion(fixture.job(), fixture.matching());
+    var otherOwner = new WorkCompletion(key(), completion.workId(), fixture.matching(), fixture.job(),
+        21L, 30L, COMPLETED_AT);
+
+    assertThat(settlements.reserve(otherWork).outcome()).isEqualTo(WORK_CONFLICT);
+    assertThat(settlements.reserve(otherOwner).outcome()).isEqualTo(LOCK_MISMATCH);
+    assertThat(lockStatus(fixture.paymentId())).isEqualTo("LOCKED");
+    assertBalance(fixture.job(), "60", "0");
+    assertThat(settlements.reserve(completion).outcome()).isEqualTo(RESERVED);
   }
 
   String releaseAttempt(long paymentId) {

@@ -6,6 +6,7 @@ import com.workernotfound.payment.domain.payment.entity.PaymentDeposit;
 import com.workernotfound.payment.domain.payment.entity.PaymentLock;
 import com.workernotfound.payment.domain.payment.repository.*;
 import com.workernotfound.payment.domain.settlement.entity.*;
+import com.workernotfound.payment.domain.settlement.exception.SettlementTargetNotReadyException;
 import com.workernotfound.payment.domain.settlement.repository.*;
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -15,6 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 근무 완료 사실로 매칭 잠금 금액 전액을 정산 예약으로 옮긴다. 외부 지급은 호출하지 않는다.
+ *
+ * <p>정산할 잠금은 MatchConfirmed로 기록한 정산 대상의 잠금이다. 매칭 slot의 현재 잠금을 그대로 고르지 않고, 대상 잠금이 아직
+ * 활성 잠금인지 확인한다. 대상이 아직 없으면 {@link SettlementTargetNotReadyException}으로 재시도를 요청한다.
  *
  * <p>잠금 순서는 Saga 해제와 같은 매칭 slot → 예치 → 잠금이다. 정산 예약·Saga 해제·신규 잠금은 같은 예치 행에서 직렬화된다.
  * 확정 결과는 반환하고 DB·잠금 실패는 예외로 전파해 호출자가 같은 사실로 재시도한다. 호출자의 트랜잭션에 참여한다.
@@ -29,6 +33,7 @@ public class SettlementReservationService {
   private final PaymentDepositRepository deposits;
   private final SettlementRepository settlements;
   private final SettlementHistoryRepository histories;
+  private final SettlementTargetRepository targets;
   private final SettlementProperties properties;
 
   @Transactional
@@ -37,8 +42,16 @@ public class SettlementReservationService {
     Optional<Long> activePaymentId = commands.findActivePaymentForUpdate(completion.matchingId());
     Optional<Settlement> existing = settlements.findByWorkId(completion.workId());
     if (existing.isPresent()) return replay(existing.get(), completion);
-    if (activePaymentId.isEmpty()) return SettlementReservationResult.rejected(LOCK_NOT_FOUND);
-    return transfer(activePaymentId.get(), completion);
+    SettlementTarget target = targets.findById(completion.matchingId())
+        .orElseThrow(() -> new SettlementTargetNotReadyException("매칭 확정이 아직 정산 대상으로 기록되지 않았습니다."));
+    // 정산 대상은 확정된 근무 하나다. 같은 매칭의 다른 근무는 정산하지 않는다.
+    if (!target.getWorkId().equals(completion.workId())) return SettlementReservationResult.rejected(WORK_CONFLICT);
+    if (!target.hasSameParticipants(completion.jobPostId(), completion.ownerMemberId(),
+        completion.workerMemberId())) return SettlementReservationResult.rejected(LOCK_MISMATCH);
+    // 확정 뒤 해제됐거나 다른 잠금으로 바뀐 경우다. 활성 잠금을 대신 정산하지 않는다.
+    if (!target.getPaymentLockId().equals(activePaymentId.orElse(null)))
+      return SettlementReservationResult.rejected(LOCK_NOT_FOUND);
+    return transfer(target.getPaymentLockId(), completion);
   }
 
   private SettlementReservationResult replay(Settlement settlement, WorkCompletion completion) {
