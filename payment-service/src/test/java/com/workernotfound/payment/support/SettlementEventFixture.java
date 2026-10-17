@@ -2,6 +2,7 @@ package com.workernotfound.payment.support;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -14,13 +15,18 @@ import java.util.Map;
  * 발행 서비스가 Redis Stream에 넣는 레코드를 그대로 만든다.
  *
  * <p>payload 레코드는 matching-service {@code MatchingEvent}, work-service {@code WorkLifecycleEvent}의 필드 이름·순서·타입과
- * 같고, 발행 서비스처럼 애플리케이션 ObjectMapper로 직렬화한다. envelope는 각 서비스의 Outbox relay처럼 모든 값을 문자열로 넣고,
- * occurredAt은 Outbox {@code DATETIME(6)}에 저장된 값을 {@code LocalDateTime.toString()}으로 쓴다.
+ * 같다. 각 서비스 {@code OpenApiConfig}의 ObjectMapper 설정으로 직렬화한다. matching-service는 날짜를 숫자 배열로, work-service는
+ * ISO 문자열로 쓴다. envelope는 각 서비스의 Outbox relay처럼 모든 값을 문자열로 넣고, occurredAt은 Outbox {@code DATETIME(6)}에
+ * 저장된 값을 {@code LocalDateTime.toString()}으로 쓴다. 발행 계약이 바뀌면 이 픽스처도 함께 바꾼다.
  */
 public final class SettlementEventFixture {
   public static final LocalDate WORK_DATE = LocalDate.of(2026, 10, 18);
   public static final LocalTime START_TIME = LocalTime.of(9, 0);
   public static final LocalTime END_TIME = LocalTime.of(18, 0);
+
+  private static final ObjectMapper MATCHING_OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+  private static final ObjectMapper WORK_OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules()
+      .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
   private SettlementEventFixture() {}
 
@@ -41,7 +47,7 @@ public final class SettlementEventFixture {
   public record WorkEvent(String eventId, String eventType, long revision, String status, long workId,
       Long matchingId, Long jobPostId, Long ownerMemberId, Long workerMemberId, LocalDateTime occurredAt) {}
 
-  public static Map<String, String> matchConfirmed(ObjectMapper mapper, Confirmation event) {
+  public static Map<String, String> matchConfirmed(Confirmation event) {
     var payload = new MatchingEventPayload(event.eventId(), "MatchConfirmed", event.occurredAt(),
         event.matchingId(), String.valueOf(event.matchingId()), event.revision(), 1, event.matchingId(),
         event.matchingId() + 7, event.jobPostId(), event.ownerMemberId(), event.workerMemberId(),
@@ -56,12 +62,12 @@ public final class SettlementEventFixture {
     fields.put("revision", String.valueOf(event.revision()));
     fields.put("version", "1");
     fields.put("occurredAt", roundToStoredMicros(event.occurredAt()).toString());
-    fields.put("payload", json(mapper, payload));
+    fields.put("payload", json(MATCHING_OBJECT_MAPPER, payload));
     return fields;
   }
 
   // work-service는 발생 시각을 마이크로초로 자른 뒤 저장·발행하므로 envelope와 payload 시각이 같다.
-  public static Map<String, String> workEvent(ObjectMapper mapper, WorkEvent event) {
+  public static Map<String, String> workEvent(WorkEvent event) {
     String actorRole = "WorkCheckedIn".equals(event.eventType()) ? "WORKER" : "OWNER";
     Long actor = "WORKER".equals(actorRole) ? event.workerMemberId() : event.ownerMemberId();
     var payload = new WorkLifecyclePayload(event.eventId(), event.eventType(), event.workId(), event.revision(),
@@ -75,7 +81,7 @@ public final class SettlementEventFixture {
     fields.put("revision", String.valueOf(event.revision()));
     fields.put("version", "1");
     fields.put("occurredAt", event.occurredAt().toString());
-    fields.put("payload", json(mapper, payload));
+    fields.put("payload", json(WORK_OBJECT_MAPPER, payload));
     return fields;
   }
 

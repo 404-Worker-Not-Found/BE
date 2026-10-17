@@ -8,7 +8,6 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workernotfound.payment.domain.payment.dto.request.PaymentLockRequest;
 import com.workernotfound.payment.domain.payment.entity.PaymentDeposit;
 import com.workernotfound.payment.domain.payment.repository.PaymentDepositRepository;
@@ -84,7 +83,6 @@ class SettlementEventConsumerTests extends IntegrationTestSupport {
   @Autowired PaymentApplicationService payments;
   @Autowired PaymentDepositRepository deposits;
   @Autowired StringRedisTemplate redis;
-  @Autowired ObjectMapper mapper;
   @Autowired JdbcTemplate jdbc;
 
   @DynamicPropertySource
@@ -558,7 +556,7 @@ class SettlementEventConsumerTests extends IntegrationTestSupport {
   }
 
   Map<String, String> workFields(WorkEvent event) {
-    return SettlementEventFixture.workEvent(mapper, event);
+    return SettlementEventFixture.workEvent(event);
   }
 
   RecordId publishWork(WorkEvent event) {
@@ -640,7 +638,7 @@ class SettlementEventConsumerTests extends IntegrationTestSupport {
   }
 
   Map<String, String> matchFields(Confirmation event) {
-    return SettlementEventFixture.matchConfirmed(mapper, event);
+    return SettlementEventFixture.matchConfirmed(event);
   }
 
   RecordId publishMatching(Confirmation event) {
