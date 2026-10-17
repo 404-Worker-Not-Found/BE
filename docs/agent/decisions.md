@@ -1538,3 +1538,27 @@ Related files:
 - `job-service/src/main/resources/db/migration/V17__add_schedule_transition_indexes_to_job_posts.sql`
 - `job-service/src/main/resources/db/migration/V18__create_job_close_requests.sql`
 - `job-service/src/main/resources/db/migration/V19__add_published_to_job_posts.sql`
+
+## 2026-10-17 - Application Admission Consumption
+
+Decision:
+- job-service marks an application admission `CONSUMED` from `ApplicationSubmitted` content (`admissionId`, `jobPostId`, `workerMemberId`, envelope `occurredAt`) through `JobApplicationAdmissionConsumptionService.consume`. The Redis Stream consumer is not connected yet.
+- `occurredAt` is the event occurrence time (when matching-service stored the application); the reception time is when job-service processes the event. Only the occurrence time is used. `consumedAt` is `occurredAt` truncated to microseconds, and the reception time is not stored on the admission.
+- An admission is consumed only when `occurredAt < expiresAt` (equal counts as expired). Both `RESERVED` and `EXPIRED` become `CONSUMED`. A later or equal submission and an already `CONSUMED` admission are left unchanged.
+- Lock the admission row by ID before validating. A missing `admissionId` or `occurredAt`, a missing admission, and a job post or worker mismatch (including null) are permanent rejections, checked before the `CONSUMED` state.
+- Return every definitive outcome as `AdmissionConsumptionResult` (`isRejected()` marks contract violations). Propagate database and lock failures as exceptions so the consumer retries. The call joins the caller's transaction.
+- The existing same-key admission retry contract is unchanged; a non-`RESERVED` or expired admission still returns `JOB-409-003`.
+
+Reason:
+- Deciding from the occurrence time keeps the result and `consumedAt` stable under delayed or repeated delivery and keeps `consumedAt < expiresAt` for every consumed admission.
+- Separating definitive results from transient exceptions keeps a database outage from being acknowledged as handled or as a permanent rejection.
+
+Implication for agents:
+- Do not compare against the current time or store the reception time as `consumedAt`.
+- When connecting the consumer, record the result and acknowledge only after the transaction commits; retry on exceptions.
+- Keep the admission-row-only lock. Issuance locks the job row and never locks existing admission rows, so lock order does not cross.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobApplicationAdmissionConsumptionService.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/AdmissionConsumptionResult.java`

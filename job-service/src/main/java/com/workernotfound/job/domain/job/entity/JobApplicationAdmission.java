@@ -107,4 +107,26 @@ public class JobApplicationAdmission extends BaseEntity {
         this.admittedAt = admittedAt;
         this.expiresAt = expiresAt;
     }
+
+    public boolean isConsumed() {
+        return status == ApplicationAdmissionStatus.CONSUMED;
+    }
+
+    // 만료 시각과 같은 시각의 지원은 만료 뒤의 지원으로 본다.
+    public boolean isSubmittedBeforeExpiry(LocalDateTime submittedAt) {
+        return submittedAt.isBefore(expiresAt);
+    }
+
+    // consumedAt은 지원이 저장된 시각(ApplicationSubmitted의 occurredAt)이다. 이벤트를 받아 처리한 시각이 아니다.
+    // 지원이 만료 전에 저장됐다면 만료 상태 정리가 먼저 끝났어도 사용 완료로 바꾼다.
+    public void consume(LocalDateTime submittedAt) {
+        if (isConsumed()) {
+            throw new IllegalStateException("이미 사용 완료된 지원 접수 승인입니다.");
+        }
+        if (!isSubmittedBeforeExpiry(submittedAt)) {
+            throw new IllegalStateException("만료 시각 이후에 제출된 지원으로 승인을 사용할 수 없습니다.");
+        }
+        this.status = ApplicationAdmissionStatus.CONSUMED;
+        this.consumedAt = submittedAt;
+    }
 }
