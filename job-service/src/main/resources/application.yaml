@@ -27,6 +27,13 @@ auth:
 job:
   application-admission:
     ttl: ${APPLICATION_ADMISSION_TTL:5m}
+  # matching-service ApplicationSubmitted를 job-service 전용 그룹(job-admission-consumption-v1)으로 소비한다.
+  admission-events:
+    enabled: ${JOB_ADMISSION_EVENTS_ENABLED:true}
+    stream: ${MATCHING_OUTBOX_STREAM_KEY:matching:domain-events}
+    poll-interval: ${JOB_ADMISSION_EVENTS_POLL_INTERVAL:1s}
+    initial-delay: ${JOB_ADMISSION_EVENTS_INITIAL_DELAY:0s}
+    batch-size: ${JOB_ADMISSION_EVENTS_BATCH_SIZE:100}
   matching-seat-reservation:
     ttl: ${MATCHING_SEAT_RESERVATION_TTL:10m}
     expiry-sweep-enabled: ${MATCHING_SEAT_RESERVATION_EXPIRY_SWEEP_ENABLED:true}

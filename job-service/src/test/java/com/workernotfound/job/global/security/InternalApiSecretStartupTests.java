@@ -76,6 +76,7 @@ class InternalApiSecretStartupTests {
                 "job.recruitment-completion.dispatch-enabled=false",
                 "job.recruitment-completion.dispatch-after-commit=false",
                 "job.recruitment-completion.reconcile.enabled=false",
+                "job.admission-events.enabled=false",
                 "spring.main.banner-mode=off",
                 "server.port=0",
                 "job.internal.secret=" + secret
