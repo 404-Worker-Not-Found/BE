@@ -12,6 +12,14 @@ spring:
     hibernate:
       ddl-auto: ${JOB_JPA_DDL_AUTO:none}
 
+  # matching-service 도메인 이벤트 Stream(matching:domain-events)이 있는 Redis다.
+  data:
+    redis:
+      host: ${MATCHING_REDIS_HOST:localhost}
+      port: ${MATCHING_REDIS_PORT:6381}
+      timeout: 2s
+      connect-timeout: 2s
+
 auth:
   jwt:
     secret: ${AUTH_JWT_SECRET}
