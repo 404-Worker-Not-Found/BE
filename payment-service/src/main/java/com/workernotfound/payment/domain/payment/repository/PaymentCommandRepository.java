@@ -1,5 +1,7 @@
 package com.workernotfound.payment.domain.payment.repository;
 
+import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -42,6 +44,15 @@ public class PaymentCommandRepository {
         matchingId);
   }
 
+  // 정산은 매칭 slot을 새로 만들지 않는다. slot이 없거나 활성 잠금이 없으면 빈 값이다.
+  public Optional<Long> findActivePaymentForUpdate(Long matchingId) {
+    List<Long> paymentIds = jdbc.queryForList(
+        "SELECT active_payment_id FROM payment_matching_slots WHERE matching_id = ? FOR UPDATE",
+        Long.class,
+        matchingId);
+    return paymentIds.isEmpty() ? Optional.empty() : Optional.ofNullable(paymentIds.get(0));
+  }
+
   public void activate(Long matchingId, Long paymentId) {
     jdbc.update(
         "UPDATE payment_matching_slots SET active_payment_id = ? WHERE matching_id = ?",
@@ -65,5 +76,13 @@ public class PaymentCommandRepository {
         previous,
         next,
         commandKey);
+  }
+
+  public void settlementHistory(Long paymentId, Long settlementId) {
+    jdbc.update(
+        "INSERT INTO payment_status_histories (payment_id, previous_status, next_status, settlement_id,"
+            + " occurred_at) VALUES (?, 'LOCKED', 'TRANSFERRED', ?, CURRENT_TIMESTAMP(6))",
+        paymentId,
+        settlementId);
   }
 }

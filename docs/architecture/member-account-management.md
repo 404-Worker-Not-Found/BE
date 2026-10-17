@@ -76,7 +76,7 @@ member-service의 `PATCH /api/members/internal/{memberId}/contact`는 X-Internal
 | job | CLOSED가 아닌 점주 공고, 유효 RESERVED 지원 승인, RESERVED 모집 자리, 미완료 주문/모집 완료 전달 |
 | matching | APPLIED 지원, PENDING 제안, PROCESSING/COMPENSATING 확정 Saga |
 | work | COMPLETED/CANCELED/FAILED/NO_SHOW가 아닌 근무 |
-| payment | FAILED/SUPERSEDED가 아닌 주문, LOCKED 결제, 잔액·잠금·확인 필요 상태의 예치금 |
+| payment | FAILED/SUPERSEDED가 아닌 주문, LOCKED 결제, 지급 완료(PAID) 전 정산, 잔액·잠금·확인 필요 상태의 예치금 |
 
 확정된 매칭과 선택된 지원은 work/payment의 종료 상태로 함께 검사한다.
 현재 최종 환불·정산 계약이 없으므로 DEPOSITED 주문은 탈퇴를 계속 차단한다.

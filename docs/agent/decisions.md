@@ -1591,3 +1591,36 @@ Related files:
 - `job-service/src/main/java/com/workernotfound/job/external/redis/ApplicationSubmittedEventParser.java`
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobAdmissionEventReceiptService.java`
 - `job-service/src/main/resources/db/migration/V20__create_job_admission_event_receipts.sql`
+
+## 2026-10-18 - Worker Settlement Policy and Foundation
+
+Decision:
+- The user confirmed the settlement policy for #105 on 2026-10-18:
+  - A worker's settlement amount is the full amount of the matching's payment lock. It is not adjusted by actual work time.
+  - A worker's wage is fixed when the matching lock is created; lock amounts can differ per worker.
+  - The planned extra-wage surge as the work date approaches is funded by depositing up to the maximum surge wage in advance. Unused deposit becomes refundable (#107). The surge itself is later job-service work.
+  - Platform fees and withholding deductions remain undecided. Reserve the full amount only, settle integer KRW only, and do not round fractional amounts. Fees and deductions must be decided before payout execution.
+  - Payout happens automatically after a waiting period following work completion. The default is 24 hours (`PAYMENT_SETTLEMENT_PAYOUT_DELAY`).
+  - The payout provider is Toss Payments payout service (지급대행). Existing Toss payment approval does not provide worker payouts. member-service owns payee bank account data, and payment-service will look it up at payout time.
+- Deposit invariant: deposited = available + locked + settlement reserved + settlement paid (+ refund reserved + refunded, added by #107). New locks and refunds may use only the available amount.
+- A settlement moves the full lock amount from locked to settlement reserved and changes the lock to `TRANSFERRED`. A `TRANSFERRED` lock stays the matching's active lock. A Saga release with a new key is rejected and persisted as `PAYMENT-409-007`; earlier command keys replay their original results.
+- Settlement states are `RESERVED`, `ON_HOLD`, `PAYOUT_REQUESTED`, `PAYOUT_FAILED`, `PAID`, with the transitions in `docs/architecture/settlement-design.md`. A deposit that is funding-blocked holds the settlement with `FUNDING_BLOCKED`.
+- `work_id` and `payment_lock_id` are each unique on settlements, independent of eventId deduplication. Same-work retries with the same facts return the original settlement; different facts are `WORK_CONFLICT`.
+- The V4 migration does not backfill settlements from existing locks.
+- Settlements before `PAID` block owner and worker withdrawal, so moving a lock out of `LOCKED` does not weaken the existing withdrawal barrier.
+
+Reason:
+- The lock amount is the employer-funded wage fixed at confirmation. Using it keeps payment-service from duplicating the job wage formula.
+- Without these rules, settled funds could return to the available balance through late Saga releases or be spent twice by settlement and refund.
+
+Implication for agents:
+- Do not call an external payout provider or fabricate payout success until fees, deductions, the payee account contract, and the payout request contract are decided.
+- Do not treat `WorkCompleted` as a payout command. The Stream consumer must store an eventId receipt with the reservation result in one transaction, ACK after commit, and retry on exceptions.
+- When #107 adds refunds, extend `PaymentDeposit.availableAmount()` and `ck_deposit_balance` with refund amounts instead of decreasing `deposited_amount`.
+- When #104 handles canceled or no-show work, release or refund only `LOCKED` locks; handle `TRANSFERRED` locks through settlement transitions.
+
+Related files:
+- `docs/architecture/settlement-design.md`
+- `docs/architecture/payment-lock-design.md`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/settlement/service/SettlementReservationService.java`
+- `payment-service/src/main/resources/db/migration/V4__create_payment_settlements.sql`
