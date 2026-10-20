@@ -22,10 +22,16 @@ import com.workernotfound.chat.support.IntegrationTestSupport;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -34,6 +40,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @AutoConfigureMockMvc
 class ChatReadPositionIntegrationTests extends IntegrationTestSupport {
@@ -47,6 +55,7 @@ class ChatReadPositionIntegrationTests extends IntegrationTestSupport {
   @Autowired ObjectMapper mapper;
   @Autowired JdbcTemplate jdbc;
   @Autowired MockMvc mvc;
+  @Autowired PlatformTransactionManager transactionManager;
 
   record Room(long id, long owner, long worker) {
     AuthenticatedMember ownerIdentity() { return new AuthenticatedMember(owner, owner, "OWNER"); }
@@ -182,6 +191,103 @@ class ChatReadPositionIntegrationTests extends IntegrationTestSupport {
         .andExpect(jsonPath("$.components.schemas.ChatReadPositionRequest.required[0]")
             .value("lastReadMessageId"));
     mvc.perform(get("/swagger-ui/index.html")).andExpect(status().isOk());
+  }
+
+  @Test
+  void concurrentDevicesCreateOnePositionAndConvergeToTheLargestConfirmedId() throws Exception {
+    var room = room(true);
+    long first = send(room, room.workerIdentity());
+    long second = send(room, room.workerIdentity());
+    long third = send(room, room.workerIdentity());
+    var tasks = new ArrayList<Callable<Long>>();
+    for (long messageId : List.of(third, first, second, first, third, second, third, first))
+      tasks.add(() -> reads.advanceReadPosition(room.ownerIdentity(), room.id(),
+          new ChatReadPositionRequest(messageId)).lastReadMessageId());
+
+    concurrently(tasks);
+
+    assertThat(positionCount(room)).isEqualTo(1);
+    var persisted = positions.findByChatRoomIdAndMemberId(room.id(), room.owner()).orElseThrow();
+    assertThat(persisted.getLastReadMessageId()).isEqualTo(third);
+    var retry = reads.advanceReadPosition(room.ownerIdentity(), room.id(), new ChatReadPositionRequest(first));
+    assertThat(retry.lastReadMessageId()).isEqualTo(third);
+    assertThat(retry.readAt()).isEqualTo(persisted.getReadAt());
+  }
+
+  @Test
+  void simultaneousParticipantUpdatesKeepSeparatePositions() throws Exception {
+    var room = room(true);
+    long first = send(room, room.ownerIdentity());
+    long second = send(room, room.workerIdentity());
+
+    concurrently(List.of(
+        () -> reads.advanceReadPosition(room.ownerIdentity(), room.id(), new ChatReadPositionRequest(second)),
+        () -> reads.advanceReadPosition(room.workerIdentity(), room.id(), new ChatReadPositionRequest(first))));
+
+    assertThat(positionCount(room)).isEqualTo(2);
+    assertThat(positions.findByChatRoomIdAndMemberId(room.id(), room.owner()).orElseThrow()
+        .getLastReadMessageId()).isEqualTo(second);
+    assertThat(positions.findByChatRoomIdAndMemberId(room.id(), room.worker()).orElseThrow()
+        .getLastReadMessageId()).isEqualTo(first);
+  }
+
+  @Test
+  void concurrentSendCannotMoveReadPositionPastTheExplicitlyConfirmedMessage() throws Exception {
+    var room = room(true);
+    long seen = send(room, room.workerIdentity());
+
+    var results = concurrently(List.<Callable<Long>>of(
+        () -> reads.advanceReadPosition(room.ownerIdentity(), room.id(), new ChatReadPositionRequest(seen))
+            .lastReadMessageId(),
+        () -> send(room, room.workerIdentity())));
+
+    assertThat(results.get(0)).isEqualTo(seen);
+    assertThat(results.get(1)).isGreaterThan(seen);
+    assertThat(positions.findByChatRoomIdAndMemberId(room.id(), room.owner()).orElseThrow()
+        .getLastReadMessageId()).isEqualTo(seen);
+    assertThat(positions.findByChatRoomIdAndMemberId(room.id(), room.worker())).isEmpty();
+  }
+
+  @Test
+  void rollbackLeavesNeitherAnInitialPositionNorAPartialAdvance() {
+    var room = room(true);
+    long first = send(room, room.workerIdentity());
+    long second = send(room, room.workerIdentity());
+    var transactions = new TransactionTemplate(transactionManager);
+
+    transactions.executeWithoutResult(status -> {
+      reads.advanceReadPosition(room.ownerIdentity(), room.id(), new ChatReadPositionRequest(first));
+      status.setRollbackOnly();
+    });
+    assertThat(positionCount(room)).isZero();
+    var initial = reads.advanceReadPosition(room.ownerIdentity(), room.id(), new ChatReadPositionRequest(first));
+    transactions.executeWithoutResult(status -> {
+      reads.advanceReadPosition(room.ownerIdentity(), room.id(), new ChatReadPositionRequest(second));
+      status.setRollbackOnly();
+    });
+
+    var persisted = positions.findByChatRoomIdAndMemberId(room.id(), room.owner()).orElseThrow();
+    assertThat(persisted.getLastReadMessageId()).isEqualTo(first);
+    assertThat(persisted.getReadAt()).isEqualTo(initial.readAt());
+  }
+
+  <T> List<T> concurrently(List<Callable<T>> tasks) throws Exception {
+    var executor = Executors.newFixedThreadPool(tasks.size());
+    var start = new CountDownLatch(1);
+    try {
+      var futures = new ArrayList<Future<T>>();
+      for (var task : tasks) futures.add(executor.submit(() -> {
+        if (!start.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("동시 실행 시작 시간 초과");
+        return task.call();
+      }));
+      start.countDown();
+      var results = new ArrayList<T>();
+      for (var future : futures) results.add(future.get(20, TimeUnit.SECONDS));
+      return results;
+    } finally {
+      start.countDown();
+      executor.shutdownNow();
+    }
   }
 
   void assertHidden(Room room, String auth, long messageId) throws Exception {
