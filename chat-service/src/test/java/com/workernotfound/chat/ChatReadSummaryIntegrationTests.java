@@ -21,6 +21,7 @@ import com.workernotfound.chat.domain.chat.service.ChatRoomQueryService;
 import com.workernotfound.chat.global.account.AccountGateService;
 import com.workernotfound.chat.global.security.AuthenticatedMember;
 import com.workernotfound.chat.support.IntegrationTestSupport;
+import jakarta.persistence.EntityManagerFactory;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -28,15 +29,21 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
+import org.hibernate.SessionFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @AutoConfigureMockMvc
 class ChatReadSummaryIntegrationTests extends IntegrationTestSupport {
@@ -51,6 +58,8 @@ class ChatReadSummaryIntegrationTests extends IntegrationTestSupport {
   @Autowired AccountGateService gates;
   @Autowired ObjectMapper mapper;
   @Autowired MockMvc mvc;
+  @Autowired EntityManagerFactory entityManagerFactory;
+  @Autowired PlatformTransactionManager transactionManager;
 
   record Room(long id, long owner, long worker) {
     AuthenticatedMember ownerIdentity() { return new AuthenticatedMember(owner, owner, "OWNER"); }
@@ -226,6 +235,91 @@ class ChatReadSummaryIntegrationTests extends IntegrationTestSupport {
         .andExpect(jsonPath("$.components.schemas.ChatRoomDetailResponse.properties.otherReadPosition").exists())
         .andExpect(jsonPath("$.components.schemas.ChatRoomDetailResponse.properties.unreadCount.type").value("integer"));
     mvc.perform(get("/swagger-ui/index.html")).andExpect(status().isOk());
+  }
+
+  @Test
+  void listQueryCountDoesNotGrowWithTheNumberOfRoomsAndEmptyPagesSkipAggregation() {
+    long owner = IDS.incrementAndGet();
+    Room last = null;
+    for (int i = 0; i < 6; i++) {
+      last = room(owner);
+      send(last, last.workerIdentity());
+    }
+    var identity = last.ownerIdentity();
+    var statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+    statistics.setStatisticsEnabled(true);
+    try {
+      for (int size : List.of(1, 5)) {
+        statistics.clear();
+        var page = queries.getChatRooms(identity, 0, size);
+        assertThat(page.content()).hasSize(size).allSatisfy(room -> assertThat(room.unreadCount()).isEqualTo(1));
+        assertThat(page.totalElements()).isEqualTo(6);
+        // 페이지 조회·전체 건수·읽음 집계의 3개 쿼리이며 반환하는 방 개수에 의존하지 않는다.
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(3);
+      }
+      statistics.clear();
+      assertThat(queries.getChatRooms(new AuthenticatedMember(1L, IDS.incrementAndGet(), "OWNER"), 0, 20)
+          .content()).isEmpty();
+      assertThat(statistics.getPrepareStatementCount()).isEqualTo(1);
+      statistics.clear();
+      assertThat(queries.getChatRoom(identity, last.id()).unreadCount()).isEqualTo(1);
+      assertThat(statistics.getPrepareStatementCount()).isEqualTo(2);
+    } finally {
+      statistics.setStatisticsEnabled(false);
+      statistics.clear();
+    }
+  }
+
+  @Test
+  void committedReadsAndMessagesAreRecoveredByFreshQueriesWithoutImplicitAcknowledgement() {
+    var room = room(IDS.incrementAndGet());
+    long first = send(room, room.workerIdentity());
+    assertThat(queries.getChatRoom(room.ownerIdentity(), room.id()).unreadCount()).isEqualTo(1);
+    reads.advanceReadPosition(room.ownerIdentity(), room.id(), new ChatReadPositionRequest(first));
+    assertThat(queries.getChatRoom(room.ownerIdentity(), room.id()).unreadCount()).isZero();
+    send(room, room.workerIdentity());
+    long ownMessage = send(room, room.ownerIdentity());
+
+    var recovered = queries.getChatRoom(room.ownerIdentity(), room.id());
+    assertThat(recovered.myReadPosition().lastReadMessageId()).isEqualTo(first);
+    assertThat(recovered.otherReadPosition()).isNull();
+    assertThat(recovered.unreadCount()).isEqualTo(1);
+    assertThat(queries.getChatRooms(room.ownerIdentity(), 0, 20).content()).containsExactly(recovered);
+    reads.advanceReadPosition(room.ownerIdentity(), room.id(), new ChatReadPositionRequest(first));
+    assertThat(queries.getChatRoom(room.ownerIdentity(), room.id())).isEqualTo(recovered);
+    reads.advanceReadPosition(room.ownerIdentity(), room.id(), new ChatReadPositionRequest(ownMessage));
+    assertThat(queries.getChatRoom(room.ownerIdentity(), room.id()).unreadCount()).isZero();
+  }
+
+  @Test
+  void readSnapshotRemainsConsistentWhileAnotherTransactionAdvancesPositionsAndSends() {
+    var room = room(IDS.incrementAndGet());
+    long first = send(room, room.workerIdentity());
+    var transaction = new TransactionTemplate(transactionManager);
+    transaction.setReadOnly(true);
+    var writer = Executors.newSingleThreadExecutor();
+    try {
+      transaction.executeWithoutResult(status -> {
+        var before = queries.getChatRoom(room.ownerIdentity(), room.id());
+        assertThat(before.myReadPosition()).isNull();
+        assertThat(before.otherReadPosition()).isNull();
+        assertThat(before.unreadCount()).isEqualTo(1);
+        CompletableFuture.runAsync(() -> {
+          reads.advanceReadPosition(room.ownerIdentity(), room.id(), new ChatReadPositionRequest(first));
+          reads.advanceReadPosition(room.workerIdentity(), room.id(), new ChatReadPositionRequest(first));
+          send(room, room.workerIdentity());
+        }, writer).orTimeout(10, TimeUnit.SECONDS).join();
+
+        assertThat(queries.getChatRoom(room.ownerIdentity(), room.id())).isEqualTo(before);
+        assertThat(queries.getChatRooms(room.ownerIdentity(), 0, 20).content()).containsExactly(before);
+      });
+    } finally {
+      writer.shutdownNow();
+    }
+    var after = queries.getChatRoom(room.ownerIdentity(), room.id());
+    assertThat(after.myReadPosition().lastReadMessageId()).isEqualTo(first);
+    assertThat(after.otherReadPosition().lastReadMessageId()).isEqualTo(first);
+    assertThat(after.unreadCount()).isEqualTo(1);
   }
 
   Room room(long owner) {
