@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -46,6 +47,15 @@ import org.springframework.transaction.support.TransactionTemplate;
 @AutoConfigureMockMvc
 class ChatReadPositionIntegrationTests extends IntegrationTestSupport {
   private static final AtomicLong IDS = new AtomicLong(4_000_000);
+  private static final String ROOM_LOCK_WAIT = """
+      SELECT 1
+      FROM performance_schema.data_locks requested
+      JOIN performance_schema.threads requester ON requester.THREAD_ID = requested.THREAD_ID
+      WHERE requester.PROCESSLIST_ID = ?
+        AND requested.OBJECT_NAME = 'chat_rooms'
+        AND requested.LOCK_TYPE = 'RECORD'
+        AND requested.LOCK_STATUS = 'WAITING'
+      """;
   @Autowired ChatRoomApplicationService rooms;
   @Autowired ChatConfirmationService confirmations;
   @Autowired ChatMessageService messages;
@@ -249,6 +259,38 @@ class ChatReadPositionIntegrationTests extends IntegrationTestSupport {
   }
 
   @Test
+  void waitsForTheRoomLockOfAnInFlightSendAndAcceptsItsMessageAfterCommit() throws Exception {
+    var room = room(true);
+    var stored = new CompletableFuture<Long>();
+    var readerConnection = new CompletableFuture<Long>();
+    var commitSend = new CountDownLatch(1);
+    var executor = Executors.newFixedThreadPool(2);
+    try {
+      var sender = executor.submit(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+        stored.complete(send(room, room.workerIdentity()));
+        awaitLatch(commitSend);
+      }));
+      long messageId = stored.get(10, TimeUnit.SECONDS);
+      var reader = executor.submit(() -> new TransactionTemplate(transactionManager).execute(status -> {
+        readerConnection.complete(jdbc.queryForObject("SELECT CONNECTION_ID()", Long.class));
+        return reads.advanceReadPosition(room.ownerIdentity(), room.id(), new ChatReadPositionRequest(messageId));
+      }));
+
+      // 방 잠금 전에 메시지를 조회하면 커밋 전 메시지를 찾지 못해 대기 없이 CHAT-404-002로 끝난다.
+      awaitRoomLockWait(readerConnection.get(10, TimeUnit.SECONDS), reader);
+      commitSend.countDown();
+      sender.get(20, TimeUnit.SECONDS);
+
+      assertThat(reader.get(20, TimeUnit.SECONDS).lastReadMessageId()).isEqualTo(messageId);
+      assertThat(positions.findByChatRoomIdAndMemberId(room.id(), room.owner()).orElseThrow()
+          .getLastReadMessageId()).isEqualTo(messageId);
+    } finally {
+      commitSend.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
   void rollbackLeavesNeitherAnInitialPositionNorAPartialAdvance() {
     var room = room(true);
     long first = send(room, room.workerIdentity());
@@ -290,6 +332,30 @@ class ChatReadPositionIntegrationTests extends IntegrationTestSupport {
     }
   }
 
+  void awaitRoomLockWait(long connectionId, Future<?> reader) throws Exception {
+    try (var observer = openLockObserverConnection(); var query = observer.prepareStatement(ROOM_LOCK_WAIT)) {
+      query.setLong(1, connectionId);
+      long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+      while (System.nanoTime() < deadline) {
+        assertThat(reader.isDone()).as("방 잠금을 기다리기 전에 읽음 갱신이 끝나면 안 된다").isFalse();
+        try (var waiting = query.executeQuery()) {
+          if (waiting.next()) return;
+        }
+        Thread.sleep(50);
+      }
+      throw new AssertionError("읽음 갱신이 전송 트랜잭션의 방 행 잠금을 기다려야 한다");
+    }
+  }
+
+  void awaitLatch(CountDownLatch latch) {
+    try {
+      if (!latch.await(30, TimeUnit.SECONDS)) throw new IllegalStateException("경합 테스트 대기 시간 초과");
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("경합 테스트 대기가 중단되었습니다.", exception);
+    }
+  }
+
   void assertHidden(Room room, String auth, long messageId) throws Exception {
     mvc.perform(put(path(room)).header("Authorization", auth)
         .contentType("application/json").content(body(messageId)))
@@ -301,7 +367,8 @@ class ChatReadPositionIntegrationTests extends IntegrationTestSupport {
     mvc.perform(put(path(room)).header("Authorization", token(room.owner(), "OWNER"))
         .contentType("application/json").content(body(messageId))).andExpect(status().isUnauthorized());
     assertThatThrownBy(() -> reads.advanceReadPosition(room.ownerIdentity(), room.id(),
-        new ChatReadPositionRequest(messageId))).isInstanceOf(BusinessException.class);
+        new ChatReadPositionRequest(messageId))).isInstanceOfSatisfying(BusinessException.class, exception ->
+            assertThat(exception.getErrorCode().getCode()).isEqualTo("GLOBAL-403-001"));
   }
 
   Room room(boolean isConfirmed) {
