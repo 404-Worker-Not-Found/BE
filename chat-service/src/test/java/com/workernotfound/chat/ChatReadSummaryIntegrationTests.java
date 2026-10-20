@@ -5,7 +5,6 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workernotfound.chat.domain.chat.dto.request.ChatMessageRequest;
 import com.workernotfound.chat.domain.chat.dto.request.ChatReadPositionRequest;
 import com.workernotfound.chat.domain.chat.dto.request.ChatRoomRequest;
@@ -22,12 +21,8 @@ import com.workernotfound.chat.global.account.AccountGateService;
 import com.workernotfound.chat.global.security.AuthenticatedMember;
 import com.workernotfound.chat.support.IntegrationTestSupport;
 import jakarta.persistence.EntityManagerFactory;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
@@ -35,8 +30,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.hibernate.SessionFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,7 +49,6 @@ class ChatReadSummaryIntegrationTests extends IntegrationTestSupport {
   @Autowired ChatReadSummaryRepository summaries;
   @Autowired ChatRoomQueryService queries;
   @Autowired AccountGateService gates;
-  @Autowired ObjectMapper mapper;
   @Autowired MockMvc mvc;
   @Autowired EntityManagerFactory entityManagerFactory;
   @Autowired PlatformTransactionManager transactionManager;
@@ -134,11 +126,7 @@ class ChatReadSummaryIntegrationTests extends IntegrationTestSupport {
   @Test
   void ownMessagesRemainExcludedEvenWhenProvisionedParticipantIdsCoincide() {
     long id = IDS.addAndGet(10);
-    var request = new ChatRoomRequest(id, id + 1, id + 2, id + 2, "work-" + id);
-    long roomId = Long.parseLong(rooms.create(UUID.randomUUID().toString(), request).chatRoomId());
-    confirmations.confirm(new MatchConfirmedEvent(UUID.randomUUID().toString(), "MatchConfirmed",
-        LocalDateTime.now(), id, 1L, 1, id, Long.toString(roomId), request.workId(),
-        request.jobPostId(), request.ownerMemberId(), request.workerMemberId()));
+    long roomId = createRoom(new ChatRoomRequest(id, id + 1, id + 2, id + 2, "work-" + id), true);
     var room = new Room(roomId, id + 2, id + 2);
     send(room, room.ownerIdentity());
 
@@ -342,29 +330,20 @@ class ChatReadSummaryIntegrationTests extends IntegrationTestSupport {
 
   Room room(long owner, boolean isConfirmed) {
     long id = IDS.addAndGet(10);
-    var request = new ChatRoomRequest(id, id + 1, owner, id + 2, "work-" + id);
+    long roomId = createRoom(new ChatRoomRequest(id, id + 1, owner, id + 2, "work-" + id), isConfirmed);
+    return new Room(roomId, owner, id + 2);
+  }
+
+  long createRoom(ChatRoomRequest request, boolean isConfirmed) {
     long roomId = Long.parseLong(rooms.create(UUID.randomUUID().toString(), request).chatRoomId());
     if (isConfirmed) confirmations.confirm(new MatchConfirmedEvent(UUID.randomUUID().toString(), "MatchConfirmed",
-        LocalDateTime.now(), id, 1L, 1, id, Long.toString(roomId), request.workId(),
-        request.jobPostId(), request.ownerMemberId(), request.workerMemberId()));
-    return new Room(roomId, owner, id + 2);
+        LocalDateTime.now(), request.matchingId(), 1L, 1, request.matchingId(), Long.toString(roomId),
+        request.workId(), request.jobPostId(), request.ownerMemberId(), request.workerMemberId()));
+    return roomId;
   }
 
   long send(Room room, AuthenticatedMember sender) {
     return messages.send(sender, room.id(), new ChatMessageRequest(UUID.randomUUID().toString(), "메시지"))
         .messageId();
-  }
-
-  String token(long memberId, String role) throws Exception {
-    var encoder = Base64.getUrlEncoder().withoutPadding();
-    String header = encoder.encodeToString(
-        "{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
-    String payload = mapper.writeValueAsString(Map.of("authAccountId", memberId,
-        "memberId", memberId, "role", role, "exp", Instant.now().plusSeconds(300).getEpochSecond()));
-    String unsigned = header + "." + encoder.encodeToString(payload.getBytes(StandardCharsets.UTF_8));
-    Mac mac = Mac.getInstance("HmacSHA256");
-    mac.init(new SecretKeySpec("chat-test-jwt-secret-for-integration-only".getBytes(StandardCharsets.UTF_8),
-        "HmacSHA256"));
-    return "Bearer " + unsigned + "." + encoder.encodeToString(mac.doFinal(unsigned.getBytes(StandardCharsets.UTF_8)));
   }
 }
