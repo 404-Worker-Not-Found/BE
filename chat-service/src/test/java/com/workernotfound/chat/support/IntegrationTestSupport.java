@@ -1,5 +1,8 @@
 package com.workernotfound.chat.support;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -28,5 +31,10 @@ public abstract class IntegrationTestSupport {
     registry.add("chat.jwt.secret", () -> "chat-test-jwt-secret-for-integration-only");
     registry.add("chat.events.initial-delay-ms", () -> "3600000");
     registry.add("chat.internal.secret", () -> "chat-test-internal-secret");
+  }
+
+  // performance_schema 잠금 정보는 애플리케이션 계정 권한 밖이므로 관찰 전용 root 연결을 쓴다.
+  protected static Connection openLockObserverConnection() throws SQLException {
+    return DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
   }
 }

@@ -2,7 +2,7 @@
 
 ## 범위
 
-`job-service`는 공고와 업종 카테고리의 원본을 소유한다. 현재는 점주의 공고 비공개(`PAYMENT_PENDING`) 등록과 payment-service 결제 주문 생성 연동, 점주의 결제 주문 조회, 공고 상세·목록 조회, 점주 본인 공고 목록, `matching-service`가 지원 저장 전에 호출하는 지원 접수 승인 내부 API와 matching Redis Stream의 `ApplicationSubmitted` 소비에 따른 승인 사용 완료 처리, 매칭 확정 Saga가 호출하는 모집 자리 예약·확정·반환 내부 API와 만료 예약 회수, 1인 예정 급여 계산, 확정 인원 기준의 모집 완료 전이와 matching-service 모집 완료 알림, payment-service 예치 상태(`funding-status`) 수신에 따른 `PAYMENT_PENDING → OPEN` 공개와 예치 차단, 결제 대기 공고의 결제 조건 변경과 실패 주문 재결제(주문 교체), 환불 검토 대상 기록, 점주 수동 마감과 지원 마감·근무 시작 경과에 따른 자동 상태 전이를 제공한다. 공개 이후의 공고 수정·재모집, 재오픈, 공고 삭제, 마감 공고의 미결제 주문 정리와 남은 예치 환불, 실제 환불·정산, 확정된 매칭·근무의 자동 취소는 후속 작업이다.
+`job-service`는 공고와 업종 카테고리의 원본을 소유한다. 현재는 점주의 공고 비공개(`PAYMENT_PENDING`) 등록과 payment-service 결제 주문 생성 연동, 점주의 결제 주문 조회, 공고 상세·목록 조회, 점주 본인 공고 목록, `matching-service`가 지원 저장 전에 호출하는 지원 접수 승인 내부 API와 matching Redis Stream의 `ApplicationSubmitted` 소비에 따른 승인 사용 완료 처리와 사용이 확인되지 않은 승인의 만료 처리, 매칭 확정 Saga가 호출하는 모집 자리 예약·확정·반환 내부 API와 만료 예약 회수, 1인 예정 급여 계산, 확정 인원 기준의 모집 완료 전이와 matching-service 모집 완료 알림, payment-service 예치 상태(`funding-status`) 수신에 따른 `PAYMENT_PENDING → OPEN` 공개와 예치 차단, 결제 대기 공고의 결제 조건 변경과 실패 주문 재결제(주문 교체), 환불 검토 대상 기록, 점주 수동 마감과 지원 마감·근무 시작 경과에 따른 자동 상태 전이를 제공한다. 공개 이후의 공고 수정·재모집, 재오픈, 공고 삭제, 마감 공고의 미결제 주문 정리와 남은 예치 환불, 실제 환불·정산, 확정된 매칭·근무의 자동 취소는 후속 작업이다.
 
 ## 공개 API
 
@@ -38,7 +38,7 @@
 - 기본 페이지는 0, 크기는 20, 최대 크기는 100이다.
 - 후보 공고를 모두 조회한 뒤 애플리케이션 메모리에서 필터·정렬·페이지 처리한다. 공고 수가 늘어나면 DB 조건 조회와 공간 인덱스로 바꿔야 한다.
 
-상세 조회의 `applicantCount`는 원본이 `matching-service`에 있고 조회 계약이 없으므로 현재 `null`이다.
+상세 조회의 `applicantCount`는 원본이 `matching-service`에 있고 지원자 수 projection이 아직 없으므로 현재 `null`이다. 구현 기준은 [지원자 수 projection 기준](#지원자-수-projection-기준미구현)에 정리했다.
 
 상세 조회 접근 규칙:
 
@@ -57,7 +57,7 @@
 - 조회 방식: 점주·상태 조건과 정렬·페이지를 DB 쿼리로 처리한다(`idx_job_posts_owner_created`). 공고 검색처럼 전체를 읽고 메모리에서 거르지 않는다.
 - 응답: `page`, `size`, `totalCount`, `totalPages`, `jobs`. 카드는 `id`, `storeName`, `title`, `status`, `isFundingBlocked`, `workDate`, `startTime`, `endTime`, `isEndTimeNextDay`, `applicationDeadline`, `recruitCount`, `confirmedCount`, `applicantCount`다.
 - `confirmedCount`는 확정(`CONSUMED`)된 모집 자리 예약 수다. `RESERVED`·`RELEASED`·`EXPIRED`는 세지 않는다. 페이지에 담긴 공고 ID로 묶어 한 번의 집계 쿼리로 센다(공고별 쿼리 없음).
-- `applicantCount`는 상세 조회와 같이 지원자 수 조회 계약이 없어 `null`이다.
+- `applicantCount`는 상세 조회와 같이 지원자 수 projection이 없어 `null`이다([지원자 수 projection 기준](#지원자-수-projection-기준미구현)).
 - 결제 진행 상태는 넣지 않는다. 점주는 공고별 [점주 결제 주문 조회](#점주-결제-주문-조회)를 사용한다.
 
 ## 내부 API
@@ -86,6 +86,23 @@
 
 계약의 세부 배경은 [지원 도메인 설계](./matching-application-design.md)의 공고 담당 범위 계약을 따른다.
 
+### 지원 접수 승인 상태 전환
+
+승인 상태는 `RESERVED`, `CONSUMED`, `EXPIRED`다. 최종 상태는 `CONSUMED`뿐이며 `EXPIRED`는 만료 전에 저장된 지원의 이벤트가 늦게 도착하면 `CONSUMED`로 바뀔 수 있다.
+
+| 현재 상태 | 사건 | 다음 상태 | 조건과 기록 |
+| --- | --- | --- | --- |
+| 없음 | 승인 발급 | `RESERVED` | 공고 `OPEN`, 예치 차단 아님, 지원 마감 전. `expiresAt = admittedAt + APPLICATION_ADMISSION_TTL` |
+| `RESERVED` | `ApplicationSubmitted` | `CONSUMED` | `occurredAt < expiresAt`. `consumedAt = occurredAt`(마이크로초 절삭) |
+| `RESERVED` | 만료 배치 | `EXPIRED` | 잠금 뒤 다시 읽은 현재 시각에서 `expiresAt <= now` |
+| `EXPIRED` | 늦게 도착한 `ApplicationSubmitted` | `CONSUMED` | `occurredAt < expiresAt`. `consumedAt = occurredAt` |
+| `RESERVED`·`EXPIRED` | `ApplicationSubmitted` | 변경 없음 | `occurredAt >= expiresAt`(`SUBMITTED_AFTER_EXPIRY`) |
+| `CONSUMED` | 이벤트 재전달·다른 이벤트·만료 배치 | 변경 없음 | `consumedAt`을 바꾸지 않는다(`ALREADY_CONSUMED`, 배치는 대상 아님) |
+
+- `consumedAt`은 지원이 저장된 시각(이벤트 `occurredAt`)이며 이벤트 수신 시각이나 배치 실행 시각이 아니다. 따라서 `CONSUMED` 승인은 어떤 처리 순서에서도 `consumedAt < expiresAt`이다.
+- `EXPIRED`로 바뀐 시각은 별도 컬럼에 저장하지 않는다(`updated_at`이 마지막 변경 시각이다). `EXPIRED → CONSUMED` 뒤에도 `consumedAt`은 이벤트 발생 시각이다.
+- 같은 키 재요청은 상태가 `RESERVED`이고 현재 시각이 `expiresAt` 전일 때만 기존 승인을 돌려준다. 배치가 아직 돌지 않은 만료 `RESERVED`도 `JOB-409-003`이므로 배치 지연은 발급 계약에 영향을 주지 않는다.
+
 ### 지원 접수 승인 사용 완료
 
 matching-service의 `ApplicationSubmitted`가 전달하는 지원 저장 사실로 승인을 `CONSUMED`로 바꾼다. 처리 단위는 `JobApplicationAdmissionConsumptionService.consume`이며 입력은 이벤트의 `admissionId`, `jobPostId`, `workerMemberId`와 envelope의 `occurredAt`이다. [ApplicationSubmitted 이벤트 소비](#applicationsubmitted-이벤트-소비)의 Redis Stream 소비자가 호출한다.
@@ -111,6 +128,32 @@ matching-service의 `ApplicationSubmitted`가 전달하는 지원 저장 사실�
 - 중복·동시 전달: 커밋 뒤 ACK가 실패하거나 프로세스가 멈춰 같은 레코드가 다시 오면 수신 기록으로 중복 판단해 ACK한다. 같은 eventId가 동시에 처리되면 늦은 처리는 승인 행 잠금을 기다린 뒤 `ALREADY_CONSUMED`를 얻고 수신 기록의 eventId 유일 제약 위반으로 롤백되어 pending으로 남고, 다음 재수신에서 중복으로 ACK된다. 승인 상태와 `consumedAt`은 처음 커밋한 처리만 정한다.
 - 발생 시각의 실제 값: matching-service는 지원의 `appliedAt`에 job-service 승인 응답의 `admittedAt`을 넣고 이를 `ApplicationSubmitted`의 `occurredAt`으로 발행한다. 지원을 실제로 저장한 시각이 아니므로 현재 발행 경로에서는 `occurredAt < expiresAt`이 항상 성립하고 `SUBMITTED_AFTER_EXPIRY`는 나오지 않는다. 만료 뒤 지원 저장은 matching-service가 저장 전에 `expiresAt`을 현재 시각과 비교하는 검사로만 막으며, 그 검사와 저장 커밋 사이에 만료된 지원도 `CONSUMED`가 된다. 사용 완료 판단 규칙은 이번 범위에서 바꾸지 않았다.
 - 설정: `JOB_ADMISSION_EVENTS_ENABLED`(기본 true), `JOB_ADMISSION_EVENTS_INITIAL_DELAY`(기본 0초). Redis는 matching-service와 같은 `MATCHING_REDIS_HOST`·`MATCHING_REDIS_PORT`(로컬 `matching-redis` 6381)를 쓴다.
+
+### 지원 접수 승인 만료
+
+`JobApplicationAdmissionExpiryScheduler`가 `APPLICATION_ADMISSION_EXPIRY_INTERVAL`(기본 1분, 첫 실행 `APPLICATION_ADMISSION_EXPIRY_INITIAL_DELAY` 기본 30초)마다 `JobApplicationAdmissionExpiryReconciler`를 실행한다. 사용이 확인되지 않은 채 만료 시각이 지난 `RESERVED` 승인만 `EXPIRED`로 바꾼다.
+
+- 대상 조회: 잠그지 않고 `status=RESERVED`, `expiresAt <= now`인 승인 ID만 ID 순으로 최대 `APPLICATION_ADMISSION_EXPIRY_BATCH_SIZE`(기본 100)개 고른다(V21 `idx_job_application_admissions_status_expires`). `now`는 `Clock` 빈의 현재 시각을 마이크로초로 절삭한 값이라 MySQL이 나노초 인자를 반올림해 경계를 앞당기지 않는다.
+- 범위 조건 `UPDATE`를 쓰지 않는다. 보조 인덱스 범위 갱신의 gap 잠금이 승인 발급 `INSERT`와 엇갈리지 않도록, 승인마다 별도 트랜잭션에서 기본 키로 `PESSIMISTIC_WRITE` 잠금을 잡고 현재 시각을 다시 읽어 `RESERVED`이고 `expiresAt <= now`일 때만 바꾼다. 경계 시각과 같으면 만료다.
+- 잠금: `ApplicationSubmitted` 소비와 같은 승인 행 잠금만 쓰고 공고 행은 잠그지 않는다. 소비와 만료는 커밋 순서로 직렬화된다. 소비가 먼저 커밋하면 배치는 `CONSUMED`를 보고 바꾸지 않고, 배치가 먼저 커밋하면 소비는 `EXPIRED`를 보고 만료 전 지원이면 `CONSUMED`로 바꾼다. 승인 발급은 공고 행을 잠근 뒤 새 승인을 저장할 뿐 기존 승인 행을 잠그지 않으므로 잠금 순서가 엇갈리지 않는다.
+- 실패와 재시도: 한 승인의 실패(DB 오류, 잠금 대기 초과)는 경고 로그(`admissionId`, 예외 종류)만 남기고 다음 승인을 계속 처리한다. 트랜잭션이 승인 단위라 실패한 승인만 롤백되어 `RESERVED`로 남는다. 별도 재시도 횟수나 실패 기록 없이 다음 순회에서 다시 대상이 된다.
+- 조회 위치: 순회 시작 시 승인 테이블의 최대 ID를 상한으로 고정하고, 직전 배치의 마지막 ID 다음부터 그 상한까지만 찾는다. 상한에 도달하거나 배치가 덜 차면 다음 실행은 처음부터 새 상한으로 순회한다. 새 만료 승인이 계속 유입되어도 순회가 끝나므로 앞쪽 실패 승인을 다시 시도하며, 실패한 승인도 조회 위치를 넘기므로 뒤 승인 처리를 막지 않는다. 조회 위치와 상한은 인스턴스 메모리에 두고 같은 인스턴스의 실행은 직렬화한다. 재시작하면 처음부터 찾는다.
+- 반복·동시 실행: 잠금 뒤 상태 조건으로 다시 판단하므로 같은 승인은 한 번만 바뀐다. 여러 인스턴스가 함께 실행해도 늦은 쪽은 `EXPIRED`를 보고 건너뛴다.
+- 실행 경로는 스케줄러뿐이다. 승인 발급·소비 경로에서 만료 승인을 따로 정리하지 않는다. `APPLICATION_ADMISSION_EXPIRY_ENABLED=false`로 끌 수 있으며, 꺼져 있어도 발급 계약과 소비 판단은 상태가 아니라 `expiresAt`으로 결정되므로 결과가 바뀌지 않는다.
+
+## 지원자 수 projection 기준(미구현)
+
+공고 상세와 점주 본인 공고 목록의 `applicantCount`는 matching-service 지원 원장의 projection으로 채울 예정이다. 이번 범위에서는 구현하지 않고 두 응답 모두 `null`을 유지한다. 구현은 별도 이슈로 진행하며 아래 기준을 따른다. 지원 접수 승인(`job_application_admissions`)은 지원 저장 전에 발급되고 만료·사용 여부만 나타내므로 지원자 수의 근거로 쓰지 않는다.
+
+- 세는 지원: 공고별 현재 상태가 `APPLIED`인 지원 수다. matching-service 점주 지원자 목록의 활성 지원자와 같은 범위다. `CANCELED`·`REJECTED`는 세지 않고, `SELECTED`는 확정 인원(`confirmedCount`, `CONSUMED` 자리 수)에서 다루므로 세지 않는다.
+- 재지원: 현재 정책은 같은 공고에 한 회원이 한 번만 지원할 수 있고(`UNIQUE(job_post_id, worker_member_id)`) 취소 뒤 재지원도 막으므로 지원 수와 회원 수가 같다. 재지원이 허용되면 matching-service는 기존 지원을 되살리지 않고 새 `applicationId`로 저장하므로, projection은 계속 지원(`applicationId`) 단위로 현재 상태를 보관한다. 한 회원의 활성 지원이 하나뿐이라는 보장은 matching-service가 맡는다.
+- 입력 이벤트: `ApplicationSubmitted`·`ApplicationCanceled`·`ApplicationSelected`·`ApplicationRejected` v1. 승인 사용 완료 그룹(`job-admission-consumption-v1`)과 별도의 consumer group을 두어 한쪽의 pending이 다른 쪽을 막지 않게 한다. payload의 `applicationId`, `jobPostId`, `status`와 envelope의 `revision`, `eventId`를 쓴다.
+- 최신 revision 판별: 지원별 `revision`은 matching-service `applications.revision`이며 최초 지원이 1이고 상태가 바뀔 때마다 1 증가한다. projection은 지원별 행(`applicationId` 기준, 공고 ID·현재 상태·마지막 반영 `revision`·`eventId`)을 두고, 저장된 `revision`보다 큰 이벤트만 최신으로 본다. `eventId`는 같은 이벤트의 재전달을 판별하는 데만 쓰고 순서 판단에 쓰지 않는다. 이벤트 `occurredAt`과 수신 시각도 순서 기준이 아니다.
+- 중복·역순: 지원 행을 잠근 트랜잭션에서 `revision`이 더 크면 상태와 `revision`을 바꾸고, 같으면 바꾸지 않으며, 작으면 무시한다. 같은 `revision`에 다른 상태가 오면 계약 위반이므로 기록하지 않고 pending으로 남긴다. 행이 없을 때 처음 도착한 이벤트가 `revision` 2 이상이어도 그 상태로 행을 만들고, 뒤늦게 온 `revision` 1(`ApplicationSubmitted`)은 무시한다. 따라서 `ApplicationCanceled`가 먼저 처리돼도 과거 `APPLIED`가 최신 상태나 집계를 덮어쓰지 않는다. relay가 지원별 revision 순서로 발행해도 pending 복구·재전달로 소비 순서가 바뀔 수 있으므로 이 검사를 생략하지 않는다.
+- 집계 반영: 공고별 수는 지원 행에서 `(job_post_id, status)` 인덱스로 세거나, 같은 트랜잭션에서 상태가 `APPLIED` 경계를 넘을 때만 공고별 카운터를 ±1 한다. 지원 행 변경과 집계 변경은 한 트랜잭션에서 커밋하고, ACK 규칙(커밋 뒤 ACK, 일시 오류 pending)은 승인 사용 완료 소비자와 같다.
+- 초기 반영: Stream은 trim하지 않으므로 새 그룹을 `0-0`부터 만들어 과거 지원 이벤트를 다시 반영할 수 있다. 다만 Stream 보존에만 의존하지 않도록 matching-service에 공고별 지원 상태 스냅샷(`applicationId`, `status`, `revision`) 내부 계약을 추가해 초기 적재에 쓴다. 스냅샷 행도 같은 `revision` 비교로 반영하므로 적재 중 도착한 이벤트와 순서에 관계없이 같은 결과로 수렴한다.
+- 재구축·정합성 복구: 원본은 matching-service MySQL이다. 공고 단위로 스냅샷을 다시 받아 `revision` 비교로 반영하면 재구축된다. 주기적으로 최근 바뀐 공고의 수를 원본과 비교하고 다르면 해당 공고를 재구축한다. 초기 적재가 끝나지 않았거나 재구축 중인 공고는 부분 집계를 보여 주지 않고 `applicantCount=null`을 유지한다.
+- 미구현 범위: projection 테이블, 소비자 그룹, matching-service 스냅샷 계약, 정합성 비교 작업. 현재 `applicantCount`는 상세 조회와 점주 공고 목록 모두 `null`이다.
 
 ## 모집 자리 예약
 
@@ -621,7 +664,7 @@ payment-service는 200 success만 전송 완료로 보고 그 밖의 응답은 �
 
 `job_posts.version`은 JPA 낙관적 잠금 값이며 1부터 시작한다. 결제 주문 생성 명령은 공고 저장 직후의 버전(신규 공고는 1)을 결제용 버전으로 고정하고, 주문 연결로 버전이 올라도 공고의 `payment_job_version`은 그 값을 유지한다. 이후 결제 조건 변경은 `@Version`이 아니라 이 공고 명령들의 최대 결제용 버전 + 1을 쓰고, 같은 조건 재결제는 연결된 주문의 버전을 그대로 쓴다. 지원 승인에는 발급 당시 버전을 `jobVersion`으로 저장한다. 모집 완료·근무 시작 마감·수동 마감 전이로 증가한 버전은 알림 명령의 완료 버전이 되어 늦은 지원 차단과 재오픈 구분의 기준이 된다. 알리지 않는 전이(`OPEN → MATCHING`, 결제 대기 공고의 마감)도 버전을 올린다.
 
-지원 승인 상태는 `RESERVED`, `CONSUMED`, `EXPIRED`다. `ApplicationSubmitted` 소비에 따른 `CONSUMED` 처리는 [지원 접수 승인 사용 완료](#지원-접수-승인-사용-완료)와 [ApplicationSubmitted 이벤트 소비](#applicationsubmitted-이벤트-소비)를 따른다. 만료 상태 정리는 아직 구현되지 않았다.
+지원 승인 상태는 `RESERVED`, `CONSUMED`, `EXPIRED`이며 전환 규칙은 [지원 접수 승인 상태 전환](#지원-접수-승인-상태-전환)을 따른다. `CONSUMED` 처리는 [지원 접수 승인 사용 완료](#지원-접수-승인-사용-완료)와 [ApplicationSubmitted 이벤트 소비](#applicationsubmitted-이벤트-소비), `EXPIRED` 처리는 [지원 접수 승인 만료](#지원-접수-승인-만료)를 따른다.
 
 자리 예약에는 발급 당시 공고 버전을 `jobVersion`으로 저장한다. 자리 예약과 마지막이 아닌 자리 확정은 공고 상태를 바꾸지 않는다. 마지막 자리 확정은 [모집 완료](#모집-완료)로 공고를 마감한다.
 
@@ -630,7 +673,7 @@ payment-service는 200 success만 전송 완료로 보고 그 밖의 응답은 �
 - `industry_categories`: 업종 카테고리. 대분류와 하위 분류를 V4 마이그레이션에서 초기 데이터로 넣는다.
 - `job_posts`: 사업장·점주 외부 ID, 카테고리 FK, 근무 일시, 급여, 모집 인원, 위경도, 긴급도, 지원 마감, 상태, 버전, 연결된 결제 주문 ID와 원래 결제 스냅샷(`payment_order_id`, `payment_job_version`, `payment_amount`, `payment_currency`, V10). 네 결제 컬럼은 모두 NULL이거나 모두 값이 있어야 한다(`ck_job_posts_payment_order_snapshot`). 예치 차단 여부 `funding_blocked`(V11, 기본 false). 공개된 적이 있는지 `published`(V19, 상세 조회 권한 기준). 점주 본인 공고 목록용 `(owner_id, created_at, id)` 인덱스 `idx_job_posts_owner_created`(V15). 자동 상태 전이 후보 조회용 `idx_job_posts_status_deadline (status, application_deadline)`과 `idx_job_posts_status_work_start (status, work_date, start_time)`(V17).
 - `job_status_histories`: 공고 상태 전이 이력. 예치 확인 공개, 모집 완료, 지원 마감·근무 시작 경과 전이, 점주 수동 마감을 기록한다. 처리 주체 컬럼이 없어 `reason`에 `주체:사유`로 기록한다.
-- `job_application_admissions`: 공고 FK, 알바생 회원 외부 ID, 멱등 키(유일), 공고 버전, 승인 상태, 승인·만료·사용 시각, 발급 당시 공고 스냅샷(점주 회원 ID, 업종 ID, 근무 일시, 위도·경도). 스냅샷 컬럼은 `updatable = false`로 두어 발급 후 바뀌지 않는다.
+- `job_application_admissions`: 공고 FK, 알바생 회원 외부 ID, 멱등 키(유일), 공고 버전, 승인 상태, 승인·만료·사용 시각, 발급 당시 공고 스냅샷(점주 회원 ID, 업종 ID, 근무 일시, 위도·경도). 스냅샷 컬럼은 `updatable = false`로 두어 발급 후 바뀌지 않는다. 만료 대상 조회용 `idx_job_application_admissions_status_expires (status, expires_at)`(V21).
 - `job_matching_seat_reservations`(V8): 공고 FK, 매칭·지원·알바생 외부 ID, 예약·확정·반환 멱등 키(각각 유일), 공고 버전, 상태, 예약·확정·반환·만료 처리 시각과 발급 시 확정한 `expires_at`, 발급 당시 스냅샷(점주 ID, 근무 일시, `end_time_next_day`, `locked_amount` 정수 KRW, `currency`). 인덱스는 공고별 점유 집계·중복 점유 확인용 `(job_post_id, status, expires_at)`과 만료 대상 공고 조회용 `(status, expires_at)`이다.
 - `job_recruitment_completion_commands`(V9): 공고 FK, 명령 ID(UUID, 유일), 완료 버전, 전송 상태(`PENDING`/`SUCCEEDED`), 시도 횟수, 다음 시도 시각, 실행권 토큰·만료 시각, 마지막 시도 시각, 마지막 실패 분류·HTTP 상태·응답 코드, 생성·성공 시각. `(job_post_id, job_version)` 유일 제약과 전송 대상 조회용 `(status, next_attempt_at)` 인덱스를 둔다.
 
@@ -687,16 +730,15 @@ payment-service는 200 success만 전송 완료로 보고 그 밖의 응답은 �
 - 근무 시작 뒤 자동 마감 전까지(최대 스케줄러 한 주기) 유효한 `RESERVED` 자리의 확정을 막을지 여부
 - 기존 멱등 키 컬럼(`job_application_admissions`, `job_matching_seat_reservations`의 예약·확정·반환 키, `job_funding_status_receipts`, `job_payment_change_requests`)은 테이블 기본 `utf8mb4_unicode_ci`라 대소문자만 다른 키를 같은 키로 본다. 운영 데이터의 충돌 여부를 확인한 뒤 바이트 비교 collation으로 바꾸는 마이그레이션이 필요하다
 - 확정된 자리의 취소·환불 정책
-- 지원 승인 만료 상태 정리(만료 배치·스케줄러)
 - `ApplicationSubmitted`의 `occurredAt`이 지원 저장 시각이 아니라 승인 발급 시각(`admittedAt`)인 문제의 정리(matching-service 발행 값 또는 판단 기준)
 - 해석할 수 없어 pending으로 남은 `ApplicationSubmitted`의 조회·조치 도구(현재는 오류 로그와 수동 ACK)
-- 지원자 수 projection
+- 지원자 수 projection 구현(별도 이슈, 기준은 [지원자 수 projection 기준](#지원자-수-projection-기준미구현)). matching-service의 공고별 지원 상태 스냅샷 내부 계약이 함께 필요하다
 - member-service 연동을 통한 사업장 소유권 검증
 - DB 기반 검색 조건과 페이지 처리
 
 ## 실행과 검증
 
-`.env.example`의 `JOB_*` 값을 개인 `.env`에 설정하고 공통 `AUTH_JWT_SECRET`, `INTERNAL_API_SECRET`을 맞춘다. `./scripts/local-run.sh infra`, `./scripts/local-run.sh job`으로 실행한다. HTTP 8083, 로컬 MySQL 3309, matching 이벤트 Redis 6381(`MATCHING_REDIS_HOST`·`MATCHING_REDIS_PORT`)을 사용한다. Swagger UI는 `/swagger-ui.html`이다. 통합 테스트는 MySQL·Redis Testcontainers로 지원 승인 발급·멱등·오류 코드, `ApplicationSubmitted` 소비(matching-service 발행 형식의 envelope·payload 해석과 시각 절삭·반올림 허용, 발행 후 처리와 커밋 뒤 ACK, 같은 eventId 레코드 중복과 두 인스턴스의 동시 재수신에서 1회 변경, 수신 기록 저장 실패 시 승인 변경 롤백, 늦은 처리의 잠금 대기와 유일 제약 롤백, 영구 거절 4종의 기록·오류 로그·ACK, 만료 시각과 같은 지원의 기록·ACK, 일시 오류와 승인 변경 뒤 실패의 미ACK·재처리, 커밋 뒤 ACK 실패와 재시작 후 pending 복구, 처리 전 중단의 pending 복구, 관계없는 이벤트 종류·aggregateType·필드 누락의 ACK, 해석할 수 없는 레코드와 같은 eventId 다른 내용의 미기록 pending 유지와 뒤 레코드 처리), 지원 승인 사용 완료(`RESERVED`·`EXPIRED`의 사용 완료, 만료 시각 직전·같은 시각·이후와 마이크로초 미만 절삭, 이미 사용된 승인의 반복 처리와 `consumedAt` 유지, 필드 누락·승인 없음·공고·회원 불일치 거절, 승인 행 잠금 대기와 커밋·롤백 순서, 호출자 트랜잭션 롤백, 일시 오류 전파, 사용 완료 뒤 같은 키 재요청의 `JOB-409-003`), 모집 자리 예약·확정·반환의 멱등·동시성·만료 경계·제약 변환, 만료 회수, 모집 완료 전이(정원 미충족 시 미마감, 동시 확정 시 1회 기록, 이력·명령 저장 실패 시 함께 롤백, 이전 공고 복구), 알림 전송(실제 소켓의 matching-service 대역으로 경로·헤더·타임아웃·실패 분류, 헤더 전 정지·헤더 지연·본문 일부 후 정지·본문 조금씩 전송에서 전체 제한시간 안의 종료와 실제 연결 닫힘, 반복 초과 시 연결·작업·스레드 미누적, HTTP 대기 중 트랜잭션·잠금 미보유, backoff, 실행권 인계와 늦은 결과 무시, 응답 유실 수렴), 급여 계산(전체 예치액 100원 경계와 오버플로), 결제 대기 비공개 생성(공고·명령 원자적 저장과 명령 저장 실패 시 롤백, 스냅샷 불변), 공개 전 공고의 점주 본인 상세 조회 허용과 타인·익명 404(지원 마감 자동 마감·수동 마감으로 공개 전에 마감된 공고 포함, 공개 뒤 마감된 공고는 공개 유지)·검색 제외·신규 지원 승인과 자리 예약 거절, 결제 주문 생성 전송(실제 소켓의 payment-service 대역으로 경로·헤더·본문, 응답 envelope·필수 필드·스냅샷·주문 상태 검증, 타임아웃·5xx·잘못된 응답 분류, HTTP 대기 중 트랜잭션·잠금 미보유, 응답 유실 뒤 같은 키·스냅샷으로 원래 주문 복구, 진행된 주문 상태 연결, `@Version` 증가 후 원래 결제용 버전 재시도, 동시 실행, 실행권 만료 인계와 늦은 결과 무시, 과거 명령의 최신 연결 덮어쓰기 방지, 커밋 후 즉시 전송, 안전한 로그), 점주 결제 주문 조회, 결제 조건 변경·재결제(점주 본인 권한과 타인 404, 본문 소유자 무시, 시각·시급·인원·지원 마감·금액 상한 검증, 같은 키 재요청의 진행·처리 상태 반환과 다른 요청 409, 새 결제용 버전·새 키 명령과 대기 조건 스냅샷, FAILED 같은 금액 재결제의 같은 버전·새 키, 진행 중인 주문 생성 중 거절, 공개·차단·예치 반영 공고 거절, 교체 거절 후 기존 조건·주문 보존, 타임아웃·5xx·잘못된 응답 뒤 같은 키 수렴, 결과 저장·요청 저장 실패 롤백, 기록되지 않은 거절의 재판단, 만료된 실행자의 늦은 결과 무시, 연결 전 새 주문 예치 알림 409와 연결 후 새 조건 공개, 이전 주문 알림의 차단·공개 무효와 revision 역전·중복, 변경 대기 중 차단·공개된 공고의 교체 무효, 동시 같은 키·다른 요청, 변경·연결과 예치 수신의 양쪽 잠금 순서 경쟁), 환불 검토 기록(주문당 1건, 첫 수신 기록 연결, 저장 실패 롤백), 예치 상태 수신(실제 등록·주문 생성·연결 경로 뒤 수신 API 호출로 내부 인증·입력 검증·공개와 이력 1건·같은 키 재전송과 공개 후 `@Version` 증가·키 재사용 409·다른 키의 같은 주문 revision 중복 효과 방지·같은 revision 내용 충돌·낮은 revision 뒤 차단 유지와 더 높은 true revision 처리·이전 주문 알림·주문 연결 전 409와 연결 후 같은 명령 처리·스냅샷 불일치·지원 마감과 근무 시작 경계·마감 공고 미공개·동시 수신·중간 실패 원자적 롤백·다른 공고 같은 키 동시 요청의 제약 변환·안전한 로그), 예치 차단과 신규 지원 승인·자리 예약·최초 확정의 양쪽 실행 순서 경쟁, 이미 성공한 지원 승인·예약·확정 명령의 멱등 결과 유지, 차단 공고의 검색 제외와 상세 노출, 점주 본인 공고 목록(다른 점주 공고 제외와 요청 값의 점주 ID 무시, 결제 대기·예치 차단·마감 공고 포함, 상태 필터와 잘못된 상태 값, 같은 등록 시각의 ID 내림차순 정렬, 기본 페이지·크기 상한·범위 밖 페이지, `RESERVED`·`RELEASED`·`EXPIRED`가 섞인 확정 인원 집계와 공고 수와 무관한 쿼리 수, 비로그인 401·알바생 403·잘못된 토큰 401·토큰 엔진 오류 500, `/api/jobs/me`와 숫자 ID 상세 조회의 독립), 공고 마감과 지원 마감 전이(지원 마감·근무 시작 자동 전이 세 가지와 직전·같은 시각 경계, 두 경계가 모두 지난 `OPEN`의 1회 마감, `MATCHING` 전환 시 알림 명령 없음과 마감 명령의 `jobVersion`=마감 후 공고 버전, 지원 마감 뒤 기존 지원자의 자리 예약·확정과 모집 완료, 마감 공고의 `RESERVED` 첫 확정 409·`CONSUMED` 같은 키 재요청 성공·반환 성공, 후보 조회 대상과 인덱스 후보, 스케줄러 재실행·동시 실행의 이력·명령 1회, 실패 공고가 다른 공고를 막지 않음, 이력·명령·요청 저장 실패 시 상태 롤백, 수동 마감 API의 권한(비로그인 401·알바생 403·타인·없는 공고 404)·키 형식·상태별 알림 여부·같은 키 재요청·이미 마감된 공고의 `ALREADY_CLOSED`·키 재사용 409·다른 공고 같은 키 동시 요청의 제약 변환, 수동 마감과 자리 확정·지원 승인·자리 예약·예치 상태 수신·자동 마감의 양쪽 실행 순서 경쟁, 마감 공고의 결제 조건 변경·재결제 409와 진행 중이던 변경 주문의 미적용, 최초 주문 연결 뒤 늦은 `funded=true`의 `JOB_CLOSED` 환불 검토), 요청 바인딩 형 변환 실패의 안전한 오류 메시지, 내부 인증, JWT 오류 경계, Swagger 접근을 확인한다. 시간 경계 테스트는 테스트용 `MutableClock` 빈으로 현재 시각을 고정한다. 설정이 다른 테스트 클래스마다 캐시된 Spring 컨텍스트가 연결 풀을 유지하므로 테스트 MySQL 컨테이너는 `max_connections=500`으로 띄운다. 테스트에서는 전송·복구 스케줄러, 자동 상태 전이 스케줄러, 커밋 후 즉시 전송(모집 완료 알림·결제 주문 생성 모두)을 끄고 직접 호출한다. payment-service 대역은 같은 키·본문에 처음 만든 주문을 돌려주는 멱등 응답을 흉내 내며 실제 PG 결제는 하지 않는다. payment-service의 주문 생성 수신 처리는 payment-service 테스트가, matching-service 수신 처리는 matching-service의 `RecruitmentCompletionContractTests`가 검증한다.
+`.env.example`의 `JOB_*` 값을 개인 `.env`에 설정하고 공통 `AUTH_JWT_SECRET`, `INTERNAL_API_SECRET`을 맞춘다. `./scripts/local-run.sh infra`, `./scripts/local-run.sh job`으로 실행한다. HTTP 8083, 로컬 MySQL 3309, matching 이벤트 Redis 6381(`MATCHING_REDIS_HOST`·`MATCHING_REDIS_PORT`)을 사용한다. Swagger UI는 `/swagger-ui.html`이다. 통합 테스트는 MySQL·Redis Testcontainers로 지원 승인 발급·멱등·오류 코드, `ApplicationSubmitted` 소비(matching-service 발행 형식의 envelope·payload 해석과 시각 절삭·반올림 허용, 발행 후 처리와 커밋 뒤 ACK, 같은 eventId 레코드 중복과 두 인스턴스의 동시 재수신에서 1회 변경, 수신 기록 저장 실패 시 승인 변경 롤백, 늦은 처리의 잠금 대기와 유일 제약 롤백, 영구 거절 4종의 기록·오류 로그·ACK, 만료 시각과 같은 지원의 기록·ACK, 일시 오류와 승인 변경 뒤 실패의 미ACK·재처리, 커밋 뒤 ACK 실패와 재시작 후 pending 복구, 처리 전 중단의 pending 복구, 관계없는 이벤트 종류·aggregateType·필드 누락의 ACK, 해석할 수 없는 레코드와 같은 eventId 다른 내용의 미기록 pending 유지와 뒤 레코드 처리), 지원 승인 사용 완료(`RESERVED`·`EXPIRED`의 사용 완료, 만료 시각 직전·같은 시각·이후와 마이크로초 미만 절삭, 이미 사용된 승인의 반복 처리와 `consumedAt` 유지, 필드 누락·승인 없음·공고·회원 불일치 거절, 승인 행 잠금 대기와 커밋·롤백 순서, 호출자 트랜잭션 롤백, 일시 오류 전파, 사용 완료 뒤 같은 키 재요청의 `JOB-409-003`), 지원 승인 만료(만료 시각 1나노초 전·같은 시각·1마이크로초 뒤 경계, `CONSUMED`·`EXPIRED` 미변경, 반복 실행의 1회 변경, 없는 승인, 같은 승인의 동시 만료 1회와 두 배치의 동시 실행, 한 승인의 `EXPIRED` 변경 실패가 다른 승인을 막지 않고 다음 실행에서 재시도, 배치 크기를 채운 실패 뒤 승인의 처리, 후보 인덱스), 만료와 소비의 수렴(배치 만료 뒤 만료 전 이벤트의 `CONSUMED`, 먼저 사용 완료된 승인을 배치가 덮어쓰지 않음, 소비·배치가 서로의 승인 행 잠금을 기다리는 양쪽 실행 순서, 만료 시각과 같거나 늦은 지원의 미변경, 중복 이벤트·다른 이벤트·배치 재실행의 `consumedAt` 유지, 실제 발급 API 승인의 만료·늦은 사용 완료 뒤 같은 키 재요청 `JOB-409-003`과 다른 회원 `JOB-409-004`), 모집 자리 예약·확정·반환의 멱등·동시성·만료 경계·제약 변환, 만료 회수, 모집 완료 전이(정원 미충족 시 미마감, 동시 확정 시 1회 기록, 이력·명령 저장 실패 시 함께 롤백, 이전 공고 복구), 알림 전송(실제 소켓의 matching-service 대역으로 경로·헤더·타임아웃·실패 분류, 헤더 전 정지·헤더 지연·본문 일부 후 정지·본문 조금씩 전송에서 전체 제한시간 안의 종료와 실제 연결 닫힘, 반복 초과 시 연결·작업·스레드 미누적, HTTP 대기 중 트랜잭션·잠금 미보유, backoff, 실행권 인계와 늦은 결과 무시, 응답 유실 수렴), 급여 계산(전체 예치액 100원 경계와 오버플로), 결제 대기 비공개 생성(공고·명령 원자적 저장과 명령 저장 실패 시 롤백, 스냅샷 불변), 공개 전 공고의 점주 본인 상세 조회 허용과 타인·익명 404(지원 마감 자동 마감·수동 마감으로 공개 전에 마감된 공고 포함, 공개 뒤 마감된 공고는 공개 유지)·검색 제외·신규 지원 승인과 자리 예약 거절, 결제 주문 생성 전송(실제 소켓의 payment-service 대역으로 경로·헤더·본문, 응답 envelope·필수 필드·스냅샷·주문 상태 검증, 타임아웃·5xx·잘못된 응답 분류, HTTP 대기 중 트랜잭션·잠금 미보유, 응답 유실 뒤 같은 키·스냅샷으로 원래 주문 복구, 진행된 주문 상태 연결, `@Version` 증가 후 원래 결제용 버전 재시도, 동시 실행, 실행권 만료 인계와 늦은 결과 무시, 과거 명령의 최신 연결 덮어쓰기 방지, 커밋 후 즉시 전송, 안전한 로그), 점주 결제 주문 조회, 결제 조건 변경·재결제(점주 본인 권한과 타인 404, 본문 소유자 무시, 시각·시급·인원·지원 마감·금액 상한 검증, 같은 키 재요청의 진행·처리 상태 반환과 다른 요청 409, 새 결제용 버전·새 키 명령과 대기 조건 스냅샷, FAILED 같은 금액 재결제의 같은 버전·새 키, 진행 중인 주문 생성 중 거절, 공개·차단·예치 반영 공고 거절, 교체 거절 후 기존 조건·주문 보존, 타임아웃·5xx·잘못된 응답 뒤 같은 키 수렴, 결과 저장·요청 저장 실패 롤백, 기록되지 않은 거절의 재판단, 만료된 실행자의 늦은 결과 무시, 연결 전 새 주문 예치 알림 409와 연결 후 새 조건 공개, 이전 주문 알림의 차단·공개 무효와 revision 역전·중복, 변경 대기 중 차단·공개된 공고의 교체 무효, 동시 같은 키·다른 요청, 변경·연결과 예치 수신의 양쪽 잠금 순서 경쟁), 환불 검토 기록(주문당 1건, 첫 수신 기록 연결, 저장 실패 롤백), 예치 상태 수신(실제 등록·주문 생성·연결 경로 뒤 수신 API 호출로 내부 인증·입력 검증·공개와 이력 1건·같은 키 재전송과 공개 후 `@Version` 증가·키 재사용 409·다른 키의 같은 주문 revision 중복 효과 방지·같은 revision 내용 충돌·낮은 revision 뒤 차단 유지와 더 높은 true revision 처리·이전 주문 알림·주문 연결 전 409와 연결 후 같은 명령 처리·스냅샷 불일치·지원 마감과 근무 시작 경계·마감 공고 미공개·동시 수신·중간 실패 원자적 롤백·다른 공고 같은 키 동시 요청의 제약 변환·안전한 로그), 예치 차단과 신규 지원 승인·자리 예약·최초 확정의 양쪽 실행 순서 경쟁, 이미 성공한 지원 승인·예약·확정 명령의 멱등 결과 유지, 차단 공고의 검색 제외와 상세 노출, 점주 본인 공고 목록(다른 점주 공고 제외와 요청 값의 점주 ID 무시, 결제 대기·예치 차단·마감 공고 포함, 상태 필터와 잘못된 상태 값, 같은 등록 시각의 ID 내림차순 정렬, 기본 페이지·크기 상한·범위 밖 페이지, `RESERVED`·`RELEASED`·`EXPIRED`가 섞인 확정 인원 집계와 공고 수와 무관한 쿼리 수, 비로그인 401·알바생 403·잘못된 토큰 401·토큰 엔진 오류 500, `/api/jobs/me`와 숫자 ID 상세 조회의 독립), 공고 마감과 지원 마감 전이(지원 마감·근무 시작 자동 전이 세 가지와 직전·같은 시각 경계, 두 경계가 모두 지난 `OPEN`의 1회 마감, `MATCHING` 전환 시 알림 명령 없음과 마감 명령의 `jobVersion`=마감 후 공고 버전, 지원 마감 뒤 기존 지원자의 자리 예약·확정과 모집 완료, 마감 공고의 `RESERVED` 첫 확정 409·`CONSUMED` 같은 키 재요청 성공·반환 성공, 후보 조회 대상과 인덱스 후보, 스케줄러 재실행·동시 실행의 이력·명령 1회, 실패 공고가 다른 공고를 막지 않음, 이력·명령·요청 저장 실패 시 상태 롤백, 수동 마감 API의 권한(비로그인 401·알바생 403·타인·없는 공고 404)·키 형식·상태별 알림 여부·같은 키 재요청·이미 마감된 공고의 `ALREADY_CLOSED`·키 재사용 409·다른 공고 같은 키 동시 요청의 제약 변환, 수동 마감과 자리 확정·지원 승인·자리 예약·예치 상태 수신·자동 마감의 양쪽 실행 순서 경쟁, 마감 공고의 결제 조건 변경·재결제 409와 진행 중이던 변경 주문의 미적용, 최초 주문 연결 뒤 늦은 `funded=true`의 `JOB_CLOSED` 환불 검토), 요청 바인딩 형 변환 실패의 안전한 오류 메시지, 내부 인증, JWT 오류 경계, Swagger 접근을 확인한다. 시간 경계 테스트는 테스트용 `MutableClock` 빈으로 현재 시각을 고정한다. 설정이 다른 테스트 클래스마다 캐시된 Spring 컨텍스트가 연결 풀을 유지하므로 테스트 MySQL 컨테이너는 `max_connections=500`으로 띄운다. 테스트에서는 전송·복구 스케줄러, 자동 상태 전이 스케줄러, 지원 승인 만료 스케줄러, 커밋 후 즉시 전송(모집 완료 알림·결제 주문 생성 모두)을 끄고 직접 호출한다. payment-service 대역은 같은 키·본문에 처음 만든 주문을 돌려주는 멱등 응답을 흉내 내며 실제 PG 결제는 하지 않는다. payment-service의 주문 생성 수신 처리는 payment-service 테스트가, matching-service 수신 처리는 matching-service의 `RecruitmentCompletionContractTests`가 검증한다.
 
 ### 서비스 간 실제 프로세스 검증(2026-10-06)
 

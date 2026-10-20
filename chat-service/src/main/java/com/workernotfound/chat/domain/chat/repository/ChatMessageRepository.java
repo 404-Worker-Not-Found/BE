@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
+  boolean existsByIdAndChatRoomId(Long id, Long chatRoomId);
+
   Optional<ChatMessage> findByChatRoomIdAndSenderMemberIdAndClientMessageId(
       Long chatRoomId, Long senderMemberId, String clientMessageId);
 
