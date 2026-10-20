@@ -1669,3 +1669,27 @@ Related files:
 - `docs/architecture/payment-lock-design.md`
 - `payment-service/src/main/java/com/workernotfound/payment/domain/settlement/service/SettlementReservationService.java`
 - `payment-service/src/main/resources/db/migration/V4__create_payment_settlements.sql`
+
+## 2026-10-20 - Explicit Chat Read Position Updates
+
+Decision:
+- For the first #109 unit, clients explicitly submit the last message they have viewed through `PUT /api/chat-rooms/me/{chatRoomId}/read-position`. The user approved explicit message acknowledgement and existing confirmed OPEN participant access rules on 2026-10-20.
+- Derive the participant from JWT member ID and role, check the account withdrawal gate, and verify room access before checking the message. Own messages may be cursor targets; a target acknowledges messages in that room up to that ID, never later messages.
+- Store one position per room/member. Advance only to larger existing message IDs in that room. Repeated or older requests preserve both the position and server advancement time and return the current stored state with 200.
+- Use account gate then room row locking, matching message-send ordering. Query messages and positions only after the room lock; a room/member unique constraint also guards first creation. Persist the position in the same transaction.
+- Do not infer read state from room entry, sends, message queries, sync, or realtime notifications. Do not backfill existing rooms. Missing position means no explicit acknowledgement yet.
+- Room-list/detail read-position queries and unread counts belong to the second unit; realtime read notifications are excluded from the current plan.
+
+Reason:
+- Message fetch and delivery do not prove that a user viewed the messages. An explicit inclusive cursor avoids marking newly arrived messages read and lets different devices converge without moving backwards.
+- Sharing the room lock with message sends preserves the existing per-room message order and safely serializes initial position creation and updates across instances.
+
+Implication for agents:
+- Keep room access errors as `CHAT-404-001`; missing or foreign-room messages after authorization use `CHAT-404-002`. Account gates must also protect service calls, beyond the JWT filter.
+- `readAt` is the server's last advancement time with microsecond precision, not a client-supplied viewing time. A stale request may return a newer cursor than it submitted.
+- Follow-up query work must preserve these write semantics and must not introduce implicit read updates.
+
+Related files:
+- `docs/architecture/chat-room-design.md`
+- `chat-service/src/main/java/com/workernotfound/chat/domain/chat/service/ChatReadPositionService.java`
+- `chat-service/src/main/resources/db/migration/V5__create_chat_read_positions.sql`
