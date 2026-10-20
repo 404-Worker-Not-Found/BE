@@ -20,6 +20,9 @@ payment:
     api-base-url: ${TOSS_API_BASE_URL:https://api.tosspayments.com}
   job-service:
     base-url: ${JOB_SERVICE_BASE_URL:http://localhost:8083}
+  settlement:
+    # 근무 완료 후 자동 지급 요청이 가능해질 때까지의 대기 기간
+    payout-delay: ${PAYMENT_SETTLEMENT_PAYOUT_DELAY:24h}
   recovery:
     enabled: true
     interval: 30s
