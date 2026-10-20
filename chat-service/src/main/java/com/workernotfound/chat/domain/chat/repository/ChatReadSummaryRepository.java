@@ -19,6 +19,7 @@ public interface ChatReadSummaryRepository extends Repository<ChatRoom, Long> {
           and other.memberId = case when r.ownerMemberId = :memberId
               then r.workerMemberId else r.ownerMemberId end
       left join ChatMessage message on message.chatRoomId = r.id
+          and message.senderMemberId <> :memberId
           and message.senderMemberId = case when r.ownerMemberId = :memberId
               then r.workerMemberId else r.ownerMemberId end
           and message.id > coalesce(mine.lastReadMessageId, 0)

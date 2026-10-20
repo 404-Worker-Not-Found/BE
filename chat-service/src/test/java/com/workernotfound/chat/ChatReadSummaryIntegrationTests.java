@@ -132,6 +132,20 @@ class ChatReadSummaryIntegrationTests extends IntegrationTestSupport {
   }
 
   @Test
+  void ownMessagesRemainExcludedEvenWhenProvisionedParticipantIdsCoincide() {
+    long id = IDS.addAndGet(10);
+    var request = new ChatRoomRequest(id, id + 1, id + 2, id + 2, "work-" + id);
+    long roomId = Long.parseLong(rooms.create(UUID.randomUUID().toString(), request).chatRoomId());
+    confirmations.confirm(new MatchConfirmedEvent(UUID.randomUUID().toString(), "MatchConfirmed",
+        LocalDateTime.now(), id, 1L, 1, id, Long.toString(roomId), request.workId(),
+        request.jobPostId(), request.ownerMemberId(), request.workerMemberId()));
+    var room = new Room(roomId, id + 2, id + 2);
+    send(room, room.ownerIdentity());
+
+    assertThat(queries.getChatRoom(room.ownerIdentity(), roomId).unreadCount()).isZero();
+  }
+
+  @Test
   void listAndDetailExposeReadPositionsFromEachViewersPerspectiveWithoutAdvancingThem() throws Exception {
     var room = room(IDS.incrementAndGet());
     long workerCursor = send(room, room.workerIdentity());
