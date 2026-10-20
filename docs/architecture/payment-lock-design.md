@@ -36,6 +36,7 @@ ID는 양수, 금액은 양수 DECIMAL(19,2), 통화는 대문자 3자이며 예
 - payment_matching_slots: 매칭별 직렬화와 활성 잠금 참조. DB 유일 제약도 활성 잠금 중복을 차단한다.
 - payment_status_histories: 전이·명령 키·시각. 내부 Saga가 변경 주체다. 정산 이관은 명령 키 대신 정산 ID를 남긴다.
 - payment_settlements, payment_settlement_histories: 근로자 정산과 상태 이력. [정산 설계](settlement-design.md)를 따른다.
+- payment_settlement_targets, payment_matching_event_receipts, payment_work_event_receipts: MatchConfirmed가 확정한 정산 대상 잠금과 확정·근무 완료 이벤트 수신 기록. 정산 대상은 matching-service가 확정한 paymentId가 활성 잠금일 때만 기록한다.
 
 잠금 순서는 명령 → 매칭 slot → 예치 → 개별 잠금이다. 다른 매칭이 같은 공고 잔액을 동시에 사용해도 예치 행 잠금으로 초과 사용을 막는다. 예치의 잠금·정산 예약·지급 완료 금액은 각각 0 이상이고 합계가 누적 예치 금액 이하이다. 정산 예약은 같은 순서로 매칭 slot → 예치 → 잠금을 잠근다. 외부 서비스 테이블과 물리 FK를 만들지 않는다.
 

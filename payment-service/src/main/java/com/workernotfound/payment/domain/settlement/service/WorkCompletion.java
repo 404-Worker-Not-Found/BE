@@ -21,4 +21,9 @@ public record WorkCompletion(String eventId, Long workId, Long matchingId, Long 
         && Stream.of(workId, matchingId, jobPostId, ownerMemberId, workerMemberId)
             .allMatch(id -> id != null && id > 0);
   }
+
+  public String fingerprint(long revision) {
+    return EventFingerprint.of("WorkCompleted:v1", eventId, workId, revision, matchingId, jobPostId,
+        ownerMemberId, workerMemberId, completedAt);
+  }
 }
