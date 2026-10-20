@@ -1693,3 +1693,28 @@ Related files:
 - `docs/architecture/chat-room-design.md`
 - `chat-service/src/main/java/com/workernotfound/chat/domain/chat/service/ChatReadPositionService.java`
 - `chat-service/src/main/resources/db/migration/V5__create_chat_read_positions.sql`
+
+## 2026-10-20 - Participant Read Position and Unread Count Queries
+
+Decision:
+- The second #109 unit extends existing authorized room list/detail responses with `myReadPosition`, `otherReadPosition`, and `unreadCount`. The user approved excluding own messages and exposing both participants' read positions and server advancement times on 2026-10-20.
+- A position object contains `lastReadMessageId` and `readAt`, or is null when no explicit acknowledgement exists. Interpret my/other relative to the authenticated viewer, not a fixed owner/worker role.
+- Count only counterpart text messages in that room whose IDs strictly exceed the viewer's cursor. With no cursor, count all counterpart messages. Empty rooms and own-only rooms have zero unread messages. The counterpart's cursor never reduces the viewer's count.
+- After existing room authorization, batch only the returned page IDs and retrieve both cursors and the count in one aggregate SELECT. Keep empty rooms through LEFT JOIN, use the room/member unique index, and add the room/sender/message-ID index. Skip aggregation for empty pages and do not fetch message bodies to count.
+- Preserve read-only query transactions and existing access, ordering, and pagination. Do not take message-send locks or update read positions on queries. Fresh REST requests recover committed changes; realtime read notifications remain excluded.
+
+Reason:
+- Clients need both their own progress and the counterpart's acknowledgement after reconnecting, without confusing fetched or delivered messages with viewed messages.
+- Reading cursors and counts together avoids mixing different snapshots, while batching keeps query count independent of the number of returned rooms.
+
+Implication for agents:
+- Preserve the first unit's explicit monotonic PUT contract. Do not mark messages read during room queries or include own messages in unread counts.
+- Preserve participant authorization before summary lookup. The repository's member predicate is an additional boundary, not a substitute for JWT role and confirmed OPEN room checks.
+- Room-query SQL is at most three statements for a populated list page and two for detail, excluding authentication. Re-check this bound if follow-up enrichment is added.
+- Existing MySQL REPEATABLE READ query transactions use a consistent snapshot; clients must requery for later commits and avoid overwriting newer screen state with older overlapping responses.
+
+Related files:
+- `docs/architecture/chat-room-design.md`
+- `chat-service/src/main/java/com/workernotfound/chat/domain/chat/service/ChatRoomQueryService.java`
+- `chat-service/src/main/java/com/workernotfound/chat/domain/chat/repository/ChatReadSummaryRepository.java`
+- `chat-service/src/main/resources/db/migration/V6__add_chat_unread_count_index.sql`

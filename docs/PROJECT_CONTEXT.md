@@ -162,7 +162,7 @@ Implemented:
 - `job-service`: job posting service
 - `matching-service`: application and matching service
 - `work-service`: scheduled work and Saga compensation service
-- `chat-service`: internal chat room creation and Saga compensation, matching-confirmation consumption, participant room queries, persistent text message sending/history, and explicit participant read-position updates
+- `chat-service`: internal chat room creation and Saga compensation, matching-confirmation consumption, participant room queries, persistent text message sending/history, explicit participant read-position updates, and participant read-position/unread-count queries
 - `payment-service`: deposit-backed payment lock and Saga compensation service with Toss test deposit ingestion
 - `notification-service`: matching-result in-app notifications and participant read state
 
@@ -318,7 +318,7 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - Confirmed OPEN room participants can send persisted text messages and query history with an exclusive descending message-ID cursor. Per-room serialization and a room/sender/client-key unique constraint make retries idempotent; changed content for a reused key returns 409.
 - STOMP WebSocket connections authenticate with an access token on CONNECT and allow only exact participant-room subscriptions. Committed message IDs are broadcast through Redis Pub/Sub across chat instances; best-effort notifications contain no message text. REST ascending-ID synchronization recovers missed messages, and clients must periodically reconcile while a room is open. Expired connections cannot receive notifications.
 - Confirmed OPEN room participants explicitly advance their own read position through `PUT /api/chat-rooms/me/{chatRoomId}/read-position`. The supplied message must exist in that room; own messages may be used as the cursor. A room/member unique record stores the maximum acknowledged message ID and server advancement time. The account gate and room row lock serialize updates with withdrawal and message sends; repeated or older requests preserve both fields. Sending, history reads, and synchronization do not implicitly mark messages read.
-- Room-list/detail read-position queries and unread counts remain the second #109 unit. Realtime read notifications, system messages, and general user room closure are not implemented.
+- Room list/detail responses now include the viewer's and counterpart's read positions (null when absent) and an unread count of counterpart messages strictly after the viewer's cursor. Missing viewer position counts all counterpart messages; own messages are excluded. A single aggregate query for authorized page IDs retrieves both positions and counts without loading message bodies or querying per room. V6 adds `(chat_room_id, sender_member_id, id)` for counting. Queries remain read-only; fresh REST requests recover committed changes without acknowledging messages. Realtime read notifications, system messages, and general user room closure are not implemented.
 - Local HTTP/MySQL ports are 8087/3312. `./scripts/local-run.sh chat` runs the service; repository verification includes its MySQL integration tests.
 - See `docs/architecture/chat-room-design.md` and `docs/architecture/error-handling-review.md`.
 
