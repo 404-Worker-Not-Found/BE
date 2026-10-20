@@ -112,6 +112,19 @@ public class JobApplicationAdmission extends BaseEntity {
         return status == ApplicationAdmissionStatus.CONSUMED;
     }
 
+    // 사용이 확인되지 않은 채 만료 시각이 지난 승인이다. 만료 시각과 같은 시각은 지난 것으로 본다.
+    public boolean isOverdueReservation(LocalDateTime now) {
+        return status == ApplicationAdmissionStatus.RESERVED && !expiresAt.isAfter(now);
+    }
+
+    // EXPIRED는 최종 상태가 아니다. 만료 전에 저장된 지원의 ApplicationSubmitted가 늦게 도착하면 consume으로 CONSUMED가 된다.
+    public void expire(LocalDateTime now) {
+        if (!isOverdueReservation(now)) {
+            throw new IllegalStateException("만료 시각이 지난 RESERVED 지원 접수 승인만 만료할 수 있습니다.");
+        }
+        this.status = ApplicationAdmissionStatus.EXPIRED;
+    }
+
     // 만료 시각과 같은 시각의 지원은 만료 뒤의 지원으로 본다.
     public boolean isSubmittedBeforeExpiry(LocalDateTime submittedAt) {
         return submittedAt.isBefore(expiresAt);

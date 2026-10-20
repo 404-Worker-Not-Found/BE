@@ -1451,7 +1451,7 @@ Decision:
 - Owners list their own jobs at `GET /api/jobs/me`. Only the `OWNER` role is allowed and the owner is the JWT `memberId`; no request value selects the owner. Security checks this path before the public `GET /api/jobs/**` rule.
 - The list includes `PAYMENT_PENDING`, `OPEN`, `MATCHING`, `CLOSED`, and funding-blocked jobs, with an optional single `status` filter. It sorts by `created_at DESC, id DESC` and pages with the search rules (default page 0, size 20, max 100).
 - Filtering, sorting, and paging run in the database, backed by the V15 `idx_job_posts_owner_created (owner_id, created_at, id)` index. Public search behavior is unchanged.
-- Each card shows `confirmedCount`, the number of `CONSUMED` seat reservations, aggregated in one grouped query per page. `applicantCount` stays `null` until the applicant-count projection (#66). Payment progress is not in the card; owners use `GET /api/jobs/{id}/payment-order`.
+- Each card shows `confirmedCount`, the number of `CONSUMED` seat reservations, aggregated in one grouped query per page. `applicantCount` stays `null` until the applicant-count projection, which was split out of #66 into a separate issue (see "2026-10-18 - Applicant Count Projection Criteria"). Payment progress is not in the card; owners use `GET /api/jobs/{id}/payment-order`.
 - Request-binding conversion failures (`@ModelAttribute` type mismatches such as an unknown `status`) return 400 `GLOBAL-400-002` with the fixed reason `유효하지 않은 값입니다.` instead of Spring's raw message.
 
 Reason:
@@ -1592,6 +1592,51 @@ Related files:
 - `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobAdmissionEventReceiptService.java`
 - `job-service/src/main/resources/db/migration/V20__create_job_admission_event_receipts.sql`
 
+## 2026-10-18 - Application Admission Expiry
+
+Decision:
+- A scheduler (`APPLICATION_ADMISSION_EXPIRY_*`, default `1m` interval, `30s` initial delay, batch `100`, matching the job schedule-transition convention) changes only `RESERVED` admissions with `expiresAt <= now` to `EXPIRED`. A time equal to `expiresAt` counts as expired.
+- Do not use a range `UPDATE`. Select candidate IDs without locking (V21 `(status, expires_at)` index, `now` truncated to microseconds), then lock each admission by primary key in its own transaction and re-check status and expiry with the `Clock` time read after the lock.
+- Serialize with `ApplicationSubmitted` consumption through the same admission-row lock only. Never lock the job row, so the lock order never crosses admission issuance.
+- `EXPIRED` is not final. A late `ApplicationSubmitted` with `occurredAt < expiresAt` still changes `EXPIRED` to `CONSUMED` with `consumedAt = occurredAt`. `CONSUMED` admissions are never changed by the batch.
+- A failure of one admission is logged and rolls back only that admission. It stays `RESERVED` and is retried on the next sweep. At sweep start, fix the maximum admission ID as an upper bound; select subsequent batches only through that ID. Reset the cursor and upper bound when the bound is reached or a batch is not full. This guarantees a wrap even under continuous arrivals while keeping failing admissions from starving later ones. Serialize runs within one instance to keep the cursor and bound consistent. No retry limit or failure record is added.
+- Do not store an expiry timestamp column. The same-key admission retry contract (`JOB-409-003` unless `RESERVED` and unexpired) is unchanged and does not depend on the batch having run.
+
+Reason:
+- Primary-key locking avoids secondary-index gap locks against admission inserts, the same reason as the seat-reservation expiry decision.
+- Deciding consumption from the event occurrence time means batch timing cannot lose a valid submission that was delivered late.
+
+Implication for agents:
+- Keep expiry and consumption on the admission-row lock only, and keep consumption accepting both `RESERVED` and `EXPIRED`.
+- Do not treat `EXPIRED` as a terminal state in new code.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobApplicationAdmissionExpiryReconciler.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/JobApplicationAdmissionExpiryService.java`
+- `job-service/src/main/resources/db/migration/V21__add_status_expires_index_to_job_application_admissions.sql`
+
+## 2026-10-18 - Applicant Count Projection Criteria
+
+Decision:
+- The applicant-count projection is not implemented in #66. It is a separate issue, and `applicantCount` stays `null` in job detail and the owner job list until then.
+- `applicantCount` counts applications whose current status is `APPLIED` (the matching-service active applicants). `CANCELED`, `REJECTED`, and `SELECTED` are not counted; confirmed workers remain `confirmedCount`.
+- Track state per `applicationId`. Reapplication is currently forbidden; if it is allowed later, matching-service creates a new `applicationId`, and the projection still counts per application.
+- The latest state of an application is the event with the highest envelope `revision` (matching-service `applications.revision`, 1 for submission, +1 per change). Apply only a higher revision under the application-row lock, ignore equal or lower revisions, and use `eventId` only for redelivery detection. Never order by `occurredAt` or reception time. An equal revision with different content stays pending as a contract violation.
+- Consume `ApplicationSubmitted`, `ApplicationCanceled`, `ApplicationSelected`, and `ApplicationRejected` with a consumer group separate from `job-admission-consumption-v1`, and commit the application row and count change together before ACK.
+- Initial load and rebuild use a new matching-service per-job application status snapshot contract (`applicationId`, `status`, `revision`) applied with the same revision rule. Stream replay from `0-0` is not the only recovery path. Periodic reconciliation rebuilds jobs whose counts differ from the source. Jobs not yet loaded or being rebuilt return `applicantCount=null`.
+
+Reason:
+- Redelivery and pending recovery can reorder events even though the relay publishes per-aggregate revisions in order. A per-application revision guard keeps stale states from overwriting newer ones.
+- matching-service MySQL remains the source of truth, so the projection must be rebuildable without depending on Stream retention.
+
+Implication for agents:
+- Do not fill `applicantCount` from admissions or from a partial projection.
+- Implement the snapshot contract in matching-service together with the projection.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `docs/architecture/matching-application-design.md`
 ## 2026-10-18 - Worker Settlement Policy and Foundation
 
 Decision:
