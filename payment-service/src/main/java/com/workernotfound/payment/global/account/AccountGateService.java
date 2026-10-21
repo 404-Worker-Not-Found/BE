@@ -66,6 +66,8 @@ public class AccountGateService {
         if (jdbc.queryForObject("select count(*) from payment_deposits where owner_member_id=? and (deposited_amount>0 or locked_amount>0 or funding_blocked=true)", Long.class, id) > 0) return true;
         // 정산으로 이관된 잠금은 LOCKED가 아니므로 지급 완료 전 정산으로 계속 차단한다.
         if (jdbc.queryForObject("select count(*) from payment_settlements where (owner_member_id=? or worker_member_id=?) and status<>'PAID'", Long.class, id, id) > 0) return true;
+        // PG 결과가 확정되지 않은 환불은 예치 차단과 별개로 계속 차단한다.
+        if (jdbc.queryForObject("select count(*) from payment_refunds where owner_member_id=? and status='REQUESTED'", Long.class, id) > 0) return true;
         return false;
     }
 
