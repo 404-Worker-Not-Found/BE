@@ -11,13 +11,10 @@ import com.workernotfound.chat.domain.chat.event.MatchConfirmedEvent;
 import com.workernotfound.chat.domain.chat.service.*;
 import com.workernotfound.chat.global.security.AuthenticatedMember;
 import com.workernotfound.chat.support.IntegrationTestSupport;
-import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -49,22 +46,6 @@ class ChatMessageIntegrationTests extends IntegrationTestSupport {
   }
 
   String path(Room room) { return "/api/chat-rooms/me/" + room.id() + "/messages"; }
-
-  String token(long memberId, String role) throws Exception {
-    var encoder = Base64.getUrlEncoder().withoutPadding();
-    String header = encoder.encodeToString(
-        "{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
-    String payload = mapper.writeValueAsString(Map.of("authAccountId", memberId,
-        "memberId", memberId, "role", role,
-        "exp", Instant.now().plusSeconds(300).getEpochSecond()));
-    String unsigned = header + "." + encoder.encodeToString(payload.getBytes(StandardCharsets.UTF_8));
-    Mac mac = Mac.getInstance("HmacSHA256");
-    mac.init(new SecretKeySpec(
-        "chat-test-jwt-secret-for-integration-only".getBytes(StandardCharsets.UTF_8),
-        "HmacSHA256"));
-    return "Bearer " + unsigned + "." + encoder.encodeToString(
-        mac.doFinal(unsigned.getBytes(StandardCharsets.UTF_8)));
-  }
 
 
   @Test

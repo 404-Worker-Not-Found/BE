@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workernotfound.chat.domain.chat.dto.request.ChatMessageRequest;
 import com.workernotfound.chat.domain.chat.dto.request.ChatReadPositionRequest;
 import com.workernotfound.chat.domain.chat.dto.request.ChatRoomRequest;
@@ -19,13 +18,9 @@ import com.workernotfound.chat.global.account.AccountGateService;
 import com.workernotfound.chat.global.exception.BusinessException;
 import com.workernotfound.chat.global.security.AuthenticatedMember;
 import com.workernotfound.chat.support.IntegrationTestSupport;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -34,8 +29,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -62,7 +55,6 @@ class ChatReadPositionIntegrationTests extends IntegrationTestSupport {
   @Autowired ChatReadPositionService reads;
   @Autowired ChatReadPositionRepository positions;
   @Autowired AccountGateService gates;
-  @Autowired ObjectMapper mapper;
   @Autowired JdbcTemplate jdbc;
   @Autowired MockMvc mvc;
   @Autowired PlatformTransactionManager transactionManager;
@@ -394,17 +386,4 @@ class ChatReadPositionIntegrationTests extends IntegrationTestSupport {
   String path(Room room) { return "/api/chat-rooms/me/" + room.id() + "/read-position"; }
 
   String body(long messageId) { return "{\"lastReadMessageId\":" + messageId + "}"; }
-
-  String token(long memberId, String role) throws Exception {
-    var encoder = Base64.getUrlEncoder().withoutPadding();
-    String header = encoder.encodeToString(
-        "{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
-    String payload = mapper.writeValueAsString(Map.of("authAccountId", memberId,
-        "memberId", memberId, "role", role, "exp", Instant.now().plusSeconds(300).getEpochSecond()));
-    String unsigned = header + "." + encoder.encodeToString(payload.getBytes(StandardCharsets.UTF_8));
-    Mac mac = Mac.getInstance("HmacSHA256");
-    mac.init(new SecretKeySpec("chat-test-jwt-secret-for-integration-only".getBytes(StandardCharsets.UTF_8),
-        "HmacSHA256"));
-    return "Bearer " + unsigned + "." + encoder.encodeToString(mac.doFinal(unsigned.getBytes(StandardCharsets.UTF_8)));
-  }
 }

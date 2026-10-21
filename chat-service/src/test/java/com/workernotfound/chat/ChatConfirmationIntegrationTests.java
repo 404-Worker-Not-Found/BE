@@ -18,8 +18,6 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -60,22 +58,6 @@ class ChatConfirmationIntegrationTests extends IntegrationTestSupport {
         "aggregateType", "MATCHING", "aggregateId", event.aggregateId().toString(),
         "revision", event.revision().toString(), "version", event.version().toString(),
         "payload", mapper.writeValueAsString(event));
-  }
-
-  String token(long memberId, String role) throws Exception {
-    var encoder = Base64.getUrlEncoder().withoutPadding();
-    String header = encoder.encodeToString(
-        "{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
-    String payload = mapper.writeValueAsString(Map.of("authAccountId", memberId,
-        "memberId", memberId, "role", role,
-        "exp", Instant.now().plusSeconds(300).getEpochSecond()));
-    String unsigned = header + "." + encoder.encodeToString(payload.getBytes(StandardCharsets.UTF_8));
-    Mac mac = Mac.getInstance("HmacSHA256");
-    mac.init(new SecretKeySpec(
-        "chat-test-jwt-secret-for-integration-only".getBytes(StandardCharsets.UTF_8),
-        "HmacSHA256"));
-    return "Bearer " + unsigned + "." + encoder.encodeToString(
-        mac.doFinal(unsigned.getBytes(StandardCharsets.UTF_8)));
   }
 
   @Test
