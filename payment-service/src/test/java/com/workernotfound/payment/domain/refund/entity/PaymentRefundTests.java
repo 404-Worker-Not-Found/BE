@@ -40,15 +40,30 @@ class PaymentRefundTests {
   @Test
   void finishedRefundKeepsFirstResult() {
     PaymentRefund succeeded = refund();
-    succeeded.succeed();
+    succeeded.succeed("tx-1");
     assertThat(succeeded.getStatus()).isEqualTo(SUCCEEDED);
+    assertThat(succeeded.getProviderTransactionKey()).isEqualTo("tx-1");
     assertThat(succeeded.getCompletedAt()).isNotNull();
-    assertThatIllegalStateException().isThrownBy(succeeded::fail);
-    assertThatIllegalStateException().isThrownBy(succeeded::succeed);
+    assertThatIllegalStateException().isThrownBy(() -> succeeded.fail("NOT_CANCELABLE_AMOUNT"));
+    assertThatIllegalStateException().isThrownBy(() -> succeeded.succeed(null));
+    assertThatIllegalStateException().isThrownBy(() -> succeeded.requireReview("PROVIDER_MISMATCH"));
 
     PaymentRefund failed = refund();
-    failed.fail();
+    failed.fail("NOT_CANCELABLE_AMOUNT");
     assertThat(failed.getStatus()).isEqualTo(FAILED);
-    assertThatIllegalStateException().isThrownBy(failed::succeed);
+    assertThat(failed.getFailureCode()).isEqualTo("NOT_CANCELABLE_AMOUNT");
+    assertThatIllegalStateException().isThrownBy(() -> failed.succeed(null));
+  }
+
+  @Test
+  void failureNeedsProviderCodeAndReviewKeepsRefundRequested() {
+    PaymentRefund refund = refund();
+    assertThatIllegalArgumentException().isThrownBy(() -> refund.fail(" "));
+    assertThat(refund.getStatus()).isEqualTo(REQUESTED);
+    refund.requireReview("UNEXPLAINED_CANCELLATION");
+    assertThat(refund.getStatus()).isEqualTo(REQUESTED);
+    assertThat(refund.isReviewRequired()).isTrue();
+    assertThat(refund.getFailureCode()).isEqualTo("UNEXPLAINED_CANCELLATION");
+    assertThat(refund.getCompletedAt()).isNull();
   }
 }
