@@ -1746,3 +1746,30 @@ Related files:
 - `chat-service/src/main/java/com/workernotfound/chat/domain/chat/service/ChatRoomQueryService.java`
 - `chat-service/src/main/java/com/workernotfound/chat/domain/chat/repository/ChatReadSummaryRepository.java`
 - `chat-service/src/main/resources/db/migration/V6__add_chat_unread_count_index.sql`
+
+## 2026-10-22 - Deposit Refund Policy and Foundation
+
+Decision:
+- The user approved the first #107 unit on 2026-10-22: the refund amount model, refund command persistence, and available-balance reservation only. The Toss cancel call and result recovery are the next unit.
+- Refunds are requested only through a payment-service internal API (`X-Internal-Secret`, `Idempotency-Key`) called by job-service or operator tooling. An owner-facing refund API is later work.
+- job-service, as the job owner, decides when a job no longer needs its deposit. `CLOSED` alone is not proof that a refund is allowed. payment-service only guarantees amount safety.
+- Partial and full refunds are allowed up to the available balance, in integer KRW of at least 1. Funding-blocked deposits are rejected and left for #108 recovery.
+- Deposit invariant: deposited = available + locked + settlement reserved + settlement paid + refund reserved + refunded. Refunds never decrease `deposited_amount`. Refund states are `REQUESTED`, `SUCCEEDED`, `FAILED`; only confirmed PG results leave `REQUESTED`.
+- Refund commands mirror lock commands: a fingerprinted key replays the original refund's current state, key reuse with different content is `PAYMENT-409-002`, and business rejections are persisted so a rejected key never later succeeds.
+- Unfinished (`REQUESTED`) refunds block owner withdrawal.
+
+Reason:
+- The job owner knows whether recruitment and seat reservations are finished; duplicating that rule in payment-service would couple it to job state.
+- Reserving only from the available balance under the deposit row lock keeps locked, settled, and refunded money from being used twice.
+
+Implication for agents:
+- Do not connect job-service or operator tooling to the refund API until the PG execution unit is merged; until then reserved refunds stay `REQUESTED`.
+- The PG execution unit must stop `OrderTransactionService.applyPayment` from treating our own refunds (`PARTIAL_CANCELED`/`CANCELED`) as external cancellations that block the deposit. Compare confirmed and in-flight refund totals with the provider's canceled amount, and block only unexplained cancellations.
+- Call the provider outside DB transactions with a stable per-refund idempotency key, keep unknown outcomes `REQUESTED`, and apply results only through `PaymentDeposit.completeRefund` or `cancelRefund`.
+- Keep the lock order refund command → deposit, and do not lock order rows after the deposit.
+
+Related files:
+- `docs/architecture/refund-design.md`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundCommandService.java`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/payment/entity/PaymentDeposit.java`
+- `payment-service/src/main/resources/db/migration/V8__create_payment_refunds.sql`
