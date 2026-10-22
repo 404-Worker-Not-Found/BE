@@ -280,13 +280,14 @@ class RefundIntegrationTests extends IntegrationTestSupport {
         .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PAYMENT-409-004"));
     mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
         .andExpect(jsonPath("$.paths['/api/payments/internal/refunds']").exists())
-        .andExpect(jsonPath("$.paths['/api/payments/internal/refunds/{refundId}']").exists());
+        .andExpect(jsonPath("$.paths['/api/payments/internal/refunds/{refundId}']").exists())
+        .andExpect(jsonPath("$.components.schemas.RefundRequest.properties.wholeAmount").doesNotExist());
   }
 
   @Test
   void httpRejectsInvalidAmountsReasonsAndKeys() throws Exception {
     long job = deposit("1000");
-    for (String amount : List.of("0", "-1", "0.5", "100.5", "100000000000000000", "null")) {
+    for (String amount : List.of("0", "-1", "0.5", "100.5", "100.50", "100000000000000000", "null")) {
       assertInvalid(key(), body(job, amount, "\"사유\""));
     }
     for (String reason : List.of("\"\"", "\" \"", "null", "\"" + "가".repeat(201) + "\"")) {
@@ -305,6 +306,11 @@ class RefundIntegrationTests extends IntegrationTestSupport {
         .header("Idempotency-Key", key()).contentType("application/json")
         .content(body(job, "100", "\"" + "가".repeat(200) + "\""))).andExpect(status().isOk());
     assertThat(balance(job, "refund_reserved_amount")).isEqualByComparingTo("100");
+    mvc.perform(post("/api/payments/internal/refunds").header("X-Internal-Secret", SECRET)
+        .header("Idempotency-Key", key()).contentType("application/json")
+        .content(body(job, "100.00", "\"사유\""))).andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.amount").value(100));
+    assertThat(balance(job, "refund_reserved_amount")).isEqualByComparingTo("200");
   }
 
   void assertInvalid(String key, String body) throws Exception {
