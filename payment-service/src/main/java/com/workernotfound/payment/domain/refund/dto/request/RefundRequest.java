@@ -9,7 +9,7 @@ public record RefundRequest(
     @NotNull @Positive Long jobPostId,
     @NotNull @Positive Long ownerMemberId,
     @NotNull @DecimalMin("1") BigDecimal amount,
-    @NotNull @Pattern(regexp = "[A-Z]{3}") String currency,
+    @NotNull @Pattern(regexp = "KRW") String currency,
     @NotBlank @Size(max = 200) String reason) {
   // @Digits는 후행 0도 소수 자릿수로 세므로 100.00을 거절한다. 후행 0을 뺀 값으로 확인한다.
   @JsonIgnore

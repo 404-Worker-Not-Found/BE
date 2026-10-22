@@ -67,7 +67,7 @@
 {"jobPostId":10,"ownerMemberId":20,"amount":30000,"currency":"KRW","reason":"모집 종료 후 미사용 예치금"}
 ```
 
-- `jobPostId`·`ownerMemberId`는 양수, `currency`는 대문자 3자, `reason`은 공백이 아닌 200자 이하다. 사유는 후속 PG 취소 요청의 취소 사유로 쓴다.
+- `jobPostId`·`ownerMemberId`는 양수, `currency`는 `KRW`, `reason`은 공백이 아닌 200자 이하다. 다른 통화는 400으로 거절하고 명령에 기록하지 않는다. 사유는 후속 PG 취소 요청의 취소 사유로 쓴다.
 - 응답 `data`: `refundId`(문자열), `jobPostId`, `ownerMemberId`, `orderId`(예치를 만든 결제 주문), `amount`, `currency`, `reason`, `status`, `requestedAt`, `completedAt`.
 - 같은 키·같은 요청은 처음 만든 환불의 **현재** 상태를 돌려준다. 금액 표현 `100`과 `100.00`은 같은 요청이다. 같은 키를 다른 내용에 쓰면 `PAYMENT-409-002`다. 키 공간은 잠금 명령과 분리돼 있다.
 
@@ -75,7 +75,7 @@
 | --- | --- | --- |
 | 성공 | 200, `REQUESTED` | 환불·이력·명령 |
 | 예치 없음 | `PAYMENT-409-001` | 명령에 거절 기록 |
-| 소유자·통화 불일치 | `PAYMENT-409-005` | 명령에 거절 기록 |
+| 소유자 불일치 | `PAYMENT-409-005` | 명령에 거절 기록 |
 | 예치 차단 | `PAYMENT-409-006` | 명령에 거절 기록 |
 | 가용 잔액 부족 | `PAYMENT-409-004` | 명령에 거절 기록 |
 | 명령 키 재사용 | `PAYMENT-409-002` | 없음 |

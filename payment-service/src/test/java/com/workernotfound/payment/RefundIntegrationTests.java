@@ -302,6 +302,11 @@ class RefundIntegrationTests extends IntegrationTestSupport {
     assertInvalid(key(), """
         {"jobPostId":1,"ownerMemberId":20,"amount":100,"currency":"krw","reason":"사유"}
         """);
+    String usd = key();
+    assertInvalid(usd, """
+        {"jobPostId":%d,"ownerMemberId":20,"amount":100,"currency":"USD","reason":"사유"}
+        """.formatted(job));
+    assertThat(count("SELECT COUNT(*) FROM payment_refund_commands WHERE command_key = ?", usd)).isZero();
     mvc.perform(post("/api/payments/internal/refunds").header("X-Internal-Secret", SECRET)
         .header("Idempotency-Key", key()).contentType("application/json")
         .content(body(job, "100", "\"" + "가".repeat(200) + "\""))).andExpect(status().isOk());
