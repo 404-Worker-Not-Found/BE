@@ -19,6 +19,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -31,6 +32,7 @@ class RefundExecutionIntegrationTests extends IntegrationTestSupport {
   @Autowired OrderApplicationService orders;
   @Autowired PaymentDepositRepository deposits;
   @Autowired JdbcTemplate jdbc;
+  @Autowired ApplicationContext context;
   @MockitoBean TossGateway toss;
   @MockitoBean FundingJobClient job;
 
@@ -245,6 +247,23 @@ class RefundExecutionIntegrationTests extends IntegrationTestSupport {
     assertThat(read(refundId).reviewRequired()).isTrue();
     assertThat(read(refundId).failureCode()).isEqualTo("PROVIDER_MISMATCH");
     assertThat(blocked(job)).isFalse();
+  }
+
+  @Test
+  void providerPaymentWithoutStatusStopsRefundAsMismatch() {
+    long job = deposit();
+    long refundId = refund(job, "3000");
+    cancelReturns(job, new TossPayment(paymentKey(job), orderId(job), null, "KRW", "카드",
+        new BigDecimal("10000"), new BigDecimal("7000"), OffsetDateTime.now()));
+    executions.execute(refundId);
+    assertThat(read(refundId).status()).isEqualTo("REQUESTED");
+    assertThat(read(refundId).failureCode()).isEqualTo("PROVIDER_MISMATCH");
+    assertThat(blocked(job)).isFalse();
+  }
+
+  @Test
+  void schedulerIsNotRegisteredWhenRecoveryIsDisabled() {
+    assertThat(context.getBeanNamesForType(RefundRecovery.class)).isEmpty();
   }
 
   @Test

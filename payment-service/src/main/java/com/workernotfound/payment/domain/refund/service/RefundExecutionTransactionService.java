@@ -112,7 +112,7 @@ public class RefundExecutionTransactionService {
         && order.currency().equals(payment.currency())
         && payment.totalAmount() != null && order.amount().compareTo(payment.totalAmount()) == 0
         && payment.balanceAmount() != null && payment.balanceAmount().signum() >= 0
-        && SETTLED_PAYMENT_STATUSES.contains(payment.status());
+        && payment.status() != null && SETTLED_PAYMENT_STATUSES.contains(payment.status());
   }
 
   // 같은 금액의 완료된 취소 중 가장 최근 것. 성공 판단에는 쓰지 않는 감사용 값이다.

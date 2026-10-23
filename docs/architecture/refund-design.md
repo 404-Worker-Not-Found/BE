@@ -123,7 +123,7 @@ fingerprint는 `REFUND:v1:{jobPostId}:{ownerMemberId}:{금액(뒤 0 제거)}:{cu
 
 ### 실행 순서
 
-`RefundRecovery`가 결제 복구 스케줄링(`payment.recovery.enabled`, 기본 켜짐)이 켜졌을 때 `payment.refund.interval`(기본 30초)마다 실행 대상을 최대 20건 처리한다.
+`RefundRecovery`는 결제 복구 설정(`payment.recovery.enabled`, 기본 켜짐)이 켜졌을 때만 빈으로 등록되고 `payment.refund.interval`(기본 30초)마다 실행 대상을 최대 20건 처리한다. 정산 이벤트 설정이 스케줄링을 켜도 이 설정이 꺼져 있으면 돌지 않는다.
 
 1. **점유**(짧은 트랜잭션): `REQUESTED`이고 검토 표시가 없고, 예치가 차단되지 않았고, 다음 시도 시각이 지났고, 임대가 없거나 만료된 환불을 `FOR UPDATE SKIP LOCKED`로 고른다. **같은 주문에 먼저 요청된 `REQUESTED` 환불이 있으면 고르지 않는다.** 2분 임대, `attempts + 1`, 첫 시도 시각을 커밋한 뒤 PG를 호출한다.
 2. **첫 시도**: 바로 `POST /v1/payments/{paymentKey}/cancel`을 보낸다. 본문은 `cancelReason`(요청 사유)과 정수 `cancelAmount`(항상 보낸다. 빼면 전액 취소가 된다), 헤더는 환불별 고정 `Idempotency-Key: refund-{refundId}`다.
