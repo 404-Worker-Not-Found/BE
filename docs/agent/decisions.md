@@ -1773,3 +1773,32 @@ Related files:
 - `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundCommandService.java`
 - `payment-service/src/main/java/com/workernotfound/payment/domain/payment/entity/PaymentDeposit.java`
 - `payment-service/src/main/resources/db/migration/V8__create_payment_refunds.sql`
+
+## 2026-10-22 - Deposit Refund Toss Execution
+
+Decision:
+- The second #107 unit executes `REQUESTED` refunds through Toss `POST /v1/payments/{paymentKey}/cancel` from a scheduler under `payment.recovery.enabled`. The refund request API stays create-only; callers poll the refund query.
+- Each refund uses the fixed idempotency key `refund-{refundId}` and always sends an integer `cancelAmount` (omitting it would cancel the full payment).
+- Refunds of one order run one at a time in request order, so earlier refunds are always resolved. Funding-blocked deposits are not executed.
+- Results are decided only by the provider's canceled total (`totalAmount - balanceAmount`) compared with the deposit's `refunded_amount`: equal → not applied, plus this refund's amount → `SUCCEEDED`, anything else → review plus deposit block like an external cancellation. Provider identity mismatches are marked for review without blocking.
+- `FAILED` requires an allowlisted definitive Toss rejection code and a re-query showing the cancel was not applied. Other codes, missing codes, 5xx, and network failures retry with 30–300 second backoff.
+- Retries re-query before resending. After 14 days from the first attempt (Toss keys are valid for 15), automatic resend stops and the refund is marked `IDEMPOTENCY_WINDOW_EXPIRED` for review.
+- Review is a flag on `REQUESTED`, not a state: the amount stays refund-reserved and automatic execution stops.
+- Order re-query and webhooks do not block a DEPOSITED order when its canceled total equals confirmed refunds, or confirmed refunds plus the order's in-flight attempted refund. Zero or other totals still block.
+
+Reason:
+- Toss cancel entries carry no caller identifier, so amount totals are the only reliable link between our refunds and provider state; sequential execution per order makes those totals unambiguous.
+- Our own refunds produce the same `PARTIAL_CANCELED`/`CANCELED` status and webhook as external cancellations; without the ledger check every successful refund would block the job.
+
+Implication for agents:
+- Keep the result-saving lock order order → deposit → refund, matching order re-query, and commit the claim (attempt increment) before calling Toss.
+- Do not resend a cancel without re-querying first, and do not mark `FAILED` from an error code alone.
+- Do not connect job-service or operator tooling to refunds until a real Toss test-environment partial/full cancel and webhook run has been verified.
+- Operator review and resume of flagged refunds, and refunds of funding-blocked deposits, remain #108 / follow-up work.
+
+Related files:
+- `docs/architecture/refund-design.md`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundExecutionService.java`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundExecutionTransactionService.java`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundLedger.java`
+- `payment-service/src/main/resources/db/migration/V9__add_payment_refund_execution.sql`

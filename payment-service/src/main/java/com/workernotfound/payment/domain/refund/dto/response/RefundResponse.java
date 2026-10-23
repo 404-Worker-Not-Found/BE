@@ -14,11 +14,13 @@ public record RefundResponse(
     String reason,
     String status,
     LocalDateTime requestedAt,
-    LocalDateTime completedAt) {
+    LocalDateTime completedAt,
+    boolean reviewRequired,
+    String failureCode) {
   public static RefundResponse from(PaymentRefund refund) {
     return new RefundResponse(refund.getId().toString(), refund.getJobPostId(),
         refund.getOwnerMemberId(), refund.getOrderId(), refund.getAmount(), refund.getCurrency(),
         refund.getReason(), refund.getStatus().name(), refund.getRequestedAt(),
-        refund.getCompletedAt());
+        refund.getCompletedAt(), refund.isReviewRequired(), refund.getFailureCode());
   }
 }

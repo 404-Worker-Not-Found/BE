@@ -4,15 +4,17 @@
 
 #107은 실제로 결제된 미사용 예치금을 점주에게 돌려주는 환불을 다룬다. 근로자 정산·지급은 #105가 맡는다([정산 설계](settlement-design.md)).
 
-첫 단위(2026-10-22)에서는 환불 정책, 금액 불변식, 환불 상태, 환불 요청 명령과 결과 조회 계약을 정했다. payment-service는 예치의 가용 잔액에서 환불 금액을 예약하고 `REQUESTED` 환불을 만든다. 아래는 구현하지 않는다.
+- 첫 단위(2026-10-22): 환불 정책, 금액 불변식, 환불 상태, 환불 요청 명령과 결과 조회 계약. payment-service는 예치의 가용 잔액에서 환불 금액을 예약하고 `REQUESTED` 환불을 만든다.
+- 두 번째 단위(2026-10-22): `REQUESTED` 환불을 토스 결제 취소로 실행하고, 응답 유실·타임아웃을 같은 환불로 복구하며, 확정된 PG 결과만 `SUCCEEDED`·`FAILED`로 반영한다. 결제 재조회·웹훅이 이쪽 환불을 외부 취소로 오인해 예치를 차단하지 않게 했다([PG 환불 실행](#pg-환불-실행)).
 
-- 토스 결제 취소 API 호출과 응답 유실·타임아웃 복구
-- 우리가 실행한 환불과 외부 취소를 구분하는 결제 재조회·웹훅 처리
-- 환불 결과(`SUCCEEDED`·`FAILED`) 반영
-- job-service의 환불 검토 화면·조회 API, 공고 자동 환불 트리거
+아래는 구현하지 않는다.
+
+- job-service의 환불 검토 화면·조회 API, 공고 자동 환불 트리거, 점주 직접 요청 API
+- 검토 대상(`review_required`) 환불의 운영자 조회·수동 재개, 차단된 예치의 환불(#108)
 - 거래 종료 확인 계약과 회원 탈퇴 차단 완화
+- 실제 토스 테스트 환경 환불 확인
 
-**호출자 연결 금지**: 이번 단위만으로는 예약된 금액이 PG에서 실제로 환불되지 않고 `REQUESTED`에 머문다. PG 실행 단위가 머지되기 전에는 job-service나 운영 도구를 이 API에 연결하지 않는다.
+**호출자 연결 전 확인**: 자동 테스트는 토스 대역으로만 검증했다. job-service나 운영 도구를 연결하기 전에 실제 토스 테스트 결제의 부분·전체 취소와 웹훅 수신을 확인한다.
 
 ## 확정한 정책 (2026-10-22)
 
@@ -23,7 +25,7 @@
 | 허용 금액 | 가용 잔액 이하이면 부분·전체 환불을 허용한다. 여러 번 나눠 요청할 수 있다. |
 | 원 단위 | 1원 이상 정수 KRW만 허용한다. `100.00`처럼 후행 0만 붙은 금액은 정수로 본다. 원 미만 금액(`100.50`)은 반올림하지 않고 400으로 거절한다. |
 | 예치 차단 | `funding_blocked` 예치는 PG에서 이미 취소·부분취소가 확인돼 장부와 PG 잔액이 다를 수 있다. 환불을 거절하고 #108 복구 대상으로 남긴다. |
-| PG | 처음에는 토스 테스트 환경을 대상으로 한다. 실행은 후속 단위다. |
+| PG | 토스 테스트 환경의 카드 결제 취소(`POST /v1/payments/{paymentKey}/cancel`)를 쓴다. |
 
 ## 금액 불변식
 
@@ -40,7 +42,7 @@
 - 환불은 `가용`에서만 예약한다. 잠금·정산 예약·지급 완료 금액은 환불할 수 없고, 환불 예약·환불 완료 금액은 새 잠금에 쓸 수 없다. 같은 금액이 정산과 환불에 동시에 쓰이지 않는다.
 - 환불은 예치 총액(`deposited_amount`)을 줄이지 않는다. 총액은 검증된 PG 예치 금액 그대로 남는다.
 - DB CHECK `ck_deposit_balance`가 여섯 항목이 0 이상이고 `잠금 + 정산 예약 + 지급 완료 + 환불 예약 + 환불 완료 <= 예치 총액`임을 강제한다(V8).
-- `PaymentDeposit.completeRefund`·`cancelRefund`는 후속 단위가 확정된 PG 결과를 반영할 때 쓴다. 예약액을 넘는 금액은 불변식 위반으로 전체를 롤백한다.
+- 확정된 PG 결과는 `PaymentDeposit.completeRefund`(성공)·`cancelRefund`(확정 실패)로만 반영한다. 예약액을 넘는 금액은 불변식 위반으로 전체를 롤백한다.
 
 ## 환불 상태
 
@@ -51,7 +53,9 @@
 | `FAILED` | PG가 환불을 확정적으로 거절. 예약액을 가용으로 돌림 | 없음 |
 
 - 응답 유실·타임아웃·5xx는 결과 미확정이다. `REQUESTED`를 유지하고 같은 환불로 조회·재시도한다. 새 환불로 다시 실행하지 않는다.
-- 모든 전이는 `payment_refund_histories`에 이전·다음 상태와 시각으로 남긴다. 결과가 확정되면 `completed_at`이 생긴다(`ck_refund_completed`).
+- `FAILED`에는 토스 오류 코드(`failure_code`)가 남는다.
+- **검토 필요**(`review_required=true`)는 상태가 아니라 표시다. 상태는 `REQUESTED`이고 금액도 환불 예약에 남은 채 자동 실행만 멈춘다. 사유는 `failure_code`에 `PROVIDER_MISMATCH`, `UNEXPLAINED_CANCELLATION`, `IDEMPOTENCY_WINDOW_EXPIRED` 중 하나로 남는다. 운영 확인·재개는 후속 범위다.
+- 모든 전이와 검토 전환은 `payment_refund_histories`에 이전·다음 상태, 사유, 시각으로 남긴다. 결과가 확정되면 `completed_at`이 생긴다(`ck_refund_completed`).
 
 ## 내부 API
 
@@ -68,7 +72,8 @@
 ```
 
 - `jobPostId`·`ownerMemberId`는 양수, `currency`는 `KRW`, `reason`은 공백이 아닌 200자 이하다. 다른 통화는 400으로 거절하고 명령에 기록하지 않는다. 사유는 후속 PG 취소 요청의 취소 사유로 쓴다.
-- 응답 `data`: `refundId`(문자열), `jobPostId`, `ownerMemberId`, `orderId`(예치를 만든 결제 주문), `amount`, `currency`, `reason`, `status`, `requestedAt`, `completedAt`.
+- 응답 `data`: `refundId`(문자열), `jobPostId`, `ownerMemberId`, `orderId`(예치를 만든 결제 주문), `amount`, `currency`, `reason`, `status`, `requestedAt`, `completedAt`, `reviewRequired`, `failureCode`.
+- 요청은 환불을 만들기만 하고 PG를 호출하지 않는다. 실행은 스케줄러가 맡으므로 호출자는 조회 API로 `SUCCEEDED`·`FAILED`를 확인한다.
 - 같은 키·같은 요청은 처음 만든 환불의 **현재** 상태를 돌려준다. 금액 표현 `100`과 `100.00`은 같은 요청이다. 같은 키를 다른 내용에 쓰면 `PAYMENT-409-002`다. 키 공간은 잠금 명령과 분리돼 있다.
 
 | 결과 | 코드 | 영속화 |
@@ -94,9 +99,9 @@
 
 | 테이블 | 내용 |
 | --- | --- |
-| `payment_refunds` | 예치·주문 ID, 공고·점주 스냅샷, 정수 KRW 금액, 사유, 상태, 요청·완료 시각. 금액·통화·상태·완료 시각 CHECK |
+| `payment_refunds` | 예치·주문 ID, 공고·점주 스냅샷, 정수 KRW 금액, 사유, 상태, 요청·완료 시각. 금액·통화·상태·완료 시각 CHECK. V9에서 실행 임대(`lease_token`·`lease_until`), 시도 횟수·첫 시도 시각·다음 시도 시각, 검토 표시, 실패 코드, 토스 취소 거래 키를 추가 |
 | `payment_refund_commands` | 명령 키, SHA-256 fingerprint, 성공한 환불 ID 또는 업무 거절 |
-| `payment_refund_histories` | 환불 상태 전이 |
+| `payment_refund_histories` | 환불 상태 전이와 사유(V9) |
 
 fingerprint는 `REFUND:v1:{jobPostId}:{ownerMemberId}:{금액(뒤 0 제거)}:{currency}:{reason}`의 SHA-256이다. 사유는 콜론을 포함할 수 있어 마지막에 둔다.
 
@@ -107,21 +112,69 @@ fingerprint는 `REFUND:v1:{jobPostId}:{ownerMemberId}:{금액(뒤 0 제거)}:{cu
 - 같은 예치의 환불끼리, 환불과 신규 잠금은 예치 행에서 직렬화된다. 둘 중 하나만 가용 잔액을 쓸 수 있다.
 - 같은 키의 동시 요청은 명령 행 잠금으로 직렬화되어 환불 하나만 만든다.
 - 주문 행은 잠그지 않고 읽는다. 결제 재조회(`주문 → 예치`)와 반대 순서로 잠그지 않기 위해서다. DEPOSITED 주문의 ID는 바뀌지 않는다.
-- 환불 예약 직후 결제 재조회가 예치를 차단할 수 있다. 차단은 예치 행 잠금을 기다렸다가 적용되며, 이미 `REQUESTED`인 환불의 처리는 PG 실행 단위가 정한다.
+- 환불 예약 직후 결제 재조회가 예치를 차단할 수 있다. 차단은 예치 행 잠금을 기다렸다가 적용되며, 차단된 예치의 환불은 실행하지 않는다.
+- 환불 결과 저장은 `주문 → 예치 → 환불` 순서로 잠근다. 결제 재조회(`주문 → 예치`)와 같은 순서라 두 판단이 직렬화되고 교착이 생기지 않는다.
 
 ## 회원 탈퇴
 
 `REQUESTED` 환불이 있는 점주는 탈퇴를 차단한다. 지금은 예치 자체(`deposited_amount > 0`)가 이미 탈퇴를 막으므로 중복이지만, 예치 차단 규칙을 거래 종료 기준으로 완화할 때도 결과 미확정 환불을 놓치지 않게 미리 둔다. 기존 차단을 완화하지 않았다.
 
+## PG 환불 실행
+
+### 실행 순서
+
+`RefundRecovery`가 결제 복구 스케줄링(`payment.recovery.enabled`, 기본 켜짐)이 켜졌을 때 `payment.refund.interval`(기본 30초)마다 실행 대상을 최대 20건 처리한다.
+
+1. **점유**(짧은 트랜잭션): `REQUESTED`이고 검토 표시가 없고, 예치가 차단되지 않았고, 다음 시도 시각이 지났고, 임대가 없거나 만료된 환불을 `FOR UPDATE SKIP LOCKED`로 고른다. **같은 주문에 먼저 요청된 `REQUESTED` 환불이 있으면 고르지 않는다.** 2분 임대, `attempts + 1`, 첫 시도 시각을 커밋한 뒤 PG를 호출한다.
+2. **첫 시도**: 바로 `POST /v1/payments/{paymentKey}/cancel`을 보낸다. 본문은 `cancelReason`(요청 사유)과 정수 `cancelAmount`(항상 보낸다. 빼면 전액 취소가 된다), 헤더는 환불별 고정 `Idempotency-Key: refund-{refundId}`다.
+3. **재시도**(attempts > 1): 먼저 `GET /v1/payments/{paymentKey}`로 반영 여부를 확인한다. 이미 반영됐으면 성공으로 확정하고, 반영되지 않았을 때만 같은 멱등 키로 다시 보낸다.
+4. **결과 저장**(짧은 트랜잭션): 주문 → 예치 → 환불 행을 잠그고 임대 토큰이 같을 때만 반영한다. 다른 작업자가 임대를 넘겨받았으면 아무것도 바꾸지 않는다.
+
+### 결과 판단
+
+토스 취소 항목(`cancels`)에는 이쪽 환불 ID가 없다. 그래서 결과는 응답의 **취소 합계**(`totalAmount - balanceAmount`)로만 판단한다. 한 주문의 환불은 요청 순서대로 하나씩 실행하므로, 실행 중인 환불보다 앞선 환불은 모두 성공·실패로 확정돼 있고 성공 합계가 예치의 `refunded_amount`다.
+
+| PG 취소 합계 | 판단 | 처리 |
+| --- | --- | --- |
+| = 환불 완료 | 반영되지 않음 | 확정 거절이면 `FAILED`(예약 → 가용), 아니면 재시도 |
+| = 환불 완료 + 이 환불 금액 | 반영됨 | `SUCCEEDED`(예약 → 환불 완료), 금액이 같은 완료 취소의 `transactionKey` 기록 |
+| 그 밖 | 설명되지 않는 취소 | 검토 표시(`UNEXPLAINED_CANCELLATION`), 주문 `REVIEW_REQUIRED`·예치 차단·`funded=false` 알림(외부 취소와 동일) |
+
+- 응답의 주문 ID·결제 키·통화·총액이 주문과 다르거나 잔액·상태가 없으면 금액을 판단하지 않고 검토 표시(`PROVIDER_MISMATCH`)만 한다.
+- 2xx 응답인데 반영되지 않은 합계면 결과 미확정으로 보고 재시도한다.
+
+### 오류 분류
+
+| 분류 | 토스 응답 | 처리 |
+| --- | --- | --- |
+| 확정 거절 | `ALREADY_CANCELED_PAYMENT`, `ALREADY_REFUND_PAYMENT`, `EXCEED_CANCEL_AMOUNT_DISCOUNT_AMOUNT`, `EXCEED_CANCEL_LIMIT`, `EXCEED_MAX_REFUND_DUE`, `INVALID_REQUEST`, `NOT_ALLOWED_PARTIAL_REFUND`, `NOT_CANCELABLE_AMOUNT`, `NOT_CANCELABLE_PAYMENT`, `NOT_CANCELABLE_PAYMENT_FOR_DORMANT_USER`, `NOT_FOUND_PAYMENT`, `NOT_MATCHES_REFUNDABLE_AMOUNT`, `REFUND_REJECTED` | 결제를 조회해 위 표로 판단한다. 반영되지 않았을 때만 `FAILED` |
+| 결과 미확정 | 그 밖의 코드(`PROVIDER_ERROR`, `FORBIDDEN_CONSECUTIVE_REQUEST`, `UNAUTHORIZED_KEY` 등), 코드 없음, 5xx, 타임아웃·네트워크 오류, 토스 비활성 | `REQUESTED` 유지, 30·60·120·240초(최대 300초) 뒤 재시도 |
+
+- 확정 거절 코드라도 조회로 반영 여부를 확인한다. 예를 들어 `ALREADY_CANCELED_PAYMENT`인데 합계가 이 환불을 포함하면 성공이다. 오류 분류가 틀려도 반영된 환불을 실패로 기록해 금액을 다시 쓰는 일은 없다.
+- 오류 응답 본문은 보관·로그하지 않는다. 대문자·숫자·밑줄 64자 이하의 `code`만 꺼낸다.
+
+### 멱등 키 유효 기간
+
+토스 멱등 키는 첫 요청부터 15일 동안만 처음 응답을 돌려준다. 첫 시도 후 14일이 지난 재시도는 같은 키로 다시 보내지 않고 검토 표시(`IDEMPOTENCY_WINDOW_EXPIRED`)로 멈춘다. 그 안의 재시도도 조회로 반영되지 않았음을 확인한 뒤에만 보낸다.
+
+### 결제 재조회·웹훅과의 관계
+
+이쪽 환불도 토스 결제를 `PARTIAL_CANCELED`·`CANCELED`로 바꾸고 `PAYMENT_STATUS_CHANGED` 웹훅을 보낸다. 기존 `OrderTransactionService.applyPayment`는 DEPOSITED 주문의 이 상태를 외부 취소로 보고 예치를 차단했다. 이제 `RefundLedger`가 같은 트랜잭션에서 예치 행을 잠그고, PG 취소 합계가 아래 둘 중 하나면 차단하지 않는다.
+
+- 확정된 환불 합계(`refunded_amount`)와 같다.
+- 확정된 환불 합계 + 이 주문의 진행 중 환불(시도 횟수 1 이상, 검토 표시 없음) 금액과 같다. PG에는 반영됐지만 결과 저장 전인 경우다. 점유가 PG 호출 전에 커밋되므로 재조회가 이 환불을 놓치지 않는다.
+
+취소 합계가 0이거나(`PARTIAL_CANCELED`인데 잔액이 그대로인 경우 포함) 위와 다르면 기존처럼 외부 취소로 보고 차단한다.
+
 ## 후속 작업
 
-1. **PG 환불 실행**: `REQUESTED` 환불을 DB 트랜잭션 밖에서 토스 `POST /v1/payments/{paymentKey}/cancel`(`cancelAmount`, `cancelReason`, 환불별 고정 `Idempotency-Key`)로 실행한다. 주문 승인과 같이 lease로 중복 실행을 막고, 결과 미확정은 같은 키로 재시도하거나 결제 조회의 취소 내역으로 확인한다. 확정된 결과만 `completeRefund`·`cancelRefund`와 상태 전이에 반영한다.
-2. **재조회·웹훅과의 충돌 방지**: 현재 `OrderTransactionService.applyPayment`는 DEPOSITED 주문의 `PARTIAL_CANCELED`·`CANCELED` 조회 결과를 외부 취소로 보고 예치를 차단(`REVIEW_REQUIRED`, `funded=false`)한다. 우리가 실행한 환불도 같은 상태를 만들므로, PG 실행 단위에서 확인된 환불 누적액·진행 중 환불액과 PG의 취소 합계(`totalAmount - balanceAmount`)를 대조해 설명되지 않는 취소만 차단해야 한다. 이 처리 없이 PG 실행을 연결하면 정상 환불 뒤 공고가 차단된다.
-3. 차단된 예치의 환불과 이미 `REQUESTED`인 환불의 처리(#108).
-4. job-service 환불 검토 기록(`job_payment_refund_reviews`)과 환불 요청 연결, 점주 직접 요청 API.
-5. 거래 종료 확인 계약: 남은 예치가 모두 정산·환불로 끝났는지 판단해 탈퇴 차단 판단에 연결한다(#105와 공동).
-6. 실제 토스 테스트 환경 환불 확인.
+1. 실제 토스 테스트 환경에서 부분·전체 취소, 같은 키 재요청, 웹훅 수신 확인. 그 뒤 호출자 연결.
+2. 검토 대상 환불의 운영자 조회·원인 확인·수동 재개 경로와 차단된 예치의 환불(#108).
+3. job-service 환불 검토 기록(`job_payment_refund_reviews`)과 환불 요청 연결, 점주 직접 요청 API.
+4. 거래 종료 확인 계약: 남은 예치가 모두 정산·환불로 끝났는지 판단해 탈퇴 차단 판단에 연결한다(#105와 공동).
 
 ## 검증
 
-MySQL Testcontainers 통합 테스트로 가용 잔액 예약, 같은 키 재요청, 거절 영속화, 잠금 금액 보호, 차단·불일치 예치, 동시 환불·잠금 경쟁, 이력 저장 실패 롤백, CHECK 제약, HTTP 계약·인증·입력 검증을 확인했다. PG 호출이 없으므로 외부 HTTP 대역은 쓰지 않았다.
+- 첫 단위: MySQL Testcontainers 통합 테스트로 가용 잔액 예약, 같은 키 재요청, 거절 영속화, 잠금 금액 보호, 차단·불일치 예치, 동시 환불·잠금 경쟁, 이력 저장 실패 롤백, CHECK 제약, HTTP 계약·인증·입력 검증을 확인했다.
+- 두 번째 단위: 토스 게이트웨이 대역과 MySQL Testcontainers로 성공 반영, 응답 유실 뒤 조회로 성공 확정(재전송 없음), 미반영 미확정 오류의 같은 키 재전송, 조회로 확인한 확정 거절의 실패와 금액 복귀, 거절 코드보다 취소 합계 우선, 재시도 대상 코드, 설명되지 않는 취소의 검토·예치 차단, 응답 식별 불일치, 주문 내 순차 실행, 멱등 키 유효 기간 초과, 차단 예치 미실행, 임대를 넘겨받은 뒤 이전 작업자의 저장 무시, 진행 중·확정 환불로 설명되는 결제 재조회의 차단 제외를 확인했다. HTTP 클라이언트는 `MockRestServiceServer`로 요청 본문·멱등 키·오류 코드 추출을 확인했다.
+- 실제 토스 API는 호출하지 않았다.
