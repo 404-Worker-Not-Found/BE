@@ -13,6 +13,7 @@ import com.workernotfound.matching.domain.matching.service.MatchingCancellationS
 import com.workernotfound.matching.domain.outbox.service.OutboxEventCommandService;
 import com.workernotfound.matching.global.account.AccountGateService;
 import com.workernotfound.matching.global.exception.BusinessException;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -32,6 +33,7 @@ public class ApplicationCommandService {
 	private final MatchingCancellationService matchingCancellationService;
 	private final OutboxEventCommandService outboxEventCommandService;
 	private final ApplicationEventPublisher eventPublisher;
+	private final Clock clock;
 
 	@Transactional
 	public Application create(
@@ -41,6 +43,7 @@ public class ApplicationCommandService {
 		Long admissionId,
 		Long jobVersion,
 		LocalDateTime appliedAt,
+		LocalDateTime workStartsAt,
 		String correlationId
 	) {
 		accountGates.requireActive(workerMemberId, ownerMemberId);
@@ -54,6 +57,7 @@ public class ApplicationCommandService {
 			.ownerMemberId(ownerMemberId)
 			.jobApplicationAdmissionId(admissionId)
 			.appliedAt(appliedAt)
+			.workStartsAt(workStartsAt)
 			.build();
 		applicationRepository.saveAndFlush(application);
 		historyRepository.saveAndFlush(initialHistory(application));
@@ -72,8 +76,12 @@ public class ApplicationCommandService {
 		if (application.getStatus() != ApplicationStatus.APPLIED) {
 			throw new BusinessException(ApplicationErrorCode.APPLICATION_STATE_CONFLICT);
 		}
+		// 지원 행 잠금 뒤의 시각으로 판단한다. 매칭 제안(PENDING)이 있어도 기한 안이면 함께 취소한다.
+		LocalDateTime changedAt = LocalDateTime.now(clock);
+		if (application.hasWorkStarted(changedAt)) {
+			throw new BusinessException(ApplicationErrorCode.CANCELLATION_DEADLINE_PASSED);
+		}
 
-		LocalDateTime changedAt = LocalDateTime.now();
 		matchingCancellationService.cancelPendingByApplication(applicationId, workerMemberId, changedAt);
 		application.cancel();
 		applicationRepository.flush();

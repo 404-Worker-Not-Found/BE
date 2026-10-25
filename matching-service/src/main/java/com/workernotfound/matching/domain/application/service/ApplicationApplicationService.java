@@ -58,6 +58,7 @@ public class ApplicationApplicationService {
 				admission.admissionId(),
 				admission.jobVersion(),
 				admission.admittedAt(),
+				LocalDateTime.of(admission.workDate(), admission.startTime()),
 				correlationId
 			));
 		} catch (DataIntegrityViolationException exception) {
@@ -142,7 +143,9 @@ public class ApplicationApplicationService {
 			|| admission.jobVersion() <= 0
 			|| admission.ownerMemberId() == null
 			|| admission.admittedAt() == null
-			|| admission.expiresAt() == null) {
+			|| admission.expiresAt() == null
+			|| admission.workDate() == null
+			|| admission.startTime() == null) {
 			throw new BusinessException(ApplicationErrorCode.DEPENDENCY_SERVICE_UNAVAILABLE);
 		}
 		if (!admission.expiresAt().isAfter(LocalDateTime.now())) {

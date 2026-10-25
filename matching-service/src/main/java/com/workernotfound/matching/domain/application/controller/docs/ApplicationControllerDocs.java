@@ -77,7 +77,7 @@ public interface ApplicationControllerDocs {
 
 	@Operation(
 		summary = "지원 취소",
-		description = "접수 상태인 본인 지원을 취소합니다. 이미 취소된 지원은 기존 결과를 반환합니다.",
+		description = "접수 상태인 본인 지원을 근무 시작 전까지 취소합니다. 매칭 제안을 받은 중이면 제안도 함께 취소합니다. 패널티는 없습니다. 이미 취소된 지원은 기존 결과를 반환합니다.",
 		security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 	)
 	@ApiResponses({
@@ -88,7 +88,7 @@ public interface ApplicationControllerDocs {
 		),
 		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "다른 회원의 지원", content = @Content),
 		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "지원 없음", content = @Content),
-		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "취소할 수 없는 상태", content = @Content)
+		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "취소할 수 없는 상태(APPLICATION-409-002) 또는 근무 시작 이후(APPLICATION-409-006)", content = @Content)
 	})
 	ResponseEntity<ApiResponse<ApplicationResponse>> cancel(
 		@Parameter(hidden = true) AuthenticatedMember member,
