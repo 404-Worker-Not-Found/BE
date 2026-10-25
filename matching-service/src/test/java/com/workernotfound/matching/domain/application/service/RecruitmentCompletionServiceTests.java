@@ -140,14 +140,14 @@ class RecruitmentCompletionServiceTests extends IntegrationTestSupport {
 		recruitmentCompletionService.complete(14L, 3L, "completion-command");
 
 		assertThatThrownBy(() -> applicationCommandService.create(
-			14L, 20L, 100L, 9L, 3L, LocalDateTime.now(), "late-application"
+			14L, 20L, 100L, 9L, 3L, LocalDateTime.now(), LocalDateTime.now().plusDays(1), "late-application"
 		))
 			.isInstanceOfSatisfying(BusinessException.class, exception ->
 				assertThat(exception.getErrorCode())
 					.isEqualTo(ApplicationErrorCode.RECRUITMENT_ALREADY_COMPLETED));
 
 		Application reopened = applicationCommandService.create(
-			14L, 20L, 100L, 10L, 4L, LocalDateTime.now(), "reopened-application"
+			14L, 20L, 100L, 10L, 4L, LocalDateTime.now(), LocalDateTime.now().plusDays(1), "reopened-application"
 		);
 
 		assertThat(reopened.getStatus()).isEqualTo(ApplicationStatus.APPLIED);
@@ -278,7 +278,7 @@ class RecruitmentCompletionServiceTests extends IntegrationTestSupport {
 				throw new IllegalStateException("지원 생성 동시성 테스트 대기 시간이 초과되었습니다.");
 			}
 			applicationCommandService.create(
-				jobPostId, 20L, 100L, 11L, 1L, LocalDateTime.now(), "concurrent-application"
+				jobPostId, 20L, 100L, 11L, 1L, LocalDateTime.now(), LocalDateTime.now().plusDays(1), "concurrent-application"
 			);
 		} catch (BusinessException exception) {
 			if (exception.getErrorCode() != ApplicationErrorCode.RECRUITMENT_ALREADY_COMPLETED) {

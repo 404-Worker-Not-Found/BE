@@ -44,6 +44,7 @@ class ApplicationOutboxTransactionTests extends IntegrationTestSupport {
 			9930L,
 			1L,
 			LocalDateTime.now(),
+			LocalDateTime.now().plusDays(1),
 			"00000000-0000-0000-0000-000000000001"
 		))
 			.isInstanceOf(IllegalStateException.class)

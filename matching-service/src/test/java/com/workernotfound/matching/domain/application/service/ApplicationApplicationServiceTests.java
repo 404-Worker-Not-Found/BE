@@ -106,6 +106,38 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 	}
 
 	@Test
+	void storesWorkStartFromAdmission() {
+		stubEligibleWorker();
+		stubAdmission(35L);
+
+		ApplicationResponse response = applicationService.create(
+			WORKER_MEMBER_ID,
+			new CreateApplicationRequest(JOB_POST_ID)
+		);
+
+		assertThat(applicationRepository.findById(response.applicationId())).get()
+			.extracting(application -> application.getWorkStartsAt())
+			.isEqualTo(LocalDate.now().plusDays(1).atTime(9, 0));
+	}
+
+	@Test
+	void rejectsAdmissionWithoutWorkScheduleWithoutCreatingApplication() {
+		stubEligibleWorker();
+		when(jobServiceClient.createApplicationAdmission(
+			org.mockito.ArgumentMatchers.eq(JOB_POST_ID),
+			org.mockito.ArgumentMatchers.eq(WORKER_MEMBER_ID),
+			anyString()
+		)).thenReturn(new ApplicationAdmissionResponse(
+			36L, JOB_POST_ID, 1L, 100L, 1L, null, LocalTime.of(9, 0), LocalTime.of(18, 0),
+			BigDecimal.valueOf(37.5), BigDecimal.valueOf(127.0), LocalDateTime.now(), LocalDateTime.now().plusMinutes(1)
+		));
+		assertThatThrownBy(() -> applicationService.create(WORKER_MEMBER_ID, new CreateApplicationRequest(JOB_POST_ID)))
+			.isInstanceOfSatisfying(BusinessException.class, exception ->
+				assertThat(exception.getErrorCode()).isEqualTo(ApplicationErrorCode.DEPENDENCY_SERVICE_UNAVAILABLE));
+		assertThat(applicationRepository.count()).isZero();
+	}
+
+	@Test
 	void returnsExistingAppliedApplicationWithoutCallingDependenciesAgain() {
 		stubEligibleWorker();
 		stubAdmission(31L);

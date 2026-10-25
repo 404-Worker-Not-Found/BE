@@ -141,6 +141,7 @@ class ApplicationQueueProjectionTests extends IntegrationTestSupport {
 			admissionId,
 			1L,
 			LocalDateTime.now(),
+			LocalDateTime.now().plusDays(1),
 			"create-correlation-id-" + admissionId
 		);
 	}
