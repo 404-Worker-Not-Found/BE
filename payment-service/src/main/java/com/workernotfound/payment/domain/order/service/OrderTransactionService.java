@@ -4,6 +4,7 @@ import com.workernotfound.payment.domain.order.dto.*;
 import com.workernotfound.payment.domain.order.exception.OrderErrorCode;
 import com.workernotfound.payment.domain.order.repository.PaymentOrderRepository.Order;
 import com.workernotfound.payment.domain.order.repository.PaymentOrderRepository;
+import com.workernotfound.payment.domain.refund.service.RefundLedger;
 import com.workernotfound.payment.external.toss.TossPayment;
 import com.workernotfound.payment.global.account.AccountGateService;
 import com.workernotfound.payment.global.exception.BusinessException;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderTransactionService {
   private final AccountGateService accountGates;
   private final PaymentOrderRepository orders;
+  private final RefundLedger refunds;
 
   public record Claim(Order order, String token, boolean firstAttempt) {}
 
@@ -110,6 +112,9 @@ public class OrderTransactionService {
       return false;
     }
     if (Set.of("CANCELED", "PARTIAL_CANCELED").contains(payment.status())) {
+      // 이쪽이 실행한 환불(확정 또는 진행 중)로 설명되는 취소는 외부 취소가 아니므로 예치를 차단하지 않는다.
+      if ("DEPOSITED".equals(order.status())
+          && refunds.explainsCancellation(order.jobId(), order.id(), payment)) return false;
       if ("DEPOSITED".equals(order.status()) || "PARTIAL_CANCELED".equals(payment.status()))
         orders.block(order);
       else orders.transition(order.id(), "FAILED");

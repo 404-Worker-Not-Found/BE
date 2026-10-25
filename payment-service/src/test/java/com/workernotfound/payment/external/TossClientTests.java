@@ -60,6 +60,61 @@ class TossClientTests {
   }
 
   @Test
+  void cancelSendsIntegerAmountReasonAndRefundIdempotencyKey() {
+    var builder = RestClient.builder().baseUrl("https://api.tosspayments.com");
+    var server = MockRestServiceServer.bindTo(builder).build();
+    server
+        .expect(requestTo("https://api.tosspayments.com/v1/payments/key-1/cancel"))
+        .andExpect(method(HttpMethod.POST))
+        .andExpect(header("Idempotency-Key", "refund-7"))
+        .andExpect(content().json("{\"cancelReason\":\"미사용 예치금\",\"cancelAmount\":3000}", true))
+        .andRespond(
+            withSuccess(
+                """
+                {"orderId":"order-1","paymentKey":"key-1","status":"PARTIAL_CANCELED","currency":"KRW",
+                "totalAmount":10000,"balanceAmount":7000,"cancels":[{"transactionKey":"tx-1","cancelAmount":3000,
+                "cancelStatus":"DONE","canceledAt":"2026-10-22T10:00:00+09:00","receiptKey":null}]}
+                """,
+                MediaType.APPLICATION_JSON));
+    var client = new TossClient(builder.build(), new TossProperties(true, "test_sk_fixture", null));
+    var payment = client.cancel("key-1", new BigDecimal("3000.00"), "미사용 예치금", "refund-7");
+    assertThat(payment.balanceAmount()).isEqualByComparingTo("7000");
+    assertThat(payment.cancels()).singleElement()
+        .satisfies(cancel -> assertThat(cancel.transactionKey()).isEqualTo("tx-1"));
+    server.verify();
+  }
+
+  @Test
+  void cancelErrorsKeepOnlyWellFormedProviderCode() {
+    var builder = RestClient.builder().baseUrl("https://api.tosspayments.com");
+    var server = MockRestServiceServer.bindTo(builder).build();
+    server
+        .expect(requestTo("https://api.tosspayments.com/v1/payments/key-1/cancel"))
+        .andRespond(withStatus(HttpStatus.FORBIDDEN).contentType(MediaType.APPLICATION_JSON)
+            .body("{\"code\":\"NOT_CANCELABLE_AMOUNT\",\"message\":\"sensitive provider details\"}"));
+    server
+        .expect(requestTo("https://api.tosspayments.com/v1/payments/key-1/cancel"))
+        .andRespond(withStatus(HttpStatus.BAD_REQUEST).body("not json sensitive"));
+    server
+        .expect(requestTo("https://api.tosspayments.com/v1/payments/key-1/cancel"))
+        .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON)
+            .body("{\"code\":\"lower case; injected\"}"));
+    var client = new TossClient(builder.build(), new TossProperties(true, "test_sk_fixture", null));
+    assertThatThrownBy(() -> client.cancel("key-1", BigDecimal.ONE, "사유", "refund-1"))
+        .isInstanceOfSatisfying(TossClientException.class, exception -> {
+          assertThat(exception.remoteStatus()).isEqualTo(403);
+          assertThat(exception.remoteCode()).isEqualTo("NOT_CANCELABLE_AMOUNT");
+          assertThat(exception.getMessage()).doesNotContain("sensitive");
+        });
+    for (int attempt = 0; attempt < 2; attempt++) {
+      assertThatThrownBy(() -> client.cancel("key-1", BigDecimal.ONE, "사유", "refund-1"))
+          .isInstanceOfSatisfying(TossClientException.class,
+              exception -> assertThat(exception.remoteCode()).isNull());
+    }
+    server.verify();
+  }
+
+  @Test
   void disabledIntegrationMakesNoRequestsAndLiveKeysAreRejected() {
     assertThatThrownBy(() -> new TossProperties(true, "live_sk_not_allowed", null))
         .isInstanceOf(IllegalArgumentException.class);
@@ -67,6 +122,8 @@ class TossClientTests {
         .isInstanceOf(IllegalArgumentException.class);
     var client = new TossClient(RestClient.create(), new TossProperties(false, "", null));
     assertThatThrownBy(() -> client.confirm("order-1", "key", BigDecimal.ONE))
+        .isInstanceOf(BusinessException.class);
+    assertThatThrownBy(() -> client.cancel("key", BigDecimal.ONE, "사유", "refund-1"))
         .isInstanceOf(BusinessException.class);
     assertThat(new TossProperties(true, "test_sk_fixture", null).toString())
         .doesNotContain("test_sk_fixture");
