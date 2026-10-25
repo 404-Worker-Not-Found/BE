@@ -76,10 +76,12 @@ member-service의 `PATCH /api/members/internal/{memberId}/contact`는 X-Internal
 | job | CLOSED가 아닌 점주 공고, 유효 RESERVED 지원 승인, RESERVED 모집 자리, 미완료 주문/모집 완료 전달 |
 | matching | APPLIED 지원, PENDING 제안, PROCESSING/COMPENSATING 확정 Saga |
 | work | COMPLETED/CANCELED/FAILED/NO_SHOW가 아닌 근무 |
-| payment | FAILED/SUPERSEDED가 아닌 주문, LOCKED 결제, 지급 완료(PAID) 전 정산, 결과 미확정(REQUESTED) 환불, 잔액·잠금·확인 필요 상태의 예치금 |
+| payment | FAILED/SUPERSEDED가 아닌 주문(예치가 종료된 DEPOSITED 주문 제외), LOCKED 결제, 지급 완료(PAID) 전 정산, 결과 미확정(REQUESTED) 환불, 종료되지 않은 예치금 |
 
 확정된 매칭과 선택된 지원은 work/payment의 종료 상태로 함께 검사한다.
-현재 최종 환불·정산 계약이 없으므로 DEPOSITED 주문은 탈퇴를 계속 차단한다.
+예치 종료(2026-10-26): 예치 총액이 지급 완료 정산액과 환불 완료액의 합과 같고 예치 차단이 없으면 종료된 예치다.
+이때 가용·잠금·정산 예약·환불 예약 금액은 모두 0이다. 종료된 예치와 그 공고의 DEPOSITED 주문은 탈퇴를 차단하지 않는다.
+남은 금액이 있거나 차단된 예치, 예치가 없는 DEPOSITED 주문, READY·CONFIRMING·REVIEW_REQUIRED 주문은 계속 차단한다.
 RELEASED 잠금은 환불이나 정산 종료의 증거로 취급하지 않는다.
 필요한 서비스가 응답하지 않아도 탈퇴를 완료하지 않는다.
 

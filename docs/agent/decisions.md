@@ -1802,3 +1802,26 @@ Related files:
 - `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundExecutionTransactionService.java`
 - `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundLedger.java`
 - `payment-service/src/main/resources/db/migration/V9__add_payment_refund_execution.sql`
+
+## 2026-10-26 - Deposit Closure Releases Owner Withdrawal Block
+
+Decision:
+- A payment deposit is closed when `deposited_amount = settlement_paid_amount + refunded_amount` and `funding_blocked = false`. The balance CHECK then guarantees available, locked, settlement-reserved, and refund-reserved amounts are all zero.
+- payment-service withdrawal prepare no longer treats a closed deposit, or a DEPOSITED order whose job's deposit (same owner) is closed, as a blocker.
+- Still blocking: deposits that are not closed (including funding-blocked ones), DEPOSITED orders without a deposit, READY/CONFIRMING/REVIEW_REQUIRED orders, LOCKED payment locks, settlements before `PAID` (owner and worker), and `REQUESTED` refunds including review-flagged ones.
+- Closure is decided only from confirmed ledger amounts. `RELEASED` locks, `CLOSED` jobs, and refund requests are not closure evidence.
+
+Reason:
+- The 2026-10-06 withdrawal decision kept DEPOSITED orders and outstanding deposits as blockers until refund/settlement completion contracts existed. #107 now confirms refunds only from Toss results and #105 records paid settlements, so the ledger can prove that no money remains.
+- Without this, an owner whose deposit was fully refunded could never withdraw.
+
+Implication for agents:
+- New balance columns on `payment_deposits` must be added to the closure condition in `AccountGateService` and to `ck_deposit_balance` together.
+- Refunds and payment locks need available balance, which a closed deposit no longer has, and order creation and locks acquire the member gate, so a closed deposit cannot receive new activity after withdrawal prepare. Keep that property when adding new deposit-crediting paths.
+- Until payout execution exists, only fully refunded deposits close; do not mark settlements `PAID` without a confirmed payout.
+
+Related files:
+- `docs/architecture/member-account-management.md`
+- `docs/architecture/refund-design.md`
+- `docs/architecture/settlement-design.md`
+- `payment-service/src/main/java/com/workernotfound/payment/global/account/AccountGateService.java`

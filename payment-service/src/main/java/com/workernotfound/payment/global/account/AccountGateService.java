@@ -16,6 +16,10 @@ import org.springframework.transaction.annotation.*;
 @Service
 @RequiredArgsConstructor
 public class AccountGateService {
+  // 예치 총액이 지급 완료와 환불 완료로 모두 끝났고 차단되지 않은 예치다.
+  // 잔액 CHECK로 이때 가용·잠금·정산 예약·환불 예약은 모두 0이다.
+  private static final String CLOSED_DEPOSIT =
+      "(d.funding_blocked=false and d.deposited_amount=d.settlement_paid_amount+d.refunded_amount)";
   private final JdbcTemplate jdbc;
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -61,9 +65,12 @@ public class AccountGateService {
     }
 
     private boolean hasBlockers(Long id) {
-        if (jdbc.queryForObject("select count(*) from payment_orders where owner_member_id=? and status not in ('FAILED','SUPERSEDED')", Long.class, id) > 0) return true;
+        // DEPOSITED 주문은 그 공고의 예치가 종료됐을 때만 차단하지 않는다. 다른 미종료 상태는 계속 차단한다.
+        if (jdbc.queryForObject("select count(*) from payment_orders o where o.owner_member_id=? and o.status not in ('FAILED','SUPERSEDED')"
+            + " and not (o.status='DEPOSITED' and exists (select 1 from payment_deposits d where d.job_post_id=o.job_post_id"
+            + " and d.owner_member_id=o.owner_member_id and " + CLOSED_DEPOSIT + "))", Long.class, id) > 0) return true;
         if (jdbc.queryForObject("select count(*) from payment_locks where (owner_member_id=? or worker_member_id=?) and status='LOCKED'", Long.class, id, id) > 0) return true;
-        if (jdbc.queryForObject("select count(*) from payment_deposits where owner_member_id=? and (deposited_amount>0 or locked_amount>0 or funding_blocked=true)", Long.class, id) > 0) return true;
+        if (jdbc.queryForObject("select count(*) from payment_deposits d where d.owner_member_id=? and not " + CLOSED_DEPOSIT, Long.class, id) > 0) return true;
         // 정산으로 이관된 잠금은 LOCKED가 아니므로 지급 완료 전 정산으로 계속 차단한다.
         if (jdbc.queryForObject("select count(*) from payment_settlements where (owner_member_id=? or worker_member_id=?) and status<>'PAID'", Long.class, id, id) > 0) return true;
         // PG 결과가 확정되지 않은 환불은 예치 차단과 별개로 계속 차단한다.
