@@ -20,6 +20,9 @@ spring:
 matching:
   internal:
     secret: ${INTERNAL_API_SECRET}
+  schedule:
+    # 공고 근무 일시를 해석하는 시간대. work-service 근무 일정 시간대와 같아야 한다.
+    time-zone: ${MATCHING_SCHEDULE_TIME_ZONE:Asia/Seoul}
   jwt:
     secret: ${AUTH_JWT_SECRET}
   member-service:

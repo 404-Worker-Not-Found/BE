@@ -1832,7 +1832,7 @@ Decision:
 - The user chose (issue #103) that workers can cancel an `APPLIED` application until work starts, that a pending matching proposal does not prevent cancellation (it is canceled together, as before), and that pre-confirmation cancellation has no penalty.
 - Work has started when the current time equals or passes `workDate + startTime`. A cancellation at or after that time returns `APPLICATION-409-006` and changes no application, matching, history, or outbox event.
 - matching-service stores the work start from the job-service admission response on the application (`applications.work_starts_at`, V12) and rejects admissions without `workDate`/`startTime` as a dependency failure. Applications created before V12 keep `NULL` and are not deadline-checked; job-service recruitment completion still rejects them after work starts.
-- The current time is read from a `Clock` bean after the application-row lock, in the server default time zone like job-service.
+- The current time is read from a `Clock` bean after the application-row lock, in the job schedule time zone (`matching.schedule.time-zone` / `MATCHING_SCHEDULE_TIME_ZONE`, default `Asia/Seoul`, kept equal to work-service `WORK_ATTENDANCE_TIME_ZONE`), not the JVM default. Work dates and times are owner-entered local times in that zone.
 - Check order: owner, already `CANCELED` returns the stored result (also after the deadline), non-`APPLIED` is `APPLICATION-409-002`, then the deadline.
 
 Reason:

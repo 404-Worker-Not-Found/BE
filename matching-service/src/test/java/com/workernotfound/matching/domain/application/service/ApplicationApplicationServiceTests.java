@@ -62,6 +62,9 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 	@Autowired
 	private ObjectMapper objectMapper;
 
+	@Autowired
+	private java.time.Clock clock;
+
 	@MockitoBean
 	private MemberServiceClient memberServiceClient;
 
@@ -118,6 +121,11 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 		assertThat(applicationRepository.findById(response.applicationId())).get()
 			.extracting(application -> application.getWorkStartsAt())
 			.isEqualTo(LocalDate.now().plusDays(1).atTime(9, 0));
+	}
+
+	@Test
+	void cancellationClockUsesScheduleTimeZoneRegardlessOfJvmDefault() {
+		assertThat(clock.getZone()).isEqualTo(java.time.ZoneId.of("Asia/Seoul"));
 	}
 
 	@Test
