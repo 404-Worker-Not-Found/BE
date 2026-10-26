@@ -41,7 +41,8 @@ class OrderIntegrationTests extends IntegrationTestSupport {
 
   @Autowired FundingNotificationRepository notifications;
   @Autowired PaymentApplicationService locks;
-  @Autowired PaymentRecovery recovery;
+  @Autowired PaymentRecoveryService recovery;
+  @Autowired org.springframework.context.ApplicationContext context;
   @Autowired JdbcTemplate jdbc;
   @Autowired MockMvc mvc;
   @MockitoBean TossGateway toss;
@@ -350,6 +351,12 @@ class OrderIntegrationTests extends IntegrationTestSupport {
                 Boolean.class,
                 order.orderId()))
         .isTrue();
+  }
+
+  @Test
+  void recoverySchedulerIsNotRegisteredWhenRecoveryIsDisabled() {
+    assertThat(context.getBeanNamesForType(PaymentRecovery.class)).isEmpty();
+    assertThat(context.getBeanNamesForType(PaymentRecoveryService.class)).hasSize(1);
   }
 
   @Test
