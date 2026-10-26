@@ -1,45 +1,24 @@
 package com.workernotfound.payment.domain.order.service;
 
-import com.workernotfound.payment.domain.order.repository.*;
-import com.workernotfound.payment.external.job.FundingJobClient;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.*;
 import org.springframework.stereotype.Component;
 
-@Slf4j
+// 결제 복구 설정(payment.recovery.enabled)이 켜져 있을 때만 등록된다.
+// 정산 이벤트 설정도 스케줄링을 켜므로 빈 등록 자체를 같은 설정으로 막는다.
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "payment.recovery.enabled", havingValue = "true", matchIfMissing = true)
 public class PaymentRecovery {
-  private final PaymentOrderRepository orders;
-  private final OrderApplicationService service;
-  private final FundingNotificationRepository notifications;
-  private final FundingJobClient job;
+  private final PaymentRecoveryService recoveries;
 
   @Scheduled(
       fixedDelayString = "${payment.recovery.interval:30s}",
       initialDelayString = "${payment.recovery.interval:30s}")
   public void recover() {
-    for (String id : orders.findDueOrders()) {
-      try {
-        service.recover(id);
-      } catch (RuntimeException exception) {
-        log.warn("결제 조회 복구 실패: type={}", exception.getClass().getSimpleName());
-      }
-    }
-    for (int i = 0; i < 20; i++) {
-      var notification = notifications.claim();
-      if (notification == null) break;
-      try {
-        job.deliver(notification);
-        notifications.acknowledge(notification);
-      } catch (RuntimeException exception) {
-        notifications.retry(notification);
-        log.warn("예치 상태 전달 실패: type={}", exception.getClass().getSimpleName());
-      }
-    }
+    recoveries.recover();
   }
 
   @Configuration(proxyBeanMethods = false)
