@@ -93,7 +93,7 @@ POST /api/jobs/internal/{jobPostId}/funding-status
 
 일반 결제 웹훅의 본문은 상태 변경의 힌트로만 사용한다. 이미 주문에 연결된 orderId/paymentKey와 일치하는 알림만 재조회 대기열에 반영하고 200으로 응답한다. 웹훅이 새로운 결제 키를 연결하거나 승인 요청을 최초로 시작할 수 없다. 조회는 서버의 시크릿 키로 수행한다. 중복·위조 알림 본문으로 잔액이 증가하지 않는다. 조회 도중 들어온 웹훅은 reconcile_revision 비교로 유실하지 않는다.
 
-30초 간격 작업자가 조회 대기와 공고 알림을 각각 최대 20개 처리한다. 실패는 30~240초 backoff로 재시도하고, 만료된 lease는 다른 인스턴스가 복구한다. 공고 알림에는 최대 시도 횟수 제한이 없다. 예치 완료 이후 확인된 취소·부분취소는 REVIEW_REQUIRED로 기록하고 funding_blocked=true로 새 잠금을 차단한다. 이미 잠긴 잔액은 임의 차감하지 않으며 환불·정산 후속 기능이 처리해야 한다. 단, payment-service가 실행한 환불(확정 또는 진행 중)로 PG 취소 합계가 설명되면 외부 취소가 아니므로 차단하지 않는다([환불 설계](refund-design.md#결제-재조회웹훅과의-관계)).
+30초 간격 작업자(`PaymentRecovery`, 처리는 `PaymentRecoveryService`)가 조회 대기와 공고 알림을 각각 최대 20개 처리한다. 작업자는 결제 복구 설정(`payment.recovery.enabled`, 기본 켜짐)이 켜졌을 때만 빈으로 등록된다. 정산 이벤트 설정이 스케줄링을 켜도 이 설정이 꺼져 있으면 돌지 않는다. 실패는 30~240초 backoff로 재시도하고, 만료된 lease는 다른 인스턴스가 복구한다. 공고 알림에는 최대 시도 횟수 제한이 없다. 예치 완료 이후 확인된 취소·부분취소는 REVIEW_REQUIRED로 기록하고 funding_blocked=true로 새 잠금을 차단한다. 이미 잠긴 잔액은 임의 차감하지 않으며 환불·정산 후속 기능이 처리해야 한다. 단, payment-service가 실행한 환불(확정 또는 진행 중)로 PG 취소 합계가 설명되면 외부 취소가 아니므로 차단하지 않는다([환불 설계](refund-design.md#결제-재조회웹훅과의-관계)).
 
 환불은 `POST /v1/payments/{paymentKey}/cancel`에 환불별 `Idempotency-Key: refund-{refundId}`와 정수 `cancelAmount`를 보낸다. 실행·복구 규칙은 환불 설계를 따른다.
 
