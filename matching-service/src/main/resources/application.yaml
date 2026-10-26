@@ -21,8 +21,8 @@ matching:
   internal:
     secret: ${INTERNAL_API_SECRET}
   schedule:
-    # 공고 근무 일시를 해석하는 시간대. work-service 근무 일정 시간대와 같아야 한다.
-    time-zone: ${MATCHING_SCHEDULE_TIME_ZONE:Asia/Seoul}
+    # 공고 근무 일시를 해석하는 시간대. 같은 로컬 시각을 같은 순간으로 보도록 work-service와 같은 설정을 쓴다.
+    time-zone: ${WORK_ATTENDANCE_TIME_ZONE:Asia/Seoul}
   jwt:
     secret: ${AUTH_JWT_SECRET}
   member-service:
