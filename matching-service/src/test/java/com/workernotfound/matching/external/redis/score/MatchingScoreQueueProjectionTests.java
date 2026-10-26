@@ -207,6 +207,7 @@ class MatchingScoreQueueProjectionTests extends IntegrationTestSupport {
 			admissionId,
 			1L,
 			appliedAt,
+			LocalDateTime.now().plusDays(1),
 			"create-correlation-id-" + admissionId
 		);
 	}

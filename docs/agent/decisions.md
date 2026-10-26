@@ -1825,3 +1825,26 @@ Related files:
 - `docs/architecture/refund-design.md`
 - `docs/architecture/settlement-design.md`
 - `payment-service/src/main/java/com/workernotfound/payment/global/account/AccountGateService.java`
+
+## 2026-10-26 - Application Cancellation Deadline Without Penalty
+
+Decision:
+- The user chose (issue #103) that workers can cancel an `APPLIED` application until work starts, that a pending matching proposal does not prevent cancellation (it is canceled together, as before), and that pre-confirmation cancellation has no penalty.
+- Work has started when the current time equals or passes `workDate + startTime`. A cancellation at or after that time returns `APPLICATION-409-006` and changes no application, matching, history, or outbox event.
+- matching-service stores the work start from the job-service admission response on the application (`applications.work_starts_at`, V12) and rejects admissions without `workDate`/`startTime` as a dependency failure. Applications created before V12 keep `NULL` and are not deadline-checked; job-service recruitment completion still rejects them after work starts.
+- The current time is read from a `Clock` bean after the application-row lock, in the job schedule time zone (`matching.schedule.time-zone`, bound to the same `WORK_ATTENDANCE_TIME_ZONE` variable as work-service, default `Asia/Seoul`), not the JVM default. Work dates and times are owner-entered local times in that zone.
+- Check order: owner, already `CANCELED` returns the stored result (also after the deadline), non-`APPLIED` is `APPLICATION-409-002`, then the deadline.
+
+Reason:
+- An application is not a work commitment and a pending proposal reserves no seat, so penalizing or blocking cancellation before confirmation has little benefit. Commitment starts at confirmation, which #104 covers.
+- Job work date and time can change only for `PAYMENT_PENDING` jobs without admission history, so the admission-time snapshot stays valid and matching-service needs no job-service call at cancellation.
+
+Implication for agents:
+- Do not add penalties or proposal-based cancellation limits for `APPLIED` applications without a new decision; put post-confirmation penalties in #104.
+- If job work schedules become editable after applications exist, the stored work start must be updated through a new contract.
+
+Related files:
+- `docs/architecture/matching-application-design.md`
+- `docs/architecture/mvp-domain-flow.md`
+- `matching-service/src/main/java/com/workernotfound/matching/domain/application/service/ApplicationCommandService.java`
+- `matching-service/src/main/resources/db/migration/V12__add_work_starts_at_to_applications.sql`

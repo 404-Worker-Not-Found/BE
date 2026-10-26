@@ -81,6 +81,7 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 			30L,
 			1L,
 			LocalDateTime.now(),
+			LocalDateTime.now().plusDays(1),
 			"correlation-id"
 		);
 
@@ -99,6 +100,7 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 			30L,
 			1L,
 			LocalDateTime.now(),
+			LocalDateTime.now().plusDays(1),
 			"create-correlation-id"
 		);
 		doThrow(new IllegalStateException("Redis connection failed"))
@@ -133,6 +135,7 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 			30L,
 			1L,
 			LocalDateTime.now(),
+			LocalDateTime.now().plusDays(1),
 			"correlation-id"
 		);
 

@@ -60,6 +60,10 @@ public class Application extends BaseEntity {
 	@Column(name = "applied_at", nullable = false, updatable = false)
 	private LocalDateTime appliedAt;
 
+	// 지원할 때 받은 근무 시작 일시. V12 이전 지원은 NULL이다.
+	@Column(name = "work_starts_at", updatable = false)
+	private LocalDateTime workStartsAt;
+
 	@Version
 	@Column(nullable = false)
 	private Long version;
@@ -73,14 +77,21 @@ public class Application extends BaseEntity {
 			Long workerMemberId,
 			Long ownerMemberId,
 			Long jobApplicationAdmissionId,
-			LocalDateTime appliedAt) {
+			LocalDateTime appliedAt,
+			LocalDateTime workStartsAt) {
 		this.jobPostId = jobPostId;
 		this.workerMemberId = workerMemberId;
 		this.ownerMemberId = ownerMemberId;
 		this.jobApplicationAdmissionId = jobApplicationAdmissionId;
 		this.status = ApplicationStatus.APPLIED;
 		this.appliedAt = appliedAt;
+		this.workStartsAt = workStartsAt;
 		this.revision = 1L;
+	}
+
+	// 근무 시작 시각과 같거나 지났으면 시작한 것으로 본다. 근무 일시를 모르는 지원은 검사하지 않는다.
+	public boolean hasWorkStarted(LocalDateTime now) {
+		return workStartsAt != null && !now.isBefore(workStartsAt);
 	}
 
 	public void cancel() {
