@@ -21,7 +21,7 @@
 
 `GET /api/payments/me/settlements?beforeId=&size=20`: 최신 ID 내림차순, 최대 100, 다음 페이지는 마지막 ID를 beforeId로 전달한다. 본인의 OWNER/WORKER 역할에 해당하는 필드로만 조회한다.
 
-`GET /api/payments/me/settlements/{id}`: 본인 정산만 반환하고 타인의 ID는 404다. 응답의 시각은 근무 시간대(`WORK_SCHEDULE_ZONE`, 기본 Asia/Seoul)다. 지급 명령의 provider 참조·수취인 정보는 반환하지 않는다. `payoutReviewRequired`로 결과 불일치·조회 부재로 검토가 필요한 상태를 구분한다.
+`GET /api/payments/me/settlements/{id}`: 본인 정산만 반환하고 타인의 ID는 404다. 응답의 시각은 근무 시간대(`WORK_ATTENDANCE_TIME_ZONE`, 기본 Asia/Seoul)다. 지급 명령의 provider 참조·수취인 정보는 반환하지 않는다. `payoutReviewRequired`로 결과 불일치·조회 부재로 검토가 필요한 상태를 구분한다.
 
 ## 출시 전 보강
 

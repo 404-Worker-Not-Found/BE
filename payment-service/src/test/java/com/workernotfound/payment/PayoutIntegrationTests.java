@@ -32,11 +32,11 @@ import org.springframework.test.context.bean.override.mockito.*;
 import org.springframework.test.web.servlet.MockMvc;
 
 @AutoConfigureMockMvc
-@TestPropertySource(properties = {"payment.payout.enabled=true", "payment.payout.initial-delay=1h"})
+@TestPropertySource(properties = {"payment.payout.enabled=true", "payment.payout.initial-delay=1h", "WORK_ATTENDANCE_TIME_ZONE=UTC"})
 class PayoutIntegrationTests extends IntegrationTestSupport {
   static final AtomicLong IDS = new AtomicLong(2_000_000);
   static final Instant NOW = Instant.parse("2026-10-28T00:00:00Z");
-  static final LocalDateTime SCHEDULE_NOW = LocalDateTime.ofInstant(NOW, ZoneId.of("Asia/Seoul"));
+  static final LocalDateTime SCHEDULE_NOW = LocalDateTime.ofInstant(NOW, ZoneOffset.UTC);
   @Autowired PayoutExecutionService execution;
   @Autowired PayoutTransactionService transactions;
   @Autowired PayoutRepository commands;

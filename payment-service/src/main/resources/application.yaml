@@ -41,7 +41,7 @@ payment:
   payout:
     # 실제 지급 어댑터·수취인 등록이 연결되기 전에는 켜지 않는다. 운영 성공 대역은 제공하지 않는다.
     enabled: ${PAYMENT_PAYOUT_ENABLED:false}
-    schedule-zone: ${WORK_SCHEDULE_ZONE:Asia/Seoul}
+    schedule-zone: ${WORK_ATTENDANCE_TIME_ZONE:Asia/Seoul}
   recovery:
     enabled: true
     interval: 30s
