@@ -110,6 +110,12 @@ public class Application extends BaseEntity {
 		this.revision++;
 	}
 
+	public void cancelSelectedWork() {
+		if (status != ApplicationStatus.SELECTED) throw new BusinessException(ApplicationErrorCode.APPLICATION_STATE_CONFLICT);
+		status = ApplicationStatus.CANCELED;
+		revision++;
+	}
+
 	public void reject() {
 		if (status != ApplicationStatus.APPLIED) {
 			throw new BusinessException(ApplicationErrorCode.APPLICATION_STATE_CONFLICT);

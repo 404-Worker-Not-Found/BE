@@ -291,6 +291,8 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - Local HTTP/MySQL ports are 8083/3309. `./scripts/local-run.sh job` runs the service; repository verification includes its MySQL integration tests.
 - See `docs/architecture/job-post-design.md`.
 
+- Work terminal-event consumers (#104/#105 MVP) reconcile confirmed work IDs and participants against the completed Saga. WorkCompleted closes a matching as COMPLETED; WorkCanceled/WorkNoShow close the matching and selected application as CANCELED with histories and deduplication. No recruitment reopening or trust penalties are applied.
+
 ## Work Service Context
 
 - `work-service` uses Java 17, Spring Boot 4.1.0, service-owned MySQL, Flyway, Spring Security, and Springdoc.
@@ -340,6 +342,8 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - HTTP/MySQL ports are 8085/3313. Local execution and repository verification include payment-service.
 - Order re-query snapshots the confirmed refund total before provider I/O. If it changes before the result is saved, the stale response is discarded and retried without changing the order, deposit, or funding notifications; unexplained cancellations from a fresh query still block funding (#122).
 - See `docs/architecture/payment-lock-design.md` for the boundary and follow-up work. See `docs/architecture/toss-deposit-design.md` for the provider and job/frontend contracts. Full matching acceptance still requires product frontend and job-service integration.
+
+- A dedicated work-termination consumer releases only the confirmed work's normal active payment lock on cancellation/no-show. Funding-blocked or settlement-transferred funds are durably marked REVIEW_REQUIRED; a transferable settlement is held. Termination records prevent a late completion from reusing released money. This is not a PG refund or an automatic resolution of blocked funds.
 
 ## Notification Service Context
 

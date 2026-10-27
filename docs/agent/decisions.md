@@ -1889,3 +1889,22 @@ Related files:
 - `docs/architecture/refund-design.md`
 - `payment-service/src/main/java/com/workernotfound/payment/domain/order/service/OrderTransactionService.java`
 - `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundLedger.java`
+
+## 2026-10-28 - MVP Work Termination Coordination
+
+Decision:
+- Under the user's MVP-first instruction, consume terminal work facts using dedicated durable consumer groups and retain eventId receipts plus a per-work fact barrier.
+- Match a terminal work against the completed confirmation Saga and participants under application → matching → Saga locks. WorkCompleted moves matching to COMPLETED and keeps the selected application; cancellation/no-show move matching and selected application to CANCELED. Existing public application-cancellation deadlines do not change.
+- For cancellation/no-show, payment uses the recorded MatchConfirmed target, never whichever replacement lock happens to be active. Normal active LOCKED money returns in full to the same deposit's available balance without PG refund or penalty.
+- Keep funding-blocked, inactive and settlement-transferred resources for review; hold a still payable transferred settlement. Do not claw back PAID money or declare an unknown payout failed. A terminal-work barrier prevents later completion from reserving already released money.
+- Missing confirmation and transient persistence errors stay pending. Contract mismatches are recorded without mutating another work or payment. Source histories, balance mutations and receipts commit together.
+
+Reason:
+- MVP needs a complete internal lifecycle without duplicating money or leaving every finished matching CONFIRMED. Actual refunds, payouts and operator recovery require separate contracts and provider verification.
+
+Implication for agents:
+- Follow `docs/mvp-release-gaps.md` for deferred launch work. Do not treat record/notification or lock release as actual provider refund/payment completion.
+
+Related files:
+- `docs/architecture/work-termination-coordination.md`
+- `docs/mvp-release-gaps.md`

@@ -33,6 +33,7 @@ public abstract class IntegrationTestSupport {
     registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
     // 정산 이벤트 소비자 빈은 만들되 스케줄러가 테스트의 직접 호출과 경쟁하지 않도록 첫 실행을 미룬다.
     registry.add("payment.settlement-events.initial-delay", () -> "1h");
+    registry.add("payment.work-termination.initial-delay-ms", () -> "3600000");
     registry.add("payment.jwt.secret", () -> "payment-test-jwt-secret-with-at-least-32-bytes");
     registry.add("payment.recovery.enabled", () -> "false");
     registry.add("payment.internal.secret", () -> "payment-test-internal-secret");
