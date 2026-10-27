@@ -16,8 +16,11 @@ import com.workernotfound.payment.support.IntegrationTestSupport;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -156,6 +159,57 @@ class RefundExecutionIntegrationTests extends IntegrationTestSupport {
     assertThat(read(refundId).status()).isEqualTo("SUCCEEDED");
     assertThat(balance(job, "refunded_amount")).isEqualByComparingTo("3000");
     verify(toss, times(1)).cancel(any(), any(), any(), any());
+  }
+
+  @ParameterizedTest
+  @CsvSource({"0,2000", "1000,2000", "1000,9000"})
+  void delayedRequeryRetriesWhenRefundLedgerChanges(String previous, String next) throws Exception {
+    long job = deposit();
+    BigDecimal previousAmount = new BigDecimal(previous);
+    if (previousAmount.signum() > 0) {
+      long first = refund(job, previous);
+      cancelReturns(job, payment(job, new BigDecimal("10000").subtract(previousAmount).toPlainString()));
+      executions.execute(first);
+    }
+    String oldBalance = new BigDecimal("10000").subtract(previousAmount).toPlainString();
+    long second = refund(job, next);
+    var queried = new CountDownLatch(1);
+    var resume = new CountDownLatch(1);
+    when(toss.getPayment(paymentKey(job))).thenAnswer(invocation -> {
+      queried.countDown();
+      if (!resume.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("조회 재개 시간 초과");
+      return payment(job, oldBalance);
+    });
+    var executor = Executors.newSingleThreadExecutor();
+    var recovery = executor.submit(() -> orders.recover(orderId(job)));
+    String latestBalance = new BigDecimal(oldBalance).subtract(new BigDecimal(next)).toPlainString();
+    try {
+      assertThat(queried.await(10, TimeUnit.SECONDS)).isTrue();
+      cancelReturns(job, payment(job, latestBalance));
+      executions.execute(second);
+      assertThat(read(second).status()).isEqualTo("SUCCEEDED");
+    } finally {
+      resume.countDown();
+      executor.shutdown();
+    }
+    recovery.get(10, TimeUnit.SECONDS);
+
+    assertThat(orderStatus(job)).isEqualTo("DEPOSITED");
+    assertThat(blocked(job)).isFalse();
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment_funding_notifications WHERE order_id = ?"
+        + " AND funded = FALSE", Long.class, orderId(job))).isZero();
+    assertThat(jdbc.queryForObject("SELECT next_check_at IS NOT NULL AND lease_token IS NULL"
+        + " FROM payment_orders WHERE id = ?", Boolean.class, orderId(job))).isTrue();
+    requery(job, payment(job, latestBalance));
+    assertThat(orderStatus(job)).isEqualTo("DEPOSITED");
+    assertThat(blocked(job)).isFalse();
+    assertThat(jdbc.queryForObject("SELECT next_check_at FROM payment_orders WHERE id = ?",
+        java.time.LocalDateTime.class, orderId(job))).isNull();
+    if (new BigDecimal(latestBalance).signum() > 0) {
+      requery(job, payment(job, new BigDecimal(latestBalance).subtract(BigDecimal.ONE).toPlainString()));
+      assertThat(orderStatus(job)).isEqualTo("REVIEW_REQUIRED");
+      assertThat(blocked(job)).isTrue();
+    }
   }
 
   @Test

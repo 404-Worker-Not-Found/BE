@@ -1,5 +1,6 @@
 package com.workernotfound.payment.domain.refund.service;
 
+import com.workernotfound.payment.domain.payment.entity.PaymentDeposit;
 import com.workernotfound.payment.domain.payment.repository.PaymentDepositRepository;
 import com.workernotfound.payment.domain.refund.repository.RefundExecutionRepository;
 import com.workernotfound.payment.external.toss.TossPayment;
@@ -19,6 +20,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class RefundLedger {
   private final PaymentDepositRepository deposits;
   private final RefundExecutionRepository executions;
+
+  @Transactional(propagation = Propagation.MANDATORY)
+  public BigDecimal findRefundedAmount(Long jobPostId) {
+    return deposits.findByJobPostIdForUpdate(jobPostId)
+        .map(PaymentDeposit::getRefundedAmount).orElse(null);
+  }
 
   @Transactional(propagation = Propagation.MANDATORY)
   public boolean explainsCancellation(Long jobPostId, String orderId, TossPayment payment) {
