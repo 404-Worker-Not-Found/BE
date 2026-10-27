@@ -1871,3 +1871,27 @@ Related files:
 - `job-service/src/main/java/com/workernotfound/job/global/config/ClockConfig.java`
 - `matching-service/src/main/java/com/workernotfound/matching/domain/application/service/ApplicationApplicationService.java`
 - `matching-service/src/main/java/com/workernotfound/matching/domain/matching/service/MatchingConfirmationService.java`
+
+## 2026-10-28 - Mutual Reviews After Work Completion (Tentative Policy)
+
+Decision:
+- With the project deadline close, the user asked for remaining MVP features to be completed and left this unit to run unattended. Mutual reviews were implemented first because ownership and contracts were already defined (member-service owns reviews and reacts to `WorkCompleted`), so only policy values had to be assumed.
+- Tentative policies, documented as such: owner and worker of a completed work review each other once per work; integer rating 1–5; optional comment up to 500 characters (trimmed, blank stored as null); writable until completion time + `MEMBER_REVIEW_WRITE_PERIOD` (default 14 days, exclusive); no edit or delete; any authenticated member can read received reviews, which hide the reviewer ID and show only the reviewer role; average is rounded to one decimal and null without reviews.
+- member-service consumes `WorkCompleted` v1 from `work:domain-events` with group `member-review-work-v1`, following the existing work/matching consumer ACK and pending rules. Same-work redelivery is a duplicate; a different owner/worker/job for the same work ID stays pending as a contract violation.
+- A review and the reviewee's rating aggregate commit in one transaction under the reviewer/reviewee account gates (ascending ID) and the reviewable-work row lock; the existing-review check is a locking read. Reviews survive withdrawal as transaction evidence and do not block withdrawal.
+- member-service reads current time from a `Clock` in the shared schedule zone (`WORK_ATTENDANCE_TIME_ZONE`).
+
+Reason:
+- Reviews are an MVP-included feature with no implementation, and the service ownership and event contract were already decided, so a reversible unit could be built without new architecture.
+- Policy values are explicitly undecided in the domain flow document; configurable or easily changed tentative values keep the demo flow complete without fixing business rules permanently.
+
+Implication for agents:
+- Treat the review policy values as tentative. Ask the user before changing rating range, period, visibility, or adding edit/delete.
+- Trust score calculation, `TrustScoreUpdated`, and the matching rating input are the next unit; compute trust scores from `member_review_stats` in the same transaction as the review per the domain flow.
+- Keep the existing-review lookup a locking read; a plain read misses concurrently committed reviews under REPEATABLE READ.
+
+Related files:
+- `docs/architecture/member-review-design.md`
+- `member-service/src/main/java/com/workernotfound/member/domain/review/service/ReviewCommandService.java`
+- `member-service/src/main/java/com/workernotfound/member/external/redis/WorkCompletedEventConsumer.java`
+- `member-service/src/main/resources/db/migration/V5__create_member_reviews.sql`
