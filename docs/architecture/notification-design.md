@@ -7,7 +7,7 @@ notification-service는 회원별 인앱 알림과 읽음 상태를 전용 MySQL
 - `MatchConfirmed`: 점주 OWNER와 알바생 WORKER 각각에게 알림을 생성한다. 화면 기본 문구는 “매칭이 확정되었습니다.”로 표시할 수 있다.
 - `ApplicationRejected`: 해당 WORKER에게만 알림을 생성한다. 기본 문구는 “지원한 공고의 모집이 완료되었습니다.”다.
 - API는 type과 공고·지원·매칭 ID를 반환한다. 프런트에서 문구와 이동 화면을 결정한다. 토큰, 결제 ID, 다른 참여자 ID, 내부 이벤트 ID는 노출하지 않는다.
-- 현재 ApplicationSubmitted 이벤트에는 점주 ID가 없으므로 점주 지원 알림을 임의로 생성하지 않는다. 공고·출근·노쇼·결제 알림, 실시간 push/SSE/WebSocket, 외부 앱 푸시·SMS·이메일은 후속 범위다. 인앱 목록과 미읽음 개수는 REST 재조회로 갱신한다.
+- 현재 ApplicationSubmitted 이벤트에는 점주 ID가 없으므로 점주 지원 알림을 임의로 생성하지 않는다. 공고·결제 알림, 실시간 push/SSE/WebSocket, 외부 앱 푸시·SMS·이메일은 후속 범위다. 인앱 목록과 미읽음 개수는 REST 재조회로 갱신한다.
 
 ## 소비와 멱등성
 
@@ -42,20 +42,26 @@ notification-service는 회원별 인앱 알림과 읽음 상태를 전용 MySQL
 
 ## 근무 상태 변경 알림
 
-`WorkCheckedIn`, `WorkStarted`, `WorkCompleted` v1은 별도 `work:domain-events` Stream에서 소비한다. 그룹은 `notification-work-v1`, 공유 논리 consumer는 `notification-work`다. 기존 matching 그룹과 pending 커서는 분리되어 한쪽의 실패가 다른 이벤트를 막지 않는다.
+`WorkCheckedIn`, `WorkStarted`, `WorkCompleted`, `WorkCanceled`, `WorkNoShow` 및 취소 요청 상태 이벤트 v1은 별도 `work:domain-events` Stream에서 소비한다. 그룹은 `notification-work-v1`, 공유 논리 consumer는 `notification-work`다. 기존 matching 그룹과 pending 커서는 분리되어 한쪽의 실패가 다른 이벤트를 막지 않는다.
 
 | 이벤트 | 처리자 역할 | 수신자 |
 | --- | --- | --- |
 | WorkCheckedIn | WORKER | 해당 근무 OWNER |
 | WorkStarted | OWNER | 해당 근무 WORKER |
 | WorkCompleted | OWNER 또는 WORKER | 처리자의 상대 역할 참여자 |
+| WorkCanceled | 동의한 OWNER 또는 WORKER | 취소 요청자 |
+| WorkNoShow | SYSTEM, 회원 ID 없음 | OWNER·WORKER 양측 |
+| WorkCancellationRequested/Rejected/Withdrawn | OWNER 또는 WORKER | 처리자의 상대 역할 참여자 |
+| WorkCancellationExpired | SYSTEM, 회원 ID 없음 | OWNER·WORKER 양측 |
 
 - 생산자의 `actorRole`과 `actorMemberId`를 함께 검증한다. 완료 주체 설정이 바뀌거나 같은 회원 ID가 여러 역할을 가질 수 있어도 ID만으로 역할을 추정하지 않는다.
-- envelope의 aggregateType=WORK, eventId, eventType, aggregateId, revision, version, occurredAt이 payload와 같아야 한다. payload는 workId·매칭·공고·참여자·일정·처리자와 상태를 포함한다. 근무별 revision은 출근 1, 시작 2, 완료 3이며 상태·역할과 함께 검증한다.
-- eventId별 고정 v1 필드 fingerprint, receipt, 상대방 알림을 한 트랜잭션으로 저장하고 커밋 후 ACK한다. 같은 ID의 다른 내용은 거부한다. 기존 매칭 이벤트의 fingerprint 계산은 바꾸지 않는다.
+- 생명주기 envelope의 aggregateType=WORK, eventId, eventType, aggregateId, revision, version, occurredAt이 payload와 같아야 한다. payload는 workId·매칭·공고·참여자·일정·처리자와 상태를 포함한다. 근무별 revision은 출근 1, 시작 2, 완료 3, 노쇼 4, 동의 취소 5이며 상태·역할과 함께 검증한다. 취소 요청은 aggregateType=WORK_CANCELLATION과 요청 ID, revision 1(요청)·2(거절/철회/만료)를 검증한다. SYSTEM 역할은 노쇼·만료에만 허용하고 actorMemberId는 반드시 null이어야 한다.
+- eventId별 고정 v1 필드 fingerprint, receipt, 해당 참여자 알림을 한 트랜잭션으로 저장하고 커밋 후 ACK한다. 같은 ID의 다른 내용은 거부한다. 기존 매칭 이벤트의 fingerprint 계산은 바꾸지 않는다.
 - 늦게 도착한 과거 단계도 별도의 알림 이력으로 보관한다. 알림 목록은 수신 ID 순서이며 발생 시각은 `occurredAt`으로 표시한다. 근무의 현재 상태를 이 알림 순서로 추정하지 않고 work-service에서 조회한다.
 - 근무 알림 응답에는 `workId`와 `matchingId`가 있고 `applicationId`는 null이다. 기존 매칭·지원 알림은 기존 식별자를 유지하며 `workId`가 null이다. 이벤트·처리자·상대방 회원 ID나 결제 식별자는 응답에 노출하지 않는다.
 - 기존 본인·역할별 조회와 읽음 처리를 그대로 사용한다. 잘못된 이벤트는 pending에 남기고 순회 커서를 진행시켜 후속 이벤트 처리를 계속한다. Stream을 자동 trim하거나 실패 이벤트를 자동 삭제하지 않는다.
 - `WORK_OUTBOX_STREAM_KEY`를 근무 생산자와 동일하게 맞춘다. `NOTIFICATION_WORK_EVENTS_ENABLED=false`는 근무 알림 소비만 중단하며 기존 매칭 알림 소비 설정과 독립적이다.
 
 이 구현은 인앱 보관함만 제공한다. 푸시·문자·이메일 발송이나 금융 처리는 수행하지 않는다.
+
+- 2026-10-28 확장에서도 기존 참여자 이벤트의 지문은 유지한다. SYSTEM의 null actor만 빈 canonical 필드로 표현하고 기존 숫자 actor 값의 직렬화는 바꾸지 않는다. 양측 알림은 하나의 트랜잭션에서 저장하므로 일부만 저장된 상태로 ACK하지 않는다.

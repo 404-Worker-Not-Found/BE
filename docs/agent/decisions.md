@@ -1889,3 +1889,26 @@ Related files:
 - `docs/architecture/refund-design.md`
 - `payment-service/src/main/java/com/workernotfound/payment/domain/order/service/OrderTransactionService.java`
 - `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundLedger.java`
+
+## 2026-10-28 - Mutual Work Cancellation and Automatic No-show Foundation
+
+Decision:
+- The user chose that every cancellation after confirmation requires the other participant's consent. A request and consent are allowed only before the scheduled job start or GPS check-in, whichever occurs first. Pending cancellation must not prevent check-in; it expires when the limit is reached.
+- The user chose automatic no-show after the check-in late window, and record/notification first with monetary and trust-score penalties deferred. The first unit does not automatically re-recruit after cancellation.
+- Work cancellation requests use PENDING, APPROVED, REJECTED, WITHDRAWN and EXPIRED. One pending request per work is enforced under the work row lock and by a database unique constraint. The requester can withdraw and only the counterpart can approve/reject. Idempotency keys are scoped to work/requester and retain the original trimmed reason.
+- Work status, request result, history and Outbox commit atomically. Expiry is committed before the application layer returns a 409 for a late approval. Check-in and expiry are serialized with approval on the work row.
+- Automatic no-show initially supports the configured GPS policy only and excludes missing-location work. It uses the schedule-zone Clock, strictly exceeds the inclusive check-in deadline, and stores the decision time and original deadline. SYSTEM histories carry no fabricated member ID.
+- Existing WORK lifecycle revisions 1/2/3 stay unchanged; WorkNoShow uses 4 and agreement WorkCanceled uses 5. Cancellation request events use WORK_CANCELLATION/request ID with revision 1 or 2 through the same durable Outbox relay. Notification recipients are the counterpart for participant actions and both parties for SYSTEM expiry/no-show.
+
+Reason:
+- A unilateral last-minute cancellation would break a confirmed commitment. Consent and a deadline distinguish it from pre-confirmation application cancellation and Saga compensation.
+- Separating request aggregates avoids collisions with existing per-work lifecycle revisions and preserves consumer contracts.
+
+Implication for agents:
+- Do not reuse the unconfirmed-work Saga cancellation or release a CONSUMED recruitment seat for this flow.
+- Cancellation/no-show records are not payment release, completed PG refund, settlement completion or a trust penalty. Related matching/job/payment terminal coordination and dispute handling remain follow-up contracts; unfinished financial activity keeps blocking withdrawal.
+
+Related files:
+- `docs/architecture/work-cancellation-design.md`
+- `docs/architecture/work-scheduled-design.md`
+- `docs/architecture/notification-design.md`

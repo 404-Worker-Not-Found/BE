@@ -14,8 +14,8 @@ public class WorkEventPublisher {
   private final WorkOutboxProperties properties;
 
   public void publish(WorkOutboxMessage message) {
-    var fields = Map.of("eventId", message.eventId(), "aggregateType", "WORK",
-        "aggregateId", Long.toString(message.workId()), "eventType", message.eventType(),
+    var fields = Map.of("eventId", message.eventId(), "aggregateType", message.aggregateType(),
+        "aggregateId", Long.toString(message.aggregateId()), "eventType", message.eventType(),
         "revision", Long.toString(message.revision()), "version", Integer.toString(message.version()),
         "occurredAt", message.occurredAt().toString(), "payload", message.payload());
     if (redis.opsForStream().add(StreamRecords.newRecord().in(properties.stream()).ofMap(fields)) == null)

@@ -308,6 +308,8 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - MySQL integration tests cover command retries, conflicts, concurrent creation/cancellation, internal authentication, and Swagger access.
 - Local execution is available through `./scripts/local-run.sh work`; the service uses port 8086 and its local MySQL uses port 3311.
 
+- Confirmed-work cancellation foundation (#104): participants request cancellation with a reason and the other participant must consent before the scheduled start or GPS check-in, whichever occurs first. Check-in stays available and expires pending requests. Request/reject/withdraw/expiry and agreement cancellation persist in one local transaction with Outbox events; no automatic re-recruitment, payment release/refund, or trust penalty is performed. GPS-only automatic no-show marking runs strictly after the configured late window, skips missing-location work, and records the decision time/deadline plus a system history/event.
+
 ## Chat Service Context
 
 - `chat-service` uses Java 17, Spring Boot 4.1.0, service-owned MySQL, Flyway, Spring Security, and Springdoc.
@@ -351,6 +353,8 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - JWT-authenticated members can list only their own role's notifications, query unread counts and idempotently mark individual notifications read. Responses omit other participants and payment identifiers.
 - Local HTTP/MySQL ports are 8088/3314. Runtime configuration, local-run and repository verification include the new service. Notification delivery currently uses REST queries; push and other event types remain future work.
 - See `docs/architecture/notification-design.md`.
+
+- Work notification consumers also handle mutual cancellation request outcomes, WorkCanceled and WorkNoShow. System expiry/no-show events require a null actor ID and SYSTEM role and notify both participants; participant actions notify the other participant. Existing event fingerprints and lifecycle revisions remain compatible.
 
 ## Error Handling State
 
