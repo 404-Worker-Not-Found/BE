@@ -257,6 +257,10 @@ class PayoutIntegrationTests extends IntegrationTestSupport {
           .andExpect(jsonPath("$.data.recipient").doesNotExist()).andExpect(jsonPath("$.data.reference").doesNotExist());
     }
     String workerToken = OrderIntegrationTests.token(30, "WORKER");
+    Claim first = claim(f);
+    transactions.settle(first, null);
+    mvc.perform(get(path).header("Authorization", "Bearer " + workerToken))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.data.payoutReviewRequired").value(true));
     mvc.perform(get("/api/payments/me/settlements").param("size", "1").header("Authorization", "Bearer " + workerToken))
         .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1));
     mvc.perform(get("/api/payments/me/settlements").param("beforeId", "1").header("Authorization", "Bearer " + workerToken))

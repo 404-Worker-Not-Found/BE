@@ -4,5 +4,5 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public record SettlementResponse(Long id, Long workId, Long matchingId, Long jobPostId,
-    BigDecimal amount, String currency, String status, String holdReason,
+    BigDecimal amount, String currency, String status, String holdReason, boolean payoutReviewRequired,
     LocalDateTime workCompletedAt, LocalDateTime payableAt, LocalDateTime paidAt) {}
