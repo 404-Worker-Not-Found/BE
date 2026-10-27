@@ -18,6 +18,7 @@ import com.workernotfound.matching.external.client.job.dto.ApplicationAdmissionR
 import com.workernotfound.matching.external.client.member.MemberServiceClient;
 import com.workernotfound.matching.external.client.member.dto.MemberInternalResponse;
 import com.workernotfound.matching.global.exception.BusinessException;
+import com.workernotfound.matching.support.TestSchedule;
 import com.workernotfound.matching.support.IntegrationTestSupport;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -120,12 +121,31 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 
 		assertThat(applicationRepository.findById(response.applicationId())).get()
 			.extracting(application -> application.getWorkStartsAt())
-			.isEqualTo(LocalDate.now().plusDays(1).atTime(9, 0));
+			.isEqualTo(TestSchedule.today().plusDays(1).atTime(9, 0));
 	}
 
 	@Test
 	void cancellationClockUsesScheduleTimeZoneRegardlessOfJvmDefault() {
 		assertThat(clock.getZone()).isEqualTo(java.time.ZoneId.of("Asia/Seoul"));
+	}
+
+	@Test
+	void rejectsAdmissionExpiredInScheduleTimeZone() {
+		stubEligibleWorker();
+		when(jobServiceClient.createApplicationAdmission(
+			org.mockito.ArgumentMatchers.eq(JOB_POST_ID),
+			org.mockito.ArgumentMatchers.eq(WORKER_MEMBER_ID),
+			anyString()
+		)).thenReturn(new ApplicationAdmissionResponse(
+			37L, JOB_POST_ID, 1L, 100L, 1L, TestSchedule.today().plusDays(1), LocalTime.of(9, 0), LocalTime.of(18, 0),
+			BigDecimal.valueOf(37.5), BigDecimal.valueOf(127.0),
+			TestSchedule.now().minusMinutes(5), TestSchedule.now().minusSeconds(1)
+		));
+
+		assertThatThrownBy(() -> applicationService.create(WORKER_MEMBER_ID, new CreateApplicationRequest(JOB_POST_ID)))
+			.isInstanceOfSatisfying(BusinessException.class, exception ->
+				assertThat(exception.getErrorCode()).isEqualTo(ApplicationErrorCode.ADMISSION_EXPIRED));
+		assertThat(applicationRepository.count()).isZero();
 	}
 
 	@Test
@@ -137,7 +157,7 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 			anyString()
 		)).thenReturn(new ApplicationAdmissionResponse(
 			36L, JOB_POST_ID, 1L, 100L, 1L, null, LocalTime.of(9, 0), LocalTime.of(18, 0),
-			BigDecimal.valueOf(37.5), BigDecimal.valueOf(127.0), LocalDateTime.now(), LocalDateTime.now().plusMinutes(1)
+			BigDecimal.valueOf(37.5), BigDecimal.valueOf(127.0), TestSchedule.now(), TestSchedule.now().plusMinutes(1)
 		));
 		assertThatThrownBy(() -> applicationService.create(WORKER_MEMBER_ID, new CreateApplicationRequest(JOB_POST_ID)))
 			.isInstanceOfSatisfying(BusinessException.class, exception ->
@@ -302,13 +322,13 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 			1L,
 			100L,
 			1L,
-			LocalDate.now().plusDays(1),
+			TestSchedule.today().plusDays(1),
 			LocalTime.of(9, 0),
 			LocalTime.of(18, 0),
 			BigDecimal.valueOf(37.5),
 			BigDecimal.valueOf(127.0),
-			LocalDateTime.now(),
-			LocalDateTime.now().plusMinutes(1)
+			TestSchedule.now(),
+			TestSchedule.now().plusMinutes(1)
 		));
 	}
 }

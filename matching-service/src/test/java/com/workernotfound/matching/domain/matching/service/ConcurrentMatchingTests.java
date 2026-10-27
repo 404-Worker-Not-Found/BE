@@ -18,6 +18,7 @@ import com.workernotfound.matching.external.client.confirmation.dto.ChatRoomResp
 import com.workernotfound.matching.external.client.confirmation.dto.PaymentLockResponse;
 import com.workernotfound.matching.external.client.confirmation.dto.ScheduledWorkResponse;
 import com.workernotfound.matching.external.client.confirmation.dto.SeatReservationResponse;
+import com.workernotfound.matching.support.TestSchedule;
 import com.workernotfound.matching.support.IntegrationTestSupport;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
@@ -225,9 +226,9 @@ class ConcurrentMatchingTests extends IntegrationTestSupport {
 				throw new IllegalStateException("자리 예약 테스트 대기 시간이 초과되었습니다.");
 			}
 			return new SeatReservationResponse(
-				"seat-1", 10L, 1L, 100L, LocalDate.now().plusDays(1),
+				"seat-1", 10L, 1L, 100L, TestSchedule.today().plusDays(1),
 				LocalTime.of(9, 0), LocalTime.of(18, 0), false, new BigDecimal("120000"), "KRW",
-				LocalDateTime.now(), LocalDateTime.now().plusMinutes(5), null, null
+				TestSchedule.now(), TestSchedule.now().plusMinutes(5), null, null
 			);
 		});
 		when(confirmationClient.lockPayment(any(), anyString()))

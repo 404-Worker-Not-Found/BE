@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.controller;
 
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.enums.JobStatus;
@@ -144,7 +145,7 @@ class JobCreationApiTests extends IntegrationTestSupport {
     }
 
     private String requestBody() {
-        LocalDate workDate = LocalDate.now().plusDays(2);
+        LocalDate workDate = TestSchedule.today().plusDays(2);
         return """
                 {"businessId":1,"categoryId":%d,"storeName":"테스트 상점","address":"서울시 마포구",
                  "title":"결제 대기 공고","description":"설명","workDate":"%s","startTime":"09:00","endTime":"18:00",
@@ -154,7 +155,7 @@ class JobCreationApiTests extends IntegrationTestSupport {
     }
 
     private CreateJobRequest request(LocalTime endTime, int baseHourlyWage, int recruitCount) {
-        LocalDate workDate = LocalDate.now().plusDays(2);
+        LocalDate workDate = TestSchedule.today().plusDays(2);
         return new CreateJobRequest(
                 1L, SEARCH_CATEGORY_ID, "테스트 상점", "서울시 마포구", "금액 경계 공고", "설명",
                 workDate, LocalTime.of(9, 0), endTime, false, baseHourlyWage, null, recruitCount,

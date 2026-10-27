@@ -111,7 +111,7 @@ public abstract class FundingStatusApiTestSupport extends IntegrationTestSupport
 
     // 모레 09:00~18:00, 시급 10,320원, 지원 마감은 전날 정오인 결제 대기 공고를 만들고 검증된 주문을 연결한다.
     protected LinkedJob createLinkedJob(int recruitCount) {
-        LocalDate workDate = LocalDate.now().plusDays(2);
+        LocalDate workDate = TestSchedule.today().plusDays(2);
         return createLinkedJob(recruitCount, workDate, LocalTime.of(9, 0), workDate.minusDays(1).atTime(LocalTime.NOON));
     }
 
@@ -130,7 +130,7 @@ public abstract class FundingStatusApiTestSupport extends IntegrationTestSupport
     }
 
     protected JobPaymentOrderCommand createPendingJob(int recruitCount) {
-        LocalDate workDate = LocalDate.now().plusDays(2);
+        LocalDate workDate = TestSchedule.today().plusDays(2);
         return createPendingJob(recruitCount, workDate, LocalTime.of(9, 0), workDate.minusDays(1).atTime(LocalTime.NOON));
     }
 

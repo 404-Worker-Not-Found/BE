@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.service;
 
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.entity.JobApplicationAdmission;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.enums.UrgencyLevel;
@@ -169,7 +170,7 @@ class JobApplicationAdmissionConstraintErrorTests extends IntegrationTestSupport
                 .address("서울시 마포구")
                 .title("테스트 공고")
                 .description("테스트 설명")
-                .workDate(LocalDate.now().plusDays(1))
+                .workDate(TestSchedule.today().plusDays(1))
                 .startTime(LocalTime.of(9, 0))
                 .endTime(LocalTime.of(18, 0))
                 .endTimeNextDay(false)
@@ -178,7 +179,7 @@ class JobApplicationAdmissionConstraintErrorTests extends IntegrationTestSupport
                 .latitude(new BigDecimal("37.5665000"))
                 .longitude(new BigDecimal("126.9780000"))
                 .urgencyLevel(UrgencyLevel.MEDIUM)
-                .applicationDeadline(LocalDateTime.now().plusHours(1))
+                .applicationDeadline(TestSchedule.now().plusHours(1))
                 .build());
     }
 }

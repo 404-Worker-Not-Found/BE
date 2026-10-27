@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.service;
 
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.entity.JobApplicationAdmission;
 import com.workernotfound.job.domain.job.entity.enums.ApplicationAdmissionStatus;
 import com.workernotfound.job.domain.job.repository.JobApplicationAdmissionRepository;
@@ -41,7 +42,7 @@ class JobApplicationAdmissionExpiryTests extends IntegrationTestSupport {
     private static final Long WORKER_ID = 300L;
 
     // 저장 정밀도(마이크로초)에 맞춘 만료 시각. 다른 테스트가 남긴 먼 미래(2030년) 승인은 대상이 되지 않는다.
-    private final LocalDateTime expiresAt = LocalDate.now().plusDays(1).atTime(12, 0, 0, 123_456_000);
+    private final LocalDateTime expiresAt = TestSchedule.today().plusDays(1).atTime(12, 0, 0, 123_456_000);
 
     @Autowired
     private JobApplicationAdmissionExpiryReconciler reconciler;

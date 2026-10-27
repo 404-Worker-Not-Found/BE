@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.service;
 
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.entity.JobMatchingSeatReservation;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.JobStatusHistory;
@@ -41,7 +42,7 @@ class JobScheduleTransitionTests extends IntegrationTestSupport {
     private static final Duration NANO = Duration.ofNanos(1);
 
     // 근무 시작 09:00, 지원 마감 07:00. 실제 현재 시각과 겹치지 않도록 며칠 뒤로 둔다.
-    private final LocalDateTime workStart = LocalDate.now().plusDays(5).atTime(9, 0);
+    private final LocalDateTime workStart = TestSchedule.today().plusDays(5).atTime(9, 0);
     private final LocalDateTime deadline = workStart.minusHours(2);
 
     @Autowired

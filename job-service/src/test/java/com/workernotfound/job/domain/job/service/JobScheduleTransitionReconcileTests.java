@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.service;
 
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.RecruitmentCompletionCommand;
 import com.workernotfound.job.domain.job.entity.enums.JobStatus;
@@ -41,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class JobScheduleTransitionReconcileTests extends IntegrationTestSupport {
 
-    private final LocalDateTime workStart = LocalDate.now().plusDays(7).atTime(9, 0);
+    private final LocalDateTime workStart = TestSchedule.today().plusDays(7).atTime(9, 0);
     private final LocalDateTime deadline = workStart.minusHours(2);
 
     @Autowired

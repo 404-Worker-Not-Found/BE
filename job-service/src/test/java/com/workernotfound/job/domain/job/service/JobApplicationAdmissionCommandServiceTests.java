@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.service;
 
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.entity.JobApplicationAdmission;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.enums.ApplicationAdmissionStatus;
@@ -34,7 +35,7 @@ class JobApplicationAdmissionCommandServiceTests extends IntegrationTestSupport 
 
     @Test
     void createsAdmissionForOpenJob() {
-        JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now().plusHours(1));
+        JobPost jobPost = saveJobPost(JobStatus.OPEN, TestSchedule.now().plusHours(1));
 
         JobApplicationAdmission admission =
                 jobApplicationAdmissionCommandService.create(jobPost.getId(), 100L, "key-create");
@@ -66,7 +67,7 @@ class JobApplicationAdmissionCommandServiceTests extends IntegrationTestSupport 
 
     @Test
     void throwsWhenJobNotOpen() {
-        JobPost jobPost = saveJobPost(JobStatus.CLOSED, LocalDateTime.now().plusHours(1));
+        JobPost jobPost = saveJobPost(JobStatus.CLOSED, TestSchedule.now().plusHours(1));
 
         assertThatThrownBy(() -> jobApplicationAdmissionCommandService.create(jobPost.getId(), 100L, "key-not-open"))
                 .isInstanceOf(BusinessException.class)
@@ -77,7 +78,7 @@ class JobApplicationAdmissionCommandServiceTests extends IntegrationTestSupport 
 
     @Test
     void throwsWhenApplicationDeadlinePassed() {
-        JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now().minusMinutes(1));
+        JobPost jobPost = saveJobPost(JobStatus.OPEN, TestSchedule.now().minusMinutes(1));
 
         assertThatThrownBy(() -> jobApplicationAdmissionCommandService.create(jobPost.getId(), 100L, "key-deadline"))
                 .isInstanceOf(BusinessException.class)
@@ -88,7 +89,7 @@ class JobApplicationAdmissionCommandServiceTests extends IntegrationTestSupport 
 
     @Test
     void reusesAdmissionForSameIdempotencyKey() {
-        JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now().plusHours(1));
+        JobPost jobPost = saveJobPost(JobStatus.OPEN, TestSchedule.now().plusHours(1));
 
         JobApplicationAdmission first =
                 jobApplicationAdmissionCommandService.create(jobPost.getId(), 100L, "key-idempotent");
@@ -105,7 +106,7 @@ class JobApplicationAdmissionCommandServiceTests extends IntegrationTestSupport 
 
     @Test
     void throwsAdmissionExpiredWhenExistingAdmissionExpired() {
-        JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now().plusHours(1));
+        JobPost jobPost = saveJobPost(JobStatus.OPEN, TestSchedule.now().plusHours(1));
         jobApplicationAdmissionRepository.save(
                 JobApplicationAdmission.builder()
                         .jobPostId(jobPost.getId())
@@ -119,8 +120,8 @@ class JobApplicationAdmissionCommandServiceTests extends IntegrationTestSupport 
                         .endTime(jobPost.getEndTime())
                         .latitude(jobPost.getLatitude())
                         .longitude(jobPost.getLongitude())
-                        .admittedAt(LocalDateTime.now().minusMinutes(10))
-                        .expiresAt(LocalDateTime.now().minusMinutes(5))
+                        .admittedAt(TestSchedule.now().minusMinutes(10))
+                        .expiresAt(TestSchedule.now().minusMinutes(5))
                         .build()
         );
 
@@ -140,7 +141,7 @@ class JobApplicationAdmissionCommandServiceTests extends IntegrationTestSupport 
                 .address("서울시 마포구")
                 .title("테스트 공고")
                 .description("테스트 설명")
-                .workDate(LocalDate.now().plusDays(1))
+                .workDate(TestSchedule.today().plusDays(1))
                 .startTime(LocalTime.of(9, 0))
                 .endTime(LocalTime.of(18, 0))
                 .endTimeNextDay(false)

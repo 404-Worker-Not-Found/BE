@@ -26,6 +26,7 @@ import com.workernotfound.matching.external.client.confirmation.dto.PaymentLockR
 import com.workernotfound.matching.external.client.confirmation.dto.ScheduledWorkResponse;
 import com.workernotfound.matching.external.client.confirmation.dto.SeatReservationResponse;
 import com.workernotfound.matching.global.exception.BusinessException;
+import com.workernotfound.matching.support.TestSchedule;
 import com.workernotfound.matching.support.IntegrationTestSupport;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -345,8 +346,8 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 				new RuntimeException("response lost")
 			))
 			// 같은 키 재요청에 job-service가 돌려준 원래 스냅샷. 응답 유실 사이에 만료되었다.
-			.thenReturn(seatResponse(40L, "seat-expired", LocalDateTime.now().minusSeconds(1)))
-			.thenReturn(seatResponse(40L, "seat-new", LocalDateTime.now().plusMinutes(10)));
+			.thenReturn(seatResponse(40L, "seat-expired", TestSchedule.now().minusSeconds(1)))
+			.thenReturn(seatResponse(40L, "seat-new", TestSchedule.now().plusMinutes(10)));
 		when(client.lockPayment(any(), anyString())).thenReturn(new PaymentLockResponse("payment-1"));
 		when(client.createScheduledWork(any(), anyString())).thenReturn(new ScheduledWorkResponse("work-1"));
 		when(client.createChatRoom(any(), anyString())).thenReturn(new ChatRoomResponse("chat-1"));
@@ -433,7 +434,7 @@ class MatchingConfirmationServiceTests extends IntegrationTestSupport {
 	}
 
 	private SeatReservationResponse seatResponse(Long jobPostId) {
-		return seatResponse(jobPostId, "seat-1", LocalDateTime.now().plusMinutes(5));
+		return seatResponse(jobPostId, "seat-1", TestSchedule.now().plusMinutes(5));
 	}
 
 	private SeatReservationResponse seatResponse(Long jobPostId, String reservationId, LocalDateTime expiresAt) {

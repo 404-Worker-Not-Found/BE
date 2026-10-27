@@ -1,6 +1,7 @@
 package com.workernotfound.job.domain.job.service;
 
 import com.jayway.jsonpath.JsonPath;
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.entity.JobApplicationAdmission;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.enums.ApplicationAdmissionStatus;
@@ -51,7 +52,7 @@ class JobApplicationAdmissionExpiryRaceTests extends IntegrationTestSupport {
     private static final AtomicLong APPLICATION_IDS = new AtomicLong(900_000);
 
     // 저장 정밀도(마이크로초)에 맞춘 만료 시각. 다른 테스트가 남긴 먼 미래(2030년) 승인은 배치 대상이 되지 않는다.
-    private final LocalDateTime expiresAt = LocalDate.now().plusDays(1).atTime(12, 0, 0, 123_456_000);
+    private final LocalDateTime expiresAt = TestSchedule.today().plusDays(1).atTime(12, 0, 0, 123_456_000);
 
     @PersistenceContext
     private EntityManager entityManager;
