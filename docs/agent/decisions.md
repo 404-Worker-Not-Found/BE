@@ -1848,3 +1848,26 @@ Related files:
 - `docs/architecture/mvp-domain-flow.md`
 - `matching-service/src/main/java/com/workernotfound/matching/domain/application/service/ApplicationCommandService.java`
 - `matching-service/src/main/resources/db/migration/V12__add_work_starts_at_to_applications.sql`
+
+## 2026-10-28 - Job Schedule Time Zone Clock
+
+Decision:
+- The user chose (issue #120) to read every job-service current time in the job schedule time zone, keep the shared `WORK_ATTENDANCE_TIME_ZONE` variable name, and skip data migration because no deployment environment exists yet.
+- job-service's `Clock` bean is `Clock.system(job.schedule.time-zone)`, bound to `WORK_ATTENDANCE_TIME_ZONE` (default `Asia/Seoul`) like work-service and matching-service. All direct `LocalDateTime.now()` calls in job-service business code use that `Clock`, and JPA auditing uses a `DateTimeProvider` backed by it. Only the common response envelope `timestamp` keeps the JVM time, like the other services.
+- matching-service compares job-issued times (admission `expiresAt`, seat reservation `expiresAt`) with its own schedule-zone `Clock`. Its internal timestamps (outbox, saga leases, histories) are unchanged.
+- Tests build job schedules and job-issued times in the schedule zone (`TestSchedule` helpers); the job-service and matching-service suites pass with the JVM set to UTC, America/Los_Angeles, and the default zone.
+
+Reason:
+- Deadlines and work dates are owner-entered local times in the schedule zone, while nothing pins the services' JVM time zone; a UTC JVM would keep jobs open up to nine hours past their deadline or work start.
+- Using one zone for every job-service time keeps comparisons between stored and current times consistent without a second clock.
+
+Implication for agents:
+- Do not call `LocalDateTime.now()`/`LocalDate.now()` without the `Clock` in job-service business code, and do not build job-service test schedules from the JVM default zone.
+- Do not change `WORK_ATTENDANCE_TIME_ZONE` on an environment with stored data without a migration; stored times and comparisons shift together.
+- When matching-service compares a time produced by job-service, use its schedule-zone `Clock`.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `job-service/src/main/java/com/workernotfound/job/global/config/ClockConfig.java`
+- `matching-service/src/main/java/com/workernotfound/matching/domain/application/service/ApplicationApplicationService.java`
+- `matching-service/src/main/java/com/workernotfound/matching/domain/matching/service/MatchingConfirmationService.java`
