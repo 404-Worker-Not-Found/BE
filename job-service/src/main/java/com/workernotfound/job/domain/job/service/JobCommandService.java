@@ -76,7 +76,7 @@ public class JobCommandService {
     }
 
     private void validateApplicationDeadline(CreateJobRequest request) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         if (!request.applicationDeadline().isAfter(now)) {
             throw new BusinessException(JobErrorCode.INVALID_APPLICATION_DEADLINE, "지원 마감 시간은 현재 시간 이후여야 합니다.");
         }

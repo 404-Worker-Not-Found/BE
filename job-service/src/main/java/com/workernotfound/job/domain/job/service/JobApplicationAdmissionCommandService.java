@@ -9,6 +9,7 @@ import com.workernotfound.job.domain.job.repository.JobApplicationAdmissionRepos
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
 import com.workernotfound.job.global.account.AccountGateService;
 import com.workernotfound.job.global.exception.BusinessException;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class JobApplicationAdmissionCommandService {
     private final JobApplicationAdmissionRepository jobApplicationAdmissionRepository;
     private final JobPostRepository jobPostRepository;
     private final ApplicationAdmissionProperties applicationAdmissionProperties;
+    private final Clock clock;
 
     @Transactional
     public JobApplicationAdmission create(Long jobPostId, Long workerMemberId, String idempotencyKey) {
@@ -54,7 +56,7 @@ public class JobApplicationAdmissionCommandService {
             throw new BusinessException(JobErrorCode.IDEMPOTENCY_KEY_REUSED);
         }
         boolean stillValid = admission.getStatus() == ApplicationAdmissionStatus.RESERVED
-                && admission.getExpiresAt().isAfter(LocalDateTime.now());
+                && admission.getExpiresAt().isAfter(LocalDateTime.now(clock));
         if (!stillValid) {
             throw new BusinessException(JobErrorCode.ADMISSION_EXPIRED);
         }
@@ -67,7 +69,7 @@ public class JobApplicationAdmissionCommandService {
     }
 
     private JobApplicationAdmission newAdmission(JobPost jobPost, Long workerMemberId, String idempotencyKey) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         return JobApplicationAdmission.builder()
                 .jobPostId(jobPost.getId())
                 .workerMemberId(workerMemberId)
@@ -100,7 +102,7 @@ public class JobApplicationAdmissionCommandService {
     }
 
     private void validateApplicationDeadline(JobPost jobPost) {
-        if (!jobPost.getApplicationDeadline().isAfter(LocalDateTime.now())) {
+        if (!jobPost.getApplicationDeadline().isAfter(LocalDateTime.now(clock))) {
             throw new BusinessException(JobErrorCode.APPLICATION_DEADLINE_PASSED);
         }
     }
