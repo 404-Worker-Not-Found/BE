@@ -1,6 +1,7 @@
 package com.workernotfound.job.domain.job.service;
 
 import com.workernotfound.job.domain.job.entity.JobAdmissionEventReceipt;
+import com.workernotfound.job.domain.job.entity.enums.AdmissionConsumptionResult;
 import com.workernotfound.job.domain.job.event.ApplicationSubmittedEvent;
 import com.workernotfound.job.domain.job.exception.InvalidAdmissionEventException;
 import com.workernotfound.job.domain.job.repository.JobAdmissionEventReceiptRepository;

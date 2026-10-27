@@ -16,6 +16,8 @@ import com.workernotfound.payment.domain.refund.service.RefundApplicationService
 import com.workernotfound.payment.global.exception.BusinessException;
 import com.workernotfound.payment.support.IntegrationTestSupport;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -85,6 +87,22 @@ class RefundIntegrationTests extends IntegrationTestSupport {
           new BigDecimal(amount), "KRW"));
       return "LOCKED";
     } catch (BusinessException exception) { return ((PaymentErrorCode) exception.getErrorCode()).name(); }
+  }
+
+  @Test
+  void replaysRefundWithPersistedLegacyFingerprintAfterDtoConversion() throws Exception {
+    long job = deposit("1000");
+    RefundResponse original = refunds.request(key(), request(job, "400"));
+    String legacyKey = key();
+    String legacyPayload = "REFUND:v1:" + job + ":20:400:KRW:미사용 예치금 반환";
+    String legacyFingerprint = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+        .digest(legacyPayload.getBytes(StandardCharsets.UTF_8)));
+    jdbc.update("INSERT INTO payment_refund_commands(command_key, fingerprint, refund_id) VALUES (?, ?, ?)",
+        legacyKey, legacyFingerprint, Long.parseLong(original.refundId()));
+
+    assertThat(refunds.request(legacyKey, request(job, "400.00"))).isEqualTo(original);
+    assertThat(balance(job, "refund_reserved_amount")).isEqualByComparingTo("400");
+    assertThat(count("SELECT COUNT(*) FROM payment_refunds WHERE job_post_id = ?", job)).isEqualTo(1);
   }
 
   @Test

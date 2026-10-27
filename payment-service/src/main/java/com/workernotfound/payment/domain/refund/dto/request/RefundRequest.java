@@ -19,10 +19,4 @@ public record RefundRequest(
     BigDecimal value = amount.stripTrailingZeros();
     return value.scale() <= 0 && value.precision() - value.scale() <= 17;
   }
-
-  // 사유는 콜론을 포함할 수 있으므로 마지막에 둔다. 앞 값들에는 콜론이 없다.
-  public String fingerprintPayload() {
-    return "REFUND:v1:" + jobPostId + ":" + ownerMemberId + ":"
-        + amount.stripTrailingZeros().toPlainString() + ":" + currency + ":" + reason;
-  }
 }
