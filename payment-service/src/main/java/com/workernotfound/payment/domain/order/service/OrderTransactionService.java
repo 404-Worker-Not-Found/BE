@@ -8,6 +8,7 @@ import com.workernotfound.payment.domain.refund.service.RefundLedger;
 import com.workernotfound.payment.external.toss.TossPayment;
 import com.workernotfound.payment.global.account.AccountGateService;
 import com.workernotfound.payment.global.exception.BusinessException;
+import java.math.BigDecimal;
 import java.time.ZoneOffset;
 import java.util.*;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +22,7 @@ public class OrderTransactionService {
   private final PaymentOrderRepository orders;
   private final RefundLedger refunds;
 
-  public record Claim(Order order, String token, boolean firstAttempt) {}
+  public record Claim(Order order, String token, boolean firstAttempt, BigDecimal refundedAmount) {}
 
   @Transactional
   public OrderResponse create(String key, CreateOrderRequest request) {
@@ -84,7 +85,9 @@ public class OrderTransactionService {
   private Claim lease(Order order, boolean first) {
     String token = UUID.randomUUID().toString();
     orders.claim(order.id(), token);
-    return new Claim(order, token, first);
+    BigDecimal refundedAmount = "DEPOSITED".equals(order.status())
+        ? refunds.findRefundedAmount(order.jobId()) : null;
+    return new Claim(order, token, first, refundedAmount);
   }
 
   @Transactional
@@ -92,6 +95,12 @@ public class OrderTransactionService {
     Order current = require(claim.order().id());
     if (!ownsLease(current, claim)) return;
     verifyIdentity(current, payment);
+    // PG 조회 중 환불이 완료됐다면 이전 응답으로 외부 취소를 판단하지 않고 다시 조회한다.
+    if ("DEPOSITED".equals(current.status())
+        && !Objects.equals(claim.refundedAmount(), refunds.findRefundedAmount(current.jobId()))) {
+      orders.release(claim.order(), true);
+      return;
+    }
     boolean retry = applyPayment(current, payment);
     // Use the revision captured before network IO so a concurrent webhook is not lost.
     orders.release(claim.order(), retry);

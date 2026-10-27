@@ -338,6 +338,7 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - On 2026-09-22, private Toss test keys and a temporary local checkout verified a KRW 1,000 test-card payment through provider approval and DB deposit credit (DEPOSITED; one deposited history entry). Synthetic local owner/job IDs and a local test JWT were used; real login, product frontend and job creation were not exercised.
 - In that 2026-09-22 manual run the funding notification remained pending (funded=true, delivered=false) because the job receiver did not exist yet. The receiver is now implemented and was exercised in the 2026-10-06 cross-process run with a PG double; actual Toss webhook delivery remains unverified. Production escrow, payouts and refunds are outside this unit.
 - HTTP/MySQL ports are 8085/3313. Local execution and repository verification include payment-service.
+- Order re-query snapshots the confirmed refund total before provider I/O. If it changes before the result is saved, the stale response is discarded and retried without changing the order, deposit, or funding notifications; unexplained cancellations from a fresh query still block funding (#122).
 - See `docs/architecture/payment-lock-design.md` for the boundary and follow-up work. See `docs/architecture/toss-deposit-design.md` for the provider and job/frontend contracts. Full matching acceptance still requires product frontend and job-service integration.
 
 ## Notification Service Context
