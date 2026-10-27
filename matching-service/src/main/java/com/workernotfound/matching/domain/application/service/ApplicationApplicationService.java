@@ -13,6 +13,7 @@ import com.workernotfound.matching.external.client.member.MemberServiceClient;
 import com.workernotfound.matching.external.client.member.MemberServiceClientException;
 import com.workernotfound.matching.external.client.member.dto.MemberInternalResponse;
 import com.workernotfound.matching.global.exception.BusinessException;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
@@ -32,6 +33,7 @@ public class ApplicationApplicationService {
 	private final ApplicationFindService applicationFindService;
 	private final MemberServiceClient memberServiceClient;
 	private final JobServiceClient jobServiceClient;
+	private final Clock clock;
 
 	public ApplicationResponse create(Long workerMemberId, CreateApplicationRequest request) {
 		Optional<Application> existing = applicationFindService.findExistingApplication(
@@ -148,7 +150,8 @@ public class ApplicationApplicationService {
 			|| admission.startTime() == null) {
 			throw new BusinessException(ApplicationErrorCode.DEPENDENCY_SERVICE_UNAVAILABLE);
 		}
-		if (!admission.expiresAt().isAfter(LocalDateTime.now())) {
+		// 승인 만료 시각은 job-service가 근무 일정 시간대로 만든 값이므로 같은 시간대의 Clock과 비교한다.
+		if (!admission.expiresAt().isAfter(LocalDateTime.now(clock))) {
 			throw new BusinessException(ApplicationErrorCode.ADMISSION_EXPIRED);
 		}
 	}

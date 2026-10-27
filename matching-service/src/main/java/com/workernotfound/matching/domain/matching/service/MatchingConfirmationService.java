@@ -19,6 +19,7 @@ import com.workernotfound.matching.external.client.confirmation.dto.SeatReservat
 import com.workernotfound.matching.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 @Service
@@ -28,6 +29,7 @@ public class MatchingConfirmationService {
 	private final MatchingConfirmationCommandService commandService;
 	private final MatchingFindService matchingFindService;
 	private final MatchingConfirmationClient client;
+	private final Clock clock;
 
 	public Matching accept(Long matchingId, Long workerMemberId) {
 		MatchingConfirmationExecution execution = commandService.prepare(matchingId, workerMemberId);
@@ -240,8 +242,9 @@ public class MatchingConfirmationService {
 		}
 	}
 
+	// 자리 예약 만료 시각은 job-service가 근무 일정 시간대로 만든 값이므로 같은 시간대의 Clock과 비교한다.
 	private boolean isExpired(SeatReservationResponse response) {
-		return !response.expiresAt().isAfter(LocalDateTime.now());
+		return !response.expiresAt().isAfter(LocalDateTime.now(clock));
 	}
 
 	private boolean isValidLocation(SeatReservationResponse response) {
