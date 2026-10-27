@@ -1889,3 +1889,20 @@ Related files:
 - `docs/architecture/refund-design.md`
 - `payment-service/src/main/java/com/workernotfound/payment/domain/order/service/OrderTransactionService.java`
 - `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundLedger.java`
+
+## 2026-10-28 - Refund Rejection HTTP Status and Code Pairs
+
+Decision:
+- Refund execution recognizes only the existing 13 definitive rejection codes paired with their documented Toss cancel HTTP status (400, 403, or 404), as listed in `docs/architecture/refund-design.md`.
+- All 5xx, missing status/code, unknown codes and mismatched pairs keep the refund REQUESTED and its amount reserved. Recovery re-queries and retries with the same refund and provider idempotency key.
+- An allowed pair still requires a provider re-query proving the cancellation was not applied before FAILED releases the reserved amount. A confirmed applied cancellation takes priority over a rejection code.
+
+Reason:
+- An error code alone cannot prove rejection when the provider's HTTP status indicates an unknown outcome.
+
+Implication for agents:
+- Preserve both remote HTTP status and code until classification; do not broaden the allowlist to all 4xx or release money on a 5xx.
+
+Related files:
+- `docs/architecture/refund-design.md`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundExecutionService.java`
