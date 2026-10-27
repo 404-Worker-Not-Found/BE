@@ -29,6 +29,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -49,6 +50,7 @@ public class JobFindService {
     private final JobPaymentOrderCommandRepository paymentOrderCommandRepository;
     private final JobPaymentChangeRequestRepository paymentChangeRequestRepository;
     private final JobMatchingSeatReservationRepository seatReservationRepository;
+    private final Clock clock;
 
     public JobPost findJobPost(Long jobId) {
         return jobPostRepository.findById(jobId)
@@ -135,17 +137,18 @@ public class JobFindService {
         validateSearchRequest(request);
         List<JobPost> candidates = fetchCandidates(request);
         Map<Long, String> categoryNameMap = buildCategoryNameMap();
+        LocalDateTime now = LocalDateTime.now(clock);
 
         List<JobCardResponse> filtered = candidates.stream()
                 .filter(job -> matchesWage(job, request))
                 .filter(job -> matchesStartTime(job, request))
                 .filter(job -> matchesUrgency(job, request))
-                .filter(job -> job.getApplicationDeadline().isAfter(LocalDateTime.now()))
+                .filter(job -> job.getApplicationDeadline().isAfter(now))
                 // 예치 차단 공고는 신규 지원을 받지 않으므로 검색에서 뺀다. 상세 조회는 기존 지원자를 위해 유지한다.
                 .filter(job -> !job.isFundingBlocked())
                 .map(job -> {
                     Double distanceKm = calculateDistance(job, request);
-                    return JobCardResponse.of(job, resolveCategoryName(categoryNameMap, job.getCategoryId()), distanceKm);
+                    return JobCardResponse.of(job, resolveCategoryName(categoryNameMap, job.getCategoryId()), distanceKm, now);
                 })
                 .filter(card -> matchesDistance(card, request))
                 .sorted(buildComparator(request.type()))

@@ -24,7 +24,7 @@ public final class JobPostFixture {
                 .address("서울시 마포구")
                 .title("테스트 공고")
                 .description("테스트 설명")
-                .workDate(LocalDate.now().plusDays(1))
+                .workDate(TestSchedule.today().plusDays(1))
                 .startTime(LocalTime.of(9, 0))
                 .endTime(LocalTime.of(18, 0))
                 .endTimeNextDay(false)
@@ -33,7 +33,7 @@ public final class JobPostFixture {
                 .latitude(new BigDecimal("37.5665000"))
                 .longitude(new BigDecimal("126.9780000"))
                 .urgencyLevel(UrgencyLevel.MEDIUM)
-                .applicationDeadline(LocalDateTime.now().plusHours(1));
+                .applicationDeadline(TestSchedule.now().plusHours(1));
     }
 
     // 신규 공고는 결제 대기(PAYMENT_PENDING)로 생성된다. 공개 이후의 동작을 검증하는 테스트는 공개 상태를 명시한다.

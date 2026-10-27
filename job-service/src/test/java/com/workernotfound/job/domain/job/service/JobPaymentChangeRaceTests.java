@@ -20,7 +20,6 @@ import java.sql.ResultSet;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -220,7 +219,7 @@ class JobPaymentChangeRaceTests extends PaymentChangeTestSupport {
         JobPaymentTerms changed = new JobPaymentTerms(jobPost.getWorkDate(), jobPost.getStartTime(), jobPost.getEndTime(),
                 false, jobPost.getBaseHourlyWage(), null, 2, jobPost.getWorkDate().atTime(LocalTime.of(8, 0)));
         JobPaymentChange change = changeService.changeTerms(job.jobPostId(), job.ownerMemberId(), changed, newKey("c"));
-        clock.fixAt(jobPost.getApplicationDeadline().atZone(ZoneId.systemDefault()).toInstant());
+        clock.fixAt(jobPost.getApplicationDeadline().atZone(clock.getZone()).toInstant());
         String token = claim(change.command());
         String newOrderId = UUID.randomUUID().toString();
 

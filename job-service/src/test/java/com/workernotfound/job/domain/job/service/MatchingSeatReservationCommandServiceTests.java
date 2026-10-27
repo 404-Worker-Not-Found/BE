@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.service;
 
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.entity.JobMatchingSeatReservation;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.enums.JobStatus;
@@ -145,14 +146,14 @@ class MatchingSeatReservationCommandServiceTests extends IntegrationTestSupport 
 
     @Test
     void usesWorkStartInsteadOfApplicationDeadline() {
-        LocalDateTime start = LocalDateTime.now().plusHours(2).withSecond(0).withNano(0);
+        LocalDateTime start = TestSchedule.now().plusHours(2).withSecond(0).withNano(0);
         JobPost jobPost = save(JobPostFixture.jobPost()
                 .workDate(start.toLocalDate())
                 .startTime(start.toLocalTime())
                 .endTime(start.toLocalTime().plusMinutes(30))
                 .endTimeNextDay(start.toLocalTime().plusMinutes(30).isBefore(start.toLocalTime()))
                 .recruitCount(2)
-                .applicationDeadline(LocalDateTime.now().minusMinutes(1)));
+                .applicationDeadline(TestSchedule.now().minusMinutes(1)));
 
         assertThat(reserve(jobPost, nextId(), nextId(), newKey()).getId()).isNotNull();
 
@@ -236,7 +237,7 @@ class MatchingSeatReservationCommandServiceTests extends IntegrationTestSupport 
         JobPost jobPost = jobPostRepository.findById(jobPostId).orElseThrow();
         ReflectionTestUtils.setField(jobPost, "startTime", LocalTime.of(10, 0));
         ReflectionTestUtils.setField(jobPost, "baseHourlyWage", 20_000);
-        ReflectionTestUtils.setField(jobPost, "workDate", LocalDate.now().plusDays(3));
+        ReflectionTestUtils.setField(jobPost, "workDate", TestSchedule.today().plusDays(3));
         ReflectionTestUtils.setField(jobPost, "latitude", new BigDecimal("35.1796"));
         ReflectionTestUtils.setField(jobPost, "longitude", new BigDecimal("129.0756"));
         jobPostRepository.saveAndFlush(jobPost);

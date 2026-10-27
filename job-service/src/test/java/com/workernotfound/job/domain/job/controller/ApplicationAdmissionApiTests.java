@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.controller;
 
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import com.workernotfound.job.domain.job.entity.enums.UrgencyLevel;
@@ -37,7 +38,7 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
 
     @Test
     void issuesAdmissionWithJobSnapshot() throws Exception {
-        JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now().plusHours(1));
+        JobPost jobPost = saveJobPost(JobStatus.OPEN, TestSchedule.now().plusHours(1));
 
         requestAdmission(jobPost.getId(), newKey(), 100L)
                 .andExpect(status().isOk())
@@ -56,7 +57,7 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
 
     @Test
     void returnsSameAdmissionForSameIdempotencyKey() throws Exception {
-        JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now().plusHours(1));
+        JobPost jobPost = saveJobPost(JobStatus.OPEN, TestSchedule.now().plusHours(1));
         String key = newKey();
 
         String first = requestAdmission(jobPost.getId(), key, 100L)
@@ -70,7 +71,7 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
 
     @Test
     void returnsIssuedSnapshotAfterJobPostChanged() throws Exception {
-        JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now().plusHours(1));
+        JobPost jobPost = saveJobPost(JobStatus.OPEN, TestSchedule.now().plusHours(1));
         String key = newKey();
         String first = requestAdmission(jobPost.getId(), key, 100L)
                 .andExpect(status().isOk())
@@ -88,7 +89,7 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
 
     @Test
     void rejectsIdempotencyKeyReusedForDifferentWorker() throws Exception {
-        JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now().plusHours(1));
+        JobPost jobPost = saveJobPost(JobStatus.OPEN, TestSchedule.now().plusHours(1));
         String key = newKey();
         requestAdmission(jobPost.getId(), key, 100L).andExpect(status().isOk());
 
@@ -106,7 +107,7 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
 
     @Test
     void returnsConflictForClosedJob() throws Exception {
-        JobPost jobPost = saveJobPost(JobStatus.CLOSED, LocalDateTime.now().plusHours(1));
+        JobPost jobPost = saveJobPost(JobStatus.CLOSED, TestSchedule.now().plusHours(1));
 
         requestAdmission(jobPost.getId(), newKey(), 100L)
                 .andExpect(status().isConflict())
@@ -115,7 +116,7 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
 
     @Test
     void returnsConflictForPaymentPendingJob() throws Exception {
-        JobPost jobPost = saveJobPost(JobStatus.PAYMENT_PENDING, LocalDateTime.now().plusHours(1));
+        JobPost jobPost = saveJobPost(JobStatus.PAYMENT_PENDING, TestSchedule.now().plusHours(1));
 
         requestAdmission(jobPost.getId(), newKey(), 100L)
                 .andExpect(status().isConflict())
@@ -124,7 +125,7 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
 
     @Test
     void returnsConflictAfterApplicationDeadline() throws Exception {
-        JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now().minusMinutes(1));
+        JobPost jobPost = saveJobPost(JobStatus.OPEN, TestSchedule.now().minusMinutes(1));
 
         requestAdmission(jobPost.getId(), newKey(), 100L)
                 .andExpect(status().isConflict())
@@ -133,7 +134,7 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
 
     @Test
     void rejectsMissingIdempotencyKey() throws Exception {
-        JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now().plusHours(1));
+        JobPost jobPost = saveJobPost(JobStatus.OPEN, TestSchedule.now().plusHours(1));
 
         mockMvc.perform(post("/api/jobs/internal/{jobPostId}/application-admissions", jobPost.getId())
                         .header("X-Internal-Secret", INTERNAL_SECRET)
@@ -144,7 +145,7 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
 
     @Test
     void rejectsTooLongIdempotencyKey() throws Exception {
-        JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now().plusHours(1));
+        JobPost jobPost = saveJobPost(JobStatus.OPEN, TestSchedule.now().plusHours(1));
 
         requestAdmission(jobPost.getId(), "k".repeat(101), 100L)
                 .andExpect(status().isBadRequest());
@@ -152,7 +153,7 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
 
     @Test
     void rejectsMissingWorkerMemberId() throws Exception {
-        JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now().plusHours(1));
+        JobPost jobPost = saveJobPost(JobStatus.OPEN, TestSchedule.now().plusHours(1));
 
         mockMvc.perform(post("/api/jobs/internal/{jobPostId}/application-admissions", jobPost.getId())
                         .header("X-Internal-Secret", INTERNAL_SECRET)
@@ -192,7 +193,7 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
                 .address("서울시 마포구")
                 .title("테스트 공고")
                 .description("테스트 설명")
-                .workDate(LocalDate.now().plusDays(1))
+                .workDate(TestSchedule.today().plusDays(1))
                 .startTime(LocalTime.of(9, 0))
                 .endTime(LocalTime.of(18, 0))
                 .endTimeNextDay(false)

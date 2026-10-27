@@ -1,6 +1,7 @@
 package com.workernotfound.job.domain.job.controller;
 
 import com.jayway.jsonpath.JsonPath;
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.dto.request.OwnerJobSearchRequest;
 import com.workernotfound.job.domain.job.entity.JobMatchingSeatReservation;
 import com.workernotfound.job.domain.job.entity.JobPost;
@@ -397,7 +398,7 @@ class OwnerJobListApiTests extends IntegrationTestSupport {
 
     private void saveReservation(JobPost post, Outcome outcome) {
         long matchingId = MATCHING_SEQUENCE.incrementAndGet();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = TestSchedule.now();
         JobMatchingSeatReservation reservation = JobMatchingSeatReservation.builder()
                 .jobPostId(post.getId())
                 .matchingId(matchingId)

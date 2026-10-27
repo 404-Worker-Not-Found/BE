@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.service;
 
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.RecruitmentCompletionCommand;
 import com.workernotfound.job.domain.job.entity.enums.JobStatus;
@@ -66,7 +67,7 @@ class JobCloseRollbackTests extends IntegrationTestSupport {
                 .commandId(UUID.randomUUID().toString())
                 .jobPostId(jobPost.getId())
                 .jobVersion(versionBefore + 1)
-                .nextAttemptAt(LocalDateTime.now())
+                .nextAttemptAt(TestSchedule.now())
                 .build());
 
         assertThatThrownBy(() -> close(jobPost, key)).isInstanceOf(DataIntegrityViolationException.class);

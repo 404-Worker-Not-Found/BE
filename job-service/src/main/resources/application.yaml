@@ -25,6 +25,9 @@ auth:
     secret: ${AUTH_JWT_SECRET}
 
 job:
+  schedule:
+    # 공고 근무 일시·지원 마감을 해석하는 시간대. 같은 로컬 시각을 같은 순간으로 보도록 work-service·matching-service와 같은 설정을 쓴다.
+    time-zone: ${WORK_ATTENDANCE_TIME_ZONE:Asia/Seoul}
   application-admission:
     ttl: ${APPLICATION_ADMISSION_TTL:5m}
   # 만료 시각이 지난 RESERVED 지원 접수 승인을 EXPIRED로 바꾼다. 늦게 도착한 만료 전 지원은 이후에도 CONSUMED로 바뀐다.

@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.service;
 
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.entity.JobPaymentOrderCommand;
 import com.workernotfound.job.domain.job.entity.enums.PaymentOrderCommandStatus;
@@ -89,7 +90,7 @@ class PaymentOrderAfterCommitDispatchTests extends IntegrationTestSupport {
     }
 
     private CreateJobRequest request() {
-        LocalDate workDate = LocalDate.now().plusDays(2);
+        LocalDate workDate = TestSchedule.today().plusDays(2);
         return new CreateJobRequest(
                 1L, 1L, "테스트 상점", "서울시 마포구", "커밋 후 전송 공고", "설명",
                 workDate, LocalTime.of(9, 0), LocalTime.of(18, 0), false, 10_320, null, 1,

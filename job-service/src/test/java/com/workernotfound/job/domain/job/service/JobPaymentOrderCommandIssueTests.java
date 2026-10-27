@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.service;
 
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.entity.JobPaymentOrderCommand;
 import com.workernotfound.job.domain.job.entity.JobPost;
@@ -139,12 +140,12 @@ class JobPaymentOrderCommandIssueTests extends IntegrationTestSupport {
                 .ownerMemberId(command.getOwnerMemberId())
                 .amount(command.getAmount())
                 .currency(command.getCurrency())
-                .nextAttemptAt(LocalDateTime.now())
+                .nextAttemptAt(TestSchedule.now())
                 .build();
     }
 
     private CreateJobRequest request(int baseHourlyWage, Integer extraWage, int recruitCount) {
-        LocalDate workDate = LocalDate.now().plusDays(2);
+        LocalDate workDate = TestSchedule.today().plusDays(2);
         return new CreateJobRequest(
                 1L, 1L, "테스트 상점", "서울시 마포구", "결제 명령 공고", "설명",
                 workDate, LocalTime.of(9, 0), LocalTime.of(18, 0), false, baseHourlyWage, extraWage, recruitCount,

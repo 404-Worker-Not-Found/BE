@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.controller;
 
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.entity.JobFundingStatusReceipt;
 import com.workernotfound.job.domain.job.entity.JobPaymentOrderCommand;
 import com.workernotfound.job.domain.job.entity.JobPost;
@@ -16,7 +17,6 @@ import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -467,7 +467,7 @@ class FundingStatusApiTests extends FundingStatusApiTestSupport {
 
     @Test
     void skipsPublicationAtApplicationDeadlineAndPublishesJustBefore() throws Exception {
-        LocalDate workDate = LocalDate.now().plusDays(3);
+        LocalDate workDate = TestSchedule.today().plusDays(3);
         LocalDateTime deadline = workDate.minusDays(1).atTime(LocalTime.NOON);
         LinkedJob atDeadline = createLinkedJob(1, workDate, LocalTime.of(9, 0), deadline);
         LinkedJob beforeDeadline = createLinkedJob(1, workDate, LocalTime.of(9, 0), deadline);
@@ -492,7 +492,7 @@ class FundingStatusApiTests extends FundingStatusApiTestSupport {
 
     @Test
     void skipsPublicationAtWorkStart() throws Exception {
-        LocalDate workDate = LocalDate.now().plusDays(3);
+        LocalDate workDate = TestSchedule.today().plusDays(3);
         LocalDateTime workStart = workDate.atTime(LocalTime.of(9, 0));
         LinkedJob job = createLinkedJob(1, workDate, LocalTime.of(9, 0), workStart.minusHours(1));
 
@@ -687,7 +687,7 @@ class FundingStatusApiTests extends FundingStatusApiTestSupport {
     }
 
     private void fixClockAt(LocalDateTime time) {
-        clock.fixAt(time.atZone(ZoneId.systemDefault()).toInstant());
+        clock.fixAt(time.atZone(clock.getZone()).toInstant());
     }
 
     private Object dataOf(String responseBody) {

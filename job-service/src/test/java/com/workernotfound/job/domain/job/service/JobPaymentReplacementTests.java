@@ -13,7 +13,6 @@ import com.workernotfound.job.support.PaymentChangeTestSupport;
 import com.workernotfound.job.support.StubPaymentServer.RecordedRequest;
 import com.workernotfound.job.support.StubPaymentServer.StubResponse;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -366,7 +365,7 @@ class JobPaymentReplacementTests extends PaymentChangeTestSupport {
     void fundedButUnpublishedEarlierOrderStaysUnderReviewAndIsNotReplaced() throws Exception {
         LinkedJob job = createLinkedJob(1);
         JobPost jobPost = jobPost(job.jobPostId());
-        clock.fixAt(jobPost.getApplicationDeadline().atZone(ZoneId.systemDefault()).toInstant());
+        clock.fixAt(jobPost.getApplicationDeadline().atZone(clock.getZone()).toInstant());
         // 예치가 지원 마감 뒤에 확인돼 공개되지 않았다. 이 예치 사실은 교체 전에 먼저 검토 대상으로 기록된다.
         sendFunding(job.jobPostId(), fundingKey(job, 1), notice(job, 1, true))
                 .andExpect(jsonPath("$.data.result").value("PUBLICATION_SKIPPED"));

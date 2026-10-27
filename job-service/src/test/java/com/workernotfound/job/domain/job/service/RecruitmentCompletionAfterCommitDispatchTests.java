@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.service;
 
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.entity.JobMatchingSeatReservation;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.RecruitmentCompletionCommand;
@@ -84,7 +85,7 @@ class RecruitmentCompletionAfterCommitDispatchTests extends IntegrationTestSuppo
                 .commandId(UUID.randomUUID().toString())
                 .jobPostId(jobPost.getId())
                 .jobVersion(jobPost.getVersion() + 1)
-                .nextAttemptAt(LocalDateTime.now().plusYears(1))
+                .nextAttemptAt(TestSchedule.now().plusYears(1))
                 .build());
 
         assertThatThrownBy(() -> seatService.confirm(

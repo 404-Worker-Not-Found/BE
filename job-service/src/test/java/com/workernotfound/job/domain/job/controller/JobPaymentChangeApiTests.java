@@ -1,5 +1,6 @@
 package com.workernotfound.job.domain.job.controller;
 
+import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.entity.JobPaymentOrderCommand;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.enums.JobStatus;
@@ -12,7 +13,6 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -96,8 +96,8 @@ class JobPaymentChangeApiTests extends PaymentChangeTestSupport {
                 with(terms(job, 1), "applicationDeadline", now().minusMinutes(1).toString()))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("JOB-400-002"));
         changeTerms(job.jobPostId(), owner, newKey("c"), with(with(terms(job, 1),
-                "workDate", LocalDate.now().minusDays(1).toString()),
-                "applicationDeadline", LocalDate.now().minusDays(2).atTime(LocalTime.NOON).toString()))
+                "workDate", TestSchedule.today().minusDays(1).toString()),
+                "applicationDeadline", TestSchedule.today().minusDays(2).atTime(LocalTime.NOON).toString()))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("JOB-400-002"));
         changeTerms(job.jobPostId(), owner, " bad key", terms(job, 2)).andExpect(status().isBadRequest());
         changeTerms(job.jobPostId(), owner, "k".repeat(101), terms(job, 2)).andExpect(status().isBadRequest());
@@ -204,7 +204,7 @@ class JobPaymentChangeApiTests extends PaymentChangeTestSupport {
     void sameKeyReplayAfterDeadlineAndWorkDatePassStillReturnsOriginalRequest() throws Exception {
         LinkedJob job = createLinkedJob(1);
         String key = newKey("change");
-        LocalDateTime deadline = LocalDateTime.now().plusSeconds(2);
+        LocalDateTime deadline = TestSchedule.now().plusSeconds(2);
         Map<String, Object> body = with(terms(job, 2), "applicationDeadline", deadline.toString());
         Long changeId = changeId(changeTerms(job.jobPostId(), job.ownerMemberId(), key, body)
                 .andExpect(status().isOk())
@@ -212,14 +212,14 @@ class JobPaymentChangeApiTests extends PaymentChangeTestSupport {
 
         // 실제 시스템 시각으로 마감을 지나게 한다. 요청 경계의 시각 검증이 재요청을 막지 않는지 확인한다.
         await().atMost(Duration.ofSeconds(10)).pollInterval(Duration.ofMillis(100))
-                .until(() -> LocalDateTime.now().isAfter(deadline));
+                .until(() -> TestSchedule.now().isAfter(deadline));
         changeTerms(job.jobPostId(), job.ownerMemberId(), key, body)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.changeId").value(changeId))
                 .andExpect(jsonPath("$.data.status").value("PENDING"));
 
         dispatchChange(changeId);
-        clock.fixAt(jobPost(job.jobPostId()).getWorkDate().plusDays(3).atStartOfDay(ZoneId.systemDefault()).toInstant());
+        clock.fixAt(jobPost(job.jobPostId()).getWorkDate().plusDays(3).atStartOfDay(clock.getZone()).toInstant());
         changeTerms(job.jobPostId(), job.ownerMemberId(), key, body)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.changeId").value(changeId))
@@ -308,7 +308,7 @@ class JobPaymentChangeApiTests extends PaymentChangeTestSupport {
     void repaymentAfterDeadlineIsRejectedButScheduleCanBeChanged() throws Exception {
         LinkedJob job = createLinkedJob(1);
         JobPost jobPost = jobPost(job.jobPostId());
-        clock.fixAt(jobPost.getApplicationDeadline().atZone(java.time.ZoneId.systemDefault()).toInstant());
+        clock.fixAt(jobPost.getApplicationDeadline().atZone(clock.getZone()).toInstant());
 
         retryPayment(job.jobPostId(), job.ownerMemberId(), newKey("r"))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("JOB-409-014"));

@@ -37,10 +37,8 @@ public record JobCardResponse(
         String status
 
 ) {
-    public static JobCardResponse of(JobPost post, String categoryName, Double distanceKm) {
-        long remainingMinutes = ChronoUnit.MINUTES.between(
-                LocalDateTime.now(), post.getApplicationDeadline()
-        );
+    public static JobCardResponse of(JobPost post, String categoryName, Double distanceKm, LocalDateTime now) {
+        long remainingMinutes = ChronoUnit.MINUTES.between(now, post.getApplicationDeadline());
         return new JobCardResponse(
                 post.getId(),
                 post.getStoreName(),

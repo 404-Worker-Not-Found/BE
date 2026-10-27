@@ -107,7 +107,7 @@
 
 matching-service의 `ApplicationSubmitted`가 전달하는 지원 저장 사실로 승인을 `CONSUMED`로 바꾼다. 처리 단위는 `JobApplicationAdmissionConsumptionService.consume`이며 입력은 이벤트의 `admissionId`, `jobPostId`, `workerMemberId`와 envelope의 `occurredAt`이다. [ApplicationSubmitted 이벤트 소비](#applicationsubmitted-이벤트-소비)의 Redis Stream 소비자가 호출한다.
 
-- 시각 정의: `occurredAt`은 matching-service가 지원을 저장한 시각(이벤트 발생 시각)이고, 수신 시각은 job-service가 이벤트를 받아 처리한 시각이다. 판단과 저장에는 발생 시각만 쓴다. `consumedAt`은 발생 시각을 저장 정밀도(마이크로초)로 절삭한 값이며 수신 시각은 승인에 저장하지 않는다. 따라서 전달이 늦어지거나 재전송돼도 결과와 `consumedAt`이 같고, `CONSUMED` 승인은 항상 `consumedAt < expiresAt`이다. 두 서비스의 `LocalDateTime`은 같은 시간대를 쓴다고 가정한다.
+- 시각 정의: `occurredAt`은 matching-service가 지원을 저장한 시각(이벤트 발생 시각)이고, 수신 시각은 job-service가 이벤트를 받아 처리한 시각이다. 판단과 저장에는 발생 시각만 쓴다. `consumedAt`은 발생 시각을 저장 정밀도(마이크로초)로 절삭한 값이며 수신 시각은 승인에 저장하지 않는다. 따라서 전달이 늦어지거나 재전송돼도 결과와 `consumedAt`이 같고, `CONSUMED` 승인은 항상 `consumedAt < expiresAt`이다. 두 서비스는 이 시각들을 같은 근무 일정 시간대로 만들고 비교한다([시각 기준](#시각-기준120-2026-10-28)).
 - 순서: `admissionId`나 `occurredAt`이 없으면 거절한다. 승인 행을 `PESSIMISTIC_WRITE`로 잠근 뒤 승인이 없으면 거절하고, 공고 ID·알바생 회원 ID가 승인과 다르거나 비어 있으면 상태와 관계없이 거절한다. 그다음 이미 `CONSUMED`면 상태와 `consumedAt`을 바꾸지 않는다. `occurredAt < expiresAt`이면 `RESERVED`·`EXPIRED`를 모두 `CONSUMED`로 바꾸고, 같거나 늦으면 상태를 바꾸지 않는다.
 - 결과: `CONSUMED`, `ALREADY_CONSUMED`, `SUBMITTED_AFTER_EXPIRY`와 영구 거절 `REJECTED_MISSING_ADMISSION_ID`, `REJECTED_MISSING_OCCURRED_AT`, `REJECTED_ADMISSION_NOT_FOUND`, `REJECTED_JOB_POST_MISMATCH`, `REJECTED_WORKER_MISMATCH`(`isRejected()`)를 반환한다. 반환된 결과는 재시도해도 다른 판단으로 바뀌지 않으므로 소비자가 기록하고 처리를 끝낼 수 있다. 같은 이벤트를 다시 처리하면 `CONSUMED` 대신 `ALREADY_CONSUMED`가 나오지만 승인 상태와 `consumedAt`은 더 바뀌지 않는다.
 - 일시 오류: DB 장애, 잠금 대기 초과 같은 예외는 결과로 바꾸지 않고 전파한다. 소비자는 그 이벤트를 재시도한다. 처리는 호출자 트랜잭션에 참여하므로 이후 단계가 실패해 롤백되면 사용 완료도 함께 취소된다.
@@ -313,6 +313,12 @@ matching-service의 `ApplicationSubmitted`가 전달하는 지원 저장 사실�
 
 ## 공고 마감과 지원 마감 전이
 
+### 시각 기준(#120, 2026-10-28)
+
+공고의 지원 마감(`applicationDeadline`)과 근무 일시(`workDate`, `startTime`)는 점주가 입력한 근무 일정 시간대의 로컬 시각이다. job-service는 현재 시각을 실행 환경의 기본 시간대가 아니라 이 시간대(`job.schedule.time-zone`, work-service·matching-service와 같은 `WORK_ATTENDANCE_TIME_ZONE`, 기본 `Asia/Seoul`)로 고정한 `Clock` 빈에서 읽는다. 지원 마감·근무 시작 판단, 공고 생성·결제 조건 변경 검증, 공개 검색 마감 필터와 카드의 남은 시간뿐 아니라 승인·자리 예약 만료, 명령·이력·수신 시각, JPA 생성·수정 시각(`DateTimeProvider`)도 같은 `Clock`을 쓴다. 따라서 job-service가 만든 시각은 모두 같은 시간대다. 응답 공통 envelope의 `timestamp`만 다른 서비스와 같이 실행 환경 시각을 쓴다.
+
+matching-service도 job-service가 만든 지원 승인·자리 예약 만료 시각을 같은 시간대의 `Clock`으로 비교한다. 운영 중에 이 시간대를 바꾸면 저장된 시각과 비교 기준이 함께 어긋나므로 바꾸지 않는다. 배포 환경이 생기기 전에 정한 것이라 기존 데이터 전환은 없다.
+
 모집 완료 외에 점주 수동 마감과 시각 경과에 따른 자동 전이로 공고 상태가 바뀐다. 모든 전이는 공고 행 비관적 잠금 아래에서 하며, 지원 승인·자리 예약·확정·반환·만료 회수·모집 완료·예치 상태 수신과 같은 잠금으로 직렬화된다. 상태 전이 메서드는 `JobPost`에 있고 허용되지 않은 상태에서 호출하면 `IllegalStateException`이다. 상태 변경, flush로 확정한 `@Version`, 상태 이력, 필요한 경우 모집 종료 알림 명령은 `JobStatusChangeRecorder`가 같은 트랜잭션에서 저장한다. 하나라도 실패하면 공고 상태도 함께 롤백된다.
 
 | 상황 | 변경 | 이력 사유 | matching-service 알림 |
@@ -366,6 +372,7 @@ matching-service의 `ApplicationSubmitted`가 전달하는 지원 저장 사실�
 
 | 환경 변수 | 기본값 | 의미 |
 | --- | --- | --- |
+| `WORK_ATTENDANCE_TIME_ZONE` | `Asia/Seoul` | 지원 마감·근무 일시를 해석하는 근무 일정 시간대. job-service의 모든 현재 시각에 쓴다(work-service·matching-service와 공통) |
 | `JOB_SCHEDULE_TRANSITION_ENABLED` | `true` | 자동 상태 전이 스케줄러 사용 |
 | `JOB_SCHEDULE_TRANSITION_INTERVAL` / `..._INITIAL_DELAY` / `..._BATCH_SIZE` | `1m` / `30s` / `100` | 주기·첫 실행·후보별 배치 |
 

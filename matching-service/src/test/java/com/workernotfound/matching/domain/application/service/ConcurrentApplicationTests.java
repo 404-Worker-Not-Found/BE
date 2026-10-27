@@ -11,6 +11,7 @@ import com.workernotfound.matching.external.client.job.JobServiceClient;
 import com.workernotfound.matching.external.client.job.dto.ApplicationAdmissionResponse;
 import com.workernotfound.matching.external.client.member.MemberServiceClient;
 import com.workernotfound.matching.external.client.member.dto.MemberInternalResponse;
+import com.workernotfound.matching.support.TestSchedule;
 import com.workernotfound.matching.support.IntegrationTestSupport;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -120,13 +121,13 @@ class ConcurrentApplicationTests extends IntegrationTestSupport {
 			1L,
 			100L,
 			1L,
-			LocalDate.now().plusDays(1),
+			TestSchedule.today().plusDays(1),
 			LocalTime.of(9, 0),
 			LocalTime.of(18, 0),
 			BigDecimal.valueOf(37.5),
 			BigDecimal.valueOf(127.0),
-			LocalDateTime.now(),
-			LocalDateTime.now().plusMinutes(1)
+			TestSchedule.now(),
+			TestSchedule.now().plusMinutes(1)
 		);
 	}
 }
