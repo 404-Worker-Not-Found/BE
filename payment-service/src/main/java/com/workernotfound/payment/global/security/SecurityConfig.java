@@ -51,6 +51,8 @@ public class SecurityConfig {
                         "/error")
                     .permitAll()
                     .requestMatchers("/api/payments/orders/**").hasRole("OWNER")
+                    .requestMatchers("/api/payments/me/settlements", "/api/payments/me/settlements/**")
+                    .hasAnyRole("OWNER", "WORKER")
                     .anyRequest()
                     .denyAll())
         // TODO: API Gateway나 mTLS 기반 서비스 간 인증으로 대체한다.

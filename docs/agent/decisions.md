@@ -1889,3 +1889,12 @@ Related files:
 - `docs/architecture/refund-design.md`
 - `payment-service/src/main/java/com/workernotfound/payment/domain/order/service/OrderTransactionService.java`
 - `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundLedger.java`
+
+## 2026-10-28 - MVP Settlement Payout Execution
+
+- 사용자의 MVP 우선 구현 지시에 따라 실제 지급 계약 전에는 지급 실행을 기본 비활성화하고, 지급 흐름은 테스트 대역으로 검증한다. 실제 PG 어댑터가 없이 실행을 켜면 시작 실패하며 운영 성공 대역은 제공하지 않는다.
+- 근무 완료 후 기존 대기 기간이 지난 정상 RESERVED 정산만 최초 지급을 요청한다. 정산당 하나의 참조·수취인·금액·통화를 첫 외부 호출 전에 저장한다.
+- 첫 시도 이후에는 기존 참조 조회만 수행한다. 응답 유실·프로세스 종료·조회 부재를 실패로 추정해 새로 보내지 않는다. 조회의 확정 부재 및 불일치는 REVIEW_REQUIRED와 예약액 유지로 처리한다. 운영 복구 API는 출시 보강 항목이다.
+- 확정 성공 시에만 예약액을 지급액으로 바꾸고, 실패는 PAYOUT_FAILED로 남기며 예약액은 유지한다. lease 점유 token으로 이전 실행의 결과 반영을 차단한다.
+- 본인 역할의 점주·근로자만 정산을 조회할 수 있다. 공개 API에 수취인·provider 식별자를 포함하지 않는다.
+- #132 종료 연동을 먼저 병합하며, V11 지급 명령 마이그레이션은 V10 종료 연동 이후 배포한다. 수취인 등록·KYC·실제 지급 연동·수수료·세금·운영 대사는 별도 보강한다.
