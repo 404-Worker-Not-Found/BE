@@ -331,4 +331,66 @@ class RefundReviewIntegrationTests extends IntegrationTestSupport {
     mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
         .andExpect(jsonPath("$.paths['/api/payments/internal/refunds/reviews']").exists());
   }
+
+  String resumeBody(String operatorId, String reviewReason, String note) {
+    return """
+        {"operatorId":%s,"reviewReason":%s,"note":%s}
+        """.formatted(operatorId, reviewReason, note);
+  }
+
+  String resumePath(long refundId) {
+    return "/api/payments/internal/refunds/" + refundId + "/review-resumptions";
+  }
+
+  @Test
+  void httpResumeContractAuthenticationAndValidation() throws Exception {
+    long refundId = providerMismatch(deposit());
+    String body = resumeBody("\"ops.kim\"", "\"PROVIDER_MISMATCH\"", "\"토스 설정 확인\"");
+    mvc.perform(post(resumePath(refundId)).header("Idempotency-Key", UUID.randomUUID().toString())
+        .contentType("application/json").content(body)).andExpect(status().isUnauthorized());
+    mvc.perform(post(resumePath(refundId)).header("X-Internal-Secret", SECRET)
+        .contentType("application/json").content(body)).andExpect(status().isBadRequest());
+    for (String invalid : List.of(
+        resumeBody("\"\"", "\"PROVIDER_MISMATCH\"", "\"메모\""),
+        resumeBody("\"ops kim\"", "\"PROVIDER_MISMATCH\"", "\"메모\""),
+        resumeBody("\"ops:kim\"", "\"PROVIDER_MISMATCH\"", "\"메모\""),
+        resumeBody("\"" + "a".repeat(65) + "\"", "\"PROVIDER_MISMATCH\"", "\"메모\""),
+        resumeBody("null", "\"PROVIDER_MISMATCH\"", "\"메모\""),
+        resumeBody("\"ops.kim\"", "\"provider_mismatch\"", "\"메모\""),
+        resumeBody("\"ops.kim\"", "null", "\"메모\""),
+        resumeBody("\"ops.kim\"", "\"PROVIDER_MISMATCH\"", "\" \""),
+        resumeBody("\"ops.kim\"", "\"PROVIDER_MISMATCH\"", "\"" + "가".repeat(201) + "\""))) {
+      String key = UUID.randomUUID().toString();
+      mvc.perform(post(resumePath(refundId)).header("X-Internal-Secret", SECRET).header("Idempotency-Key", key)
+          .contentType("application/json").content(invalid)).andExpect(status().isBadRequest());
+      assertThat(count("SELECT COUNT(*) FROM payment_refund_review_resumptions WHERE command_key = ?", key))
+          .isZero();
+    }
+    mvc.perform(post("/api/payments/internal/refunds/0/review-resumptions").header("X-Internal-Secret", SECRET)
+        .header("Idempotency-Key", UUID.randomUUID().toString()).contentType("application/json").content(body))
+        .andExpect(status().isBadRequest());
+    mvc.perform(post(resumePath(Long.MAX_VALUE)).header("X-Internal-Secret", SECRET)
+        .header("Idempotency-Key", UUID.randomUUID().toString()).contentType("application/json").content(body))
+        .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("PAYMENT-404-002"));
+
+    mvc.perform(post(resumePath(refundId)).header("X-Internal-Secret", SECRET)
+        .header("Idempotency-Key", UUID.randomUUID().toString()).contentType("application/json")
+        .content(resumeBody("\"ops.kim\"", "\"IDEMPOTENCY_WINDOW_EXPIRED\"", "\"메모\"")))
+        .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PAYMENT-409-008"));
+    mvc.perform(post(resumePath(refundId)).header("X-Internal-Secret", SECRET)
+        .header("Idempotency-Key", UUID.randomUUID().toString()).contentType("application/json")
+        .content(resumeBody("\"ops.kim\"", "\"PROVIDER_MISMATCH\"", "\"" + "가".repeat(200) + "\"")))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.data.refundId").value(String.valueOf(refundId)))
+        .andExpect(jsonPath("$.data.status").value("REQUESTED"))
+        .andExpect(jsonPath("$.data.reviewRequired").value(false))
+        .andExpect(jsonPath("$.data.failureCode").doesNotExist());
+
+    long unexplained = unexplainedCancellation(deposit());
+    mvc.perform(post(resumePath(unexplained)).header("X-Internal-Secret", SECRET)
+        .header("Idempotency-Key", UUID.randomUUID().toString()).contentType("application/json")
+        .content(resumeBody("\"ops.kim\"", "\"UNEXPLAINED_CANCELLATION\"", "\"메모\"")))
+        .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PAYMENT-409-009"));
+    mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths['/api/payments/internal/refunds/{refundId}/review-resumptions']").exists());
+  }
 }

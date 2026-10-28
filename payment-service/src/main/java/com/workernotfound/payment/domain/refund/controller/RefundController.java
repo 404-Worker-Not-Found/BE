@@ -2,6 +2,7 @@ package com.workernotfound.payment.domain.refund.controller;
 
 import com.workernotfound.payment.domain.refund.controller.docs.RefundControllerDocs;
 import com.workernotfound.payment.domain.refund.dto.request.RefundRequest;
+import com.workernotfound.payment.domain.refund.dto.request.RefundReviewResumeRequest;
 import com.workernotfound.payment.domain.refund.dto.response.RefundResponse;
 import com.workernotfound.payment.domain.refund.dto.response.RefundReviewPageResponse;
 import com.workernotfound.payment.domain.refund.service.RefundApplicationService;
@@ -30,5 +31,11 @@ public class RefundController implements RefundControllerDocs {
   public ApiResponse<RefundReviewPageResponse> getReviews(
       @RequestParam(defaultValue = "0") Long afterRefundId, @RequestParam(defaultValue = "20") int size) {
     return ApiResponse.success(service.getReviews(afterRefundId, size));
+  }
+
+  @PostMapping("/{refundId}/review-resumptions")
+  public ApiResponse<RefundResponse> resumeReview(@PathVariable Long refundId,
+      @RequestHeader("Idempotency-Key") String key, @RequestBody RefundReviewResumeRequest request) {
+    return ApiResponse.success(service.resumeReview(refundId, key, request));
   }
 }
