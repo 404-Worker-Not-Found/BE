@@ -1,7 +1,6 @@
 package com.workernotfound.payment.domain.refund.service;
 
 import com.workernotfound.payment.domain.payment.exception.PaymentErrorCode;
-import com.workernotfound.payment.domain.refund.dto.request.RefundReviewResumeRequest;
 import com.workernotfound.payment.domain.refund.repository.RefundReviewRepository;
 import com.workernotfound.payment.domain.refund.repository.RefundReviewRepository.RefundState;
 import com.workernotfound.payment.global.exception.BusinessException;
@@ -29,15 +28,15 @@ public class RefundReviewCommandService {
 
   /** @return 업무 거절 코드. 재개했거나 같은 키로 이미 재개했으면 비어 있다. */
   @Transactional
-  public Optional<PaymentErrorCode> resume(Long refundId, String key, RefundReviewResumeRequest request) {
+  public Optional<PaymentErrorCode> resume(Long refundId, String key, RefundReviewResumeCommand command) {
     Long depositId = reviews.findDepositId(refundId)
         .orElseThrow(() -> new BusinessException(PaymentErrorCode.REFUND_NOT_FOUND));
     // 명령 저장의 FK 검사가 환불 행을 공유 잠금하므로 예치를 먼저 잠가야 예치 → 환불 순서가 유지된다.
     boolean isFundingBlocked = reviews.lockFundingBlocked(depositId);
-    var command = lockCommand(key, refundId, request);
-    if (command.isResolved()) return Optional.ofNullable(command.rejection()).map(PaymentErrorCode::valueOf);
+    var stored = lockCommand(key, refundId, command);
+    if (stored.isResolved()) return Optional.ofNullable(stored.rejection()).map(PaymentErrorCode::valueOf);
     RefundState refund = reviews.lockRefund(refundId);
-    Optional<PaymentErrorCode> rejection = rejection(refund, request.reviewReason(), isFundingBlocked);
+    Optional<PaymentErrorCode> rejection = rejection(refund, command.reviewReason(), isFundingBlocked);
     if (rejection.isPresent()) {
       reviews.rejectCommand(key, rejection.get().name());
       return rejection;
@@ -46,7 +45,7 @@ public class RefundReviewCommandService {
     reviews.history(refundId, RESUMED);
     reviews.completeCommand(key, refund.reviewReason());
     log.info("검토 대상 환불 자동 실행 재개: refundId={}, reviewReason={}, operatorId={}", refundId,
-        refund.reviewReason(), request.operatorId());
+        refund.reviewReason(), command.operatorId());
     return Optional.empty();
   }
 
@@ -61,12 +60,12 @@ public class RefundReviewCommandService {
   }
 
   private RefundReviewRepository.Command lockCommand(
-      String key, Long refundId, RefundReviewResumeRequest request) {
-    String fingerprint = fingerprint(request.fingerprintPayload(refundId));
-    var command = reviews.lockCommand(key, fingerprint, refundId, request.operatorId(), request.note());
-    if (!command.fingerprint().equals(fingerprint))
+      String key, Long refundId, RefundReviewResumeCommand command) {
+    String fingerprint = fingerprint(command.fingerprintPayload(refundId));
+    var stored = reviews.lockCommand(key, fingerprint, refundId, command.operatorId(), command.note());
+    if (!stored.fingerprint().equals(fingerprint))
       throw new BusinessException(PaymentErrorCode.COMMAND_CONFLICT);
-    return command;
+    return stored;
   }
 
   private String fingerprint(String payload) {

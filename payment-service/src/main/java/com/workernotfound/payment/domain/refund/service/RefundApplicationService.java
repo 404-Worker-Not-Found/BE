@@ -29,7 +29,8 @@ public class RefundApplicationService {
 
   // 같은 키의 재요청은 처음 판단을 돌려준다. 재개한 환불은 다음 실행 주기에 결제를 먼저 조회한다.
   public RefundResponse resumeReview(Long refundId, String key, RefundReviewResumeRequest request) {
-    reviewCommands.resume(refundId, key, request).ifPresent(rejection -> {
+    var command = new RefundReviewResumeCommand(request.operatorId(), request.reviewReason(), request.note());
+    reviewCommands.resume(refundId, key, command).ifPresent(rejection -> {
       throw new BusinessException(rejection);
     });
     return getRefund(refundId);
