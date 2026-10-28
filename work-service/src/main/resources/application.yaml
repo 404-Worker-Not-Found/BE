@@ -17,6 +17,10 @@ spring:
     hibernate:
       ddl-auto: validate
 work:
+  cancellation-expiry:
+    enabled: ${WORK_CANCELLATION_EXPIRY_ENABLED:true}
+  no-show:
+    enabled: ${WORK_NO_SHOW_ENABLED:true}
   outbox:
     enabled: ${WORK_OUTBOX_ENABLED:true}
     stream: ${WORK_OUTBOX_STREAM_KEY:work:domain-events}

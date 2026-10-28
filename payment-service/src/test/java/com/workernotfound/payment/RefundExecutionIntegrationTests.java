@@ -228,23 +228,61 @@ class RefundExecutionIntegrationTests extends IntegrationTestSupport {
     assertThat(read(refundId).status()).isEqualTo("SUCCEEDED");
   }
 
-  @Test
-  void definitiveRejectionFailsOnlyAfterQueryConfirmsNotApplied() {
+  @ParameterizedTest
+  @CsvSource({
+      "400,ALREADY_CANCELED_PAYMENT", "400,ALREADY_REFUND_PAYMENT",
+      "400,EXCEED_CANCEL_AMOUNT_DISCOUNT_AMOUNT", "400,INVALID_REQUEST",
+      "400,NOT_MATCHES_REFUNDABLE_AMOUNT", "400,REFUND_REJECTED",
+      "403,EXCEED_CANCEL_LIMIT", "403,EXCEED_MAX_REFUND_DUE", "403,NOT_ALLOWED_PARTIAL_REFUND",
+      "403,NOT_CANCELABLE_AMOUNT", "403,NOT_CANCELABLE_PAYMENT",
+      "403,NOT_CANCELABLE_PAYMENT_FOR_DORMANT_USER", "404,NOT_FOUND_PAYMENT"
+  })
+  void definitiveRejectionFailsOnlyAfterQueryConfirmsNotApplied(int status, String code) {
     long job = deposit();
     long refundId = refund(job, "3000");
-    cancelFails(job, 403, "NOT_CANCELABLE_AMOUNT");
+    cancelFails(job, status, code);
     when(toss.getPayment(paymentKey(job))).thenReturn(payment(job, "10000"));
     executions.execute(refundId);
 
     RefundResponse refund = read(refundId);
     assertThat(refund.status()).isEqualTo("FAILED");
-    assertThat(refund.failureCode()).isEqualTo("NOT_CANCELABLE_AMOUNT");
+    assertThat(refund.failureCode()).isEqualTo(code);
     assertThat(balance(job, "refund_reserved_amount")).isEqualByComparingTo("0");
     assertThat(balance(job, "refunded_amount")).isEqualByComparingTo("0");
     assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment_refund_histories WHERE refund_id = ? AND"
-        + " next_status = 'FAILED' AND reason = 'NOT_CANCELABLE_AMOUNT'", Long.class, refundId)).isEqualTo(1);
+        + " next_status = 'FAILED' AND reason = ?", Long.class, refundId, code)).isEqualTo(1);
     // 실패한 환불 금액은 다시 쓸 수 있다.
     assertThat(read(refund(job, "10000")).status()).isEqualTo("REQUESTED");
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+      "500,INVALID_REQUEST", "503,NOT_CANCELABLE_AMOUNT", "500,NOT_FOUND_PAYMENT",
+      "400,NOT_CANCELABLE_AMOUNT", "403,INVALID_REQUEST", "404,INVALID_REQUEST",
+      "401,INVALID_REQUEST", "429,INVALID_REQUEST", ",INVALID_REQUEST", "400,",
+      "400,UNKNOWN_ERROR"
+  })
+  void mismatchedRejectionKeepsReservedAmountAndRetriesSameRefund(Integer status, String code) {
+    long job = deposit();
+    long refundId = refund(job, "3000");
+    cancelFails(job, status, code);
+    when(toss.getPayment(paymentKey(job))).thenReturn(payment(job, "10000"));
+    executions.execute(refundId);
+
+    assertThat(read(refundId).status()).isEqualTo("REQUESTED");
+    assertThat(read(refundId).reviewRequired()).isFalse();
+    assertThat(balance(job, "refund_reserved_amount")).isEqualByComparingTo("3000");
+    assertThat(balance(job, "refunded_amount")).isEqualByComparingTo("0");
+    assertThat(blocked(job)).isFalse();
+    verify(toss, never()).getPayment(paymentKey(job));
+
+    cancelReturns(job, payment(job, "7000", cancel("tx-retry", "3000")));
+    makeDue(refundId);
+    executions.execute(refundId);
+    assertThat(read(refundId).status()).isEqualTo("SUCCEEDED");
+    assertThat(balance(job, "refund_reserved_amount")).isEqualByComparingTo("0");
+    assertThat(balance(job, "refunded_amount")).isEqualByComparingTo("3000");
+    verify(toss, times(2)).cancel(eq(paymentKey(job)), any(), eq(REASON), eq("refund-" + refundId));
   }
 
   @Test

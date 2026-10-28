@@ -1,4 +1,4 @@
-package com.workernotfound.job.domain.job.service;
+package com.workernotfound.job.domain.job.entity.enums;
 
 /**
  * 승인 사용 완료 처리의 확정된 결과다. 재시도해도 다른 판단으로 바뀌지 않으므로 소비자는 결과를 기록하고 처리를 끝낼 수 있다.

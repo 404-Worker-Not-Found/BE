@@ -26,25 +26,41 @@ public class WorkNotificationEventService {
     if (!fingerprint.equals(receipts.record(event.eventId(), fingerprint)))
       throw new IllegalArgumentException("동일 근무 이벤트 ID의 내용이 다릅니다.");
     if (notifications.existsByEventId(event.eventId())) return;
+    if ("SYSTEM".equals(event.actorRole())) {
+      notifyParticipant(event, event.ownerMemberId(), "OWNER");
+      notifyParticipant(event, event.workerMemberId(), "WORKER");
+      return;
+    }
     boolean forOwner = "WORKER".equals(event.actorRole());
+    notifyParticipant(event, forOwner ? event.ownerMemberId() : event.workerMemberId(), forOwner ? "OWNER" : "WORKER");
+  }
+
+  private void notifyParticipant(WorkNotificationEvent event, Long memberId, String role) {
     notifications.save(Notification.builder().eventId(event.eventId())
-        .memberId(forOwner ? event.ownerMemberId() : event.workerMemberId())
-        .memberRole(forOwner ? "OWNER" : "WORKER").notificationType(event.eventType())
+        .memberId(memberId).memberRole(role).notificationType(event.eventType())
         .jobPostId(event.jobPostId()).matchingId(event.matchingId()).workId(event.workId())
         .occurredAt(event.occurredAt()).build());
   }
 
   private void validate(WorkNotificationEvent event) {
     if (event == null || !validator.validate(event).isEmpty() || event.version() != 1
-        || !event.aggregateId().equals(event.workId())
+        || (!event.eventType().startsWith("WorkCancellation") && !event.aggregateId().equals(event.workId()))
         || event.endTimeNextDay() != !event.endTime().isAfter(event.startTime()))
       throw new IllegalArgumentException("지원하지 않거나 잘못된 근무 알림 이벤트입니다.");
-    boolean owner = "OWNER".equals(event.actorRole()) && event.actorMemberId().equals(event.ownerMemberId());
-    boolean worker = "WORKER".equals(event.actorRole()) && event.actorMemberId().equals(event.workerMemberId());
+    boolean owner = "OWNER".equals(event.actorRole()) && Objects.equals(event.actorMemberId(), event.ownerMemberId());
+    boolean worker = "WORKER".equals(event.actorRole()) && Objects.equals(event.actorMemberId(), event.workerMemberId());
     boolean valid = switch (event.eventType()) {
       case "WorkCheckedIn" -> worker && event.revision() == 1 && "CHECKED_IN".equals(event.status());
       case "WorkStarted" -> owner && event.revision() == 2 && "IN_PROGRESS".equals(event.status());
       case "WorkCompleted" -> (owner || worker) && event.revision() == 3 && "COMPLETED".equals(event.status());
+      case "WorkNoShow" -> "SYSTEM".equals(event.actorRole()) && event.actorMemberId() == null
+          && event.revision() == 4 && "NO_SHOW".equals(event.status());
+      case "WorkCanceled" -> (owner || worker) && event.revision() == 5 && "CANCELED".equals(event.status());
+      case "WorkCancellationRequested" -> (owner || worker) && event.revision() == 1 && "PENDING".equals(event.status());
+      case "WorkCancellationRejected" -> (owner || worker) && event.revision() == 2 && "REJECTED".equals(event.status());
+      case "WorkCancellationWithdrawn" -> (owner || worker) && event.revision() == 2 && "WITHDRAWN".equals(event.status());
+      case "WorkCancellationExpired" -> "SYSTEM".equals(event.actorRole()) && event.actorMemberId() == null
+          && event.revision() == 2 && "EXPIRED".equals(event.status());
       default -> false;
     };
     if (!valid) throw new IllegalArgumentException("근무 전이와 처리자 정보가 올바르지 않습니다.");
@@ -54,7 +70,7 @@ public class WorkNotificationEventService {
     List<Object> fields = List.of("WORK:v1", event.eventId(), event.eventType(), event.aggregateId(),
         event.revision(), event.version(), DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(event.occurredAt()),
         event.workId(), event.matchingId(), event.jobPostId(), event.ownerMemberId(), event.workerMemberId(),
-        event.actorMemberId(), event.actorRole(), event.status(), event.workDate(), event.startTime(),
+        event.actorMemberId() == null ? "" : event.actorMemberId(), event.actorRole(), event.status(), event.workDate(), event.startTime(),
         event.endTime(), event.endTimeNextDay());
     var canonical = new StringBuilder();
     for (Object field : fields) {

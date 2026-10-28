@@ -20,7 +20,8 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(name = "notification.work-events.enabled", havingValue = "true", matchIfMissing = true)
 public class WorkNotificationEventConsumer {
   private static final String GROUP = "notification-work-v1";
-  private static final Set<String> SUPPORTED_EVENTS = Set.of("WorkCheckedIn", "WorkStarted", "WorkCompleted");
+  private static final Set<String> SUPPORTED_EVENTS = Set.of("WorkCheckedIn", "WorkStarted", "WorkCompleted", "WorkNoShow",
+      "WorkCanceled", "WorkCancellationRequested", "WorkCancellationRejected", "WorkCancellationWithdrawn", "WorkCancellationExpired");
   // One logical consumer across replicas: every replica can recover its pending deliveries.
   // Concurrent delivery is safe because MySQL serializes notification updates and event receipts.
   private static final String CONSUMER = "notification-work";
@@ -114,7 +115,8 @@ public class WorkNotificationEventConsumer {
 
   private WorkNotificationEvent parse(Map<Object, Object> fields) throws JsonProcessingException {
     var event = mapper.readValue((String) fields.get("payload"), WorkNotificationEvent.class);
-    String aggregateType = "WORK";
+    String aggregateType = event.eventType() != null && event.eventType().startsWith("WorkCancellation")
+        ? "WORK_CANCELLATION" : "WORK";
     if (!aggregateType.equals(fields.get("aggregateType"))
         || !Objects.equals(fields.get("eventId"), event.eventId())
         || !Objects.equals(fields.get("eventType"), event.eventType())

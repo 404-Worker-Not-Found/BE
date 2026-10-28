@@ -1,8 +1,8 @@
 package com.workernotfound.job.external.redis;
 
+import com.workernotfound.job.domain.job.entity.enums.AdmissionConsumptionResult;
 import com.workernotfound.job.domain.job.event.ApplicationSubmittedEvent;
 import com.workernotfound.job.domain.job.exception.InvalidAdmissionEventException;
-import com.workernotfound.job.domain.job.service.AdmissionConsumptionResult;
 import com.workernotfound.job.domain.job.service.AdmissionEventOutcome;
 import com.workernotfound.job.domain.job.service.JobAdmissionEventReceiptService;
 import java.nio.charset.StandardCharsets;

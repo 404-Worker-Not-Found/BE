@@ -1,7 +1,7 @@
 package com.workernotfound.job.domain.job.entity;
 
+import com.workernotfound.job.domain.job.entity.enums.AdmissionConsumptionResult;
 import com.workernotfound.job.domain.job.event.ApplicationSubmittedEvent;
-import com.workernotfound.job.domain.job.service.AdmissionConsumptionResult;
 import com.workernotfound.job.global.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

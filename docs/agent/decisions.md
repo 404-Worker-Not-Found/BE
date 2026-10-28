@@ -1890,6 +1890,70 @@ Related files:
 - `payment-service/src/main/java/com/workernotfound/payment/domain/order/service/OrderTransactionService.java`
 - `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundLedger.java`
 
+## 2026-10-28 - Refund Rejection HTTP Status and Code Pairs
+
+Decision:
+- Refund execution recognizes only the existing 13 definitive rejection codes paired with their documented Toss cancel HTTP status (400, 403, or 404), as listed in `docs/architecture/refund-design.md`.
+- All 5xx, missing status/code, unknown codes and mismatched pairs keep the refund REQUESTED and its amount reserved. Recovery re-queries and retries with the same refund and provider idempotency key.
+- An allowed pair still requires a provider re-query proving the cancellation was not applied before FAILED releases the reserved amount. A confirmed applied cancellation takes priority over a rejection code.
+
+Reason:
+- An error code alone cannot prove rejection when the provider's HTTP status indicates an unknown outcome.
+
+Implication for agents:
+- Preserve both remote HTTP status and code until classification; do not broaden the allowlist to all 4xx or release money on a 5xx.
+
+Related files:
+- `docs/architecture/refund-design.md`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundExecutionService.java`
+
+## 2026-10-28 - Mutual Reviews After Work Completion (Tentative Policy)
+
+Decision:
+- With the project deadline close, the user asked for remaining MVP features to be completed and left this unit to run unattended. Mutual reviews were implemented first because ownership and contracts were already defined (member-service owns reviews and reacts to `WorkCompleted`), so only policy values had to be assumed.
+- Tentative policies, documented as such: owner and worker of a completed work review each other once per work; integer rating 1–5; optional comment up to 500 characters (trimmed, blank stored as null); writable until completion time + `MEMBER_REVIEW_WRITE_PERIOD` (default 14 days, exclusive); no edit or delete; any authenticated member can read received reviews, which hide the reviewer ID and show only the reviewer role; average is rounded to one decimal and null without reviews.
+- member-service consumes `WorkCompleted` v1 from `work:domain-events` with group `member-review-work-v1`, following the existing work/matching consumer ACK and pending rules. Same-work redelivery is a duplicate; a different owner/worker/job for the same work ID stays pending as a contract violation.
+- A review and the reviewee's rating aggregate commit in one transaction under the reviewer/reviewee account gates (ascending ID) and the reviewable-work row lock; the existing-review check is a locking read. Reviews survive withdrawal as transaction evidence and do not block withdrawal.
+- member-service reads current time from a `Clock` in the shared schedule zone (`WORK_ATTENDANCE_TIME_ZONE`).
+
+Reason:
+- Reviews are an MVP-included feature with no implementation, and the service ownership and event contract were already decided, so a reversible unit could be built without new architecture.
+- Policy values are explicitly undecided in the domain flow document; configurable or easily changed tentative values keep the demo flow complete without fixing business rules permanently.
+
+Implication for agents:
+- Treat the review policy values as tentative. Ask the user before changing rating range, period, visibility, or adding edit/delete.
+- Trust score calculation, `TrustScoreUpdated`, and the matching rating input are the next unit; compute trust scores from `member_review_stats` in the same transaction as the review per the domain flow.
+- Keep the existing-review lookup a locking read; a plain read misses concurrently committed reviews under REPEATABLE READ.
+
+Related files:
+- `docs/architecture/member-review-design.md`
+- `member-service/src/main/java/com/workernotfound/member/domain/review/service/ReviewCommandService.java`
+- `member-service/src/main/java/com/workernotfound/member/external/redis/WorkCompletedEventConsumer.java`
+- `member-service/src/main/resources/db/migration/V5__create_member_reviews.sql`
+
+## 2026-10-28 - Mutual Work Cancellation and Automatic No-show Foundation
+
+Decision:
+- The user chose that every cancellation after confirmation requires the other participant's consent. A request and consent are allowed only before the scheduled job start or GPS check-in, whichever occurs first. Pending cancellation must not prevent check-in; it expires when the limit is reached.
+- The user chose automatic no-show after the check-in late window, and record/notification first with monetary and trust-score penalties deferred. The first unit does not automatically re-recruit after cancellation.
+- Work cancellation requests use PENDING, APPROVED, REJECTED, WITHDRAWN and EXPIRED. One pending request per work is enforced under the work row lock and by a database unique constraint. The requester can withdraw and only the counterpart can approve/reject. Idempotency keys are scoped to work/requester and retain the original trimmed reason.
+- Work status, request result, history and Outbox commit atomically. Expiry is committed before the application layer returns a 409 for a late approval. Check-in and expiry are serialized with approval on the work row.
+- Automatic no-show initially supports the configured GPS policy only and excludes missing-location work. It uses the schedule-zone Clock, strictly exceeds the inclusive check-in deadline, and stores the decision time and original deadline. SYSTEM histories carry no fabricated member ID.
+- Existing WORK lifecycle revisions 1/2/3 stay unchanged; WorkNoShow uses 4 and agreement WorkCanceled uses 5. Cancellation request events use WORK_CANCELLATION/request ID with revision 1 or 2 through the same durable Outbox relay. Notification recipients are the counterpart for participant actions and both parties for SYSTEM expiry/no-show.
+
+Reason:
+- A unilateral last-minute cancellation would break a confirmed commitment. Consent and a deadline distinguish it from pre-confirmation application cancellation and Saga compensation.
+- Separating request aggregates avoids collisions with existing per-work lifecycle revisions and preserves consumer contracts.
+
+Implication for agents:
+- Do not reuse the unconfirmed-work Saga cancellation or release a CONSUMED recruitment seat for this flow.
+- Cancellation/no-show records are not payment release, completed PG refund, settlement completion or a trust penalty. Related matching/job/payment terminal coordination and dispute handling remain follow-up contracts; unfinished financial activity keeps blocking withdrawal.
+
+Related files:
+- `docs/architecture/work-cancellation-design.md`
+- `docs/architecture/work-scheduled-design.md`
+- `docs/architecture/notification-design.md`
+
 ## 2026-10-28 - MVP Work Termination Coordination
 
 Decision:

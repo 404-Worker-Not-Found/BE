@@ -17,7 +17,8 @@ public record WorkResponse(
     boolean endTimeNextDay,
     WorkStatus status,
     LocalDateTime confirmedAt, BigDecimal latitude, BigDecimal longitude,
-    LocalDateTime checkedInAt, LocalDateTime startedAt, LocalDateTime completedAt) {
+    LocalDateTime checkedInAt, LocalDateTime startedAt, LocalDateTime completedAt,
+    LocalDateTime noShowAt, LocalDateTime noShowDeadline, LocalDateTime canceledAt) {
   public static WorkResponse from(Work work) {
     return new WorkResponse(
         work.getId(),
@@ -31,6 +32,7 @@ public record WorkResponse(
         work.isEndTimeNextDay(),
         work.getStatus(),
         work.getConfirmedAt(), work.getLatitude(), work.getLongitude(),
-        work.getCheckedInAt(), work.getStartedAt(), work.getCompletedAt());
+        work.getCheckedInAt(), work.getStartedAt(), work.getCompletedAt(),
+        work.getNoShowAt(), work.getNoShowDeadline(), work.getCanceledAt());
   }
 }
