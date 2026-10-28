@@ -132,3 +132,14 @@ When merging a PR, check:
 - Is squash-and-merge being used?
 - Will the branch be deleted after merge?
 - Will the next unit of work start from a fresh branch?
+
+## MVP Journey Check
+
+When verifying the complete MVP flow or changing a service-to-service contract:
+
+- Is the HTTP/Redis path exercised with real service processes when unit-level evidence is insufficient?
+- Use `python3 scripts/e2e/mvp_journey.py` for the disposable local journey; Docker, Java 17 and Python 3 are required.
+- Does the run preserve existing `.env`, databases and containers, and clean only its own resources on success or failure?
+- Are verification flags, fixture-only schedule changes and external provider doubles disclosed separately from real provider/browser verification?
+- Did completion, mutual cancellation, no-show and funding anomalies preserve the expected work states and money boundaries?
+- Do not interpret the job-service business-ownership stub or disabled payout as completed real ownership/payment verification.
