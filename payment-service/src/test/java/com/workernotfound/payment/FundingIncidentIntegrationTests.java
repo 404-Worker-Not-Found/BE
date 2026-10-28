@@ -30,6 +30,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 
 @AutoConfigureMockMvc
+@org.springframework.test.context.TestPropertySource(properties={"payment.payout.enabled=true", "payment.payout.initial-delay=1h"})
 class FundingIncidentIntegrationTests extends IntegrationTestSupport {
   static final AtomicLong IDS=new AtomicLong(4_000_000);
   @Autowired OrderApplicationService orders;
@@ -42,6 +43,8 @@ class FundingIncidentIntegrationTests extends IntegrationTestSupport {
   @Autowired JdbcTemplate jdbc;
   @Autowired PlatformTransactionManager tx;
   @Autowired MockMvc mvc;
+  @Autowired com.workernotfound.payment.domain.payout.service.PayoutExecutionService payouts;
+  @MockitoBean com.workernotfound.payment.external.payout.PayoutGateway payoutGateway;
   @MockitoBean TossGateway toss;
   @MockitoBean FundingJobClient job;
   @MockitoBean FundingIncidentClient notifications;
@@ -121,4 +124,58 @@ class FundingIncidentIntegrationTests extends IntegrationTestSupport {
     mvc.perform(get(path)).andExpect(status().isUnauthorized());
     mvc.perform(get(path).header("X-Internal-Secret","payment-test-internal-secret")).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("REVIEW_REQUIRED"));
   }
+  @Test void fundingBlockDuringRecipientLookupPreventsNewPayout() throws Exception {
+    var o=funded();long settlement=reserve(target(o,LocalDateTime.of(2026,10,1,9,0)));
+    var prepared=new java.util.concurrent.CountDownLatch(1);
+    var resume=new java.util.concurrent.CountDownLatch(1);
+    when(payoutGateway.resolveRecipient(30L)).thenAnswer(call->{
+      prepared.countDown();
+      if(!resume.await(10,java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("test timeout");
+      return "test-recipient-30";
+    });
+    var pool=java.util.concurrent.Executors.newSingleThreadExecutor();
+    try {
+      var running=pool.submit(()->payouts.execute(settlement));
+      assertThat(prepared.await(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      block(o);resume.countDown();running.get(10,java.util.concurrent.TimeUnit.SECONDS);
+      assertThat(state(settlement)).isEqualTo("ON_HOLD");
+      assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment_payout_commands WHERE settlement_id=?",Long.class,settlement)).isZero();
+      assertThat(jdbc.queryForObject("SELECT settlement_reserved_amount FROM payment_deposits WHERE job_post_id=?",BigDecimal.class,o.jobPostId())).isEqualByComparingTo("600");
+      verify(payoutGateway,never()).request(any());
+    } finally {resume.countDown();pool.shutdownNow();}
+  }
+
+  @Test void blockDuringRequestedPayoutPreservesLookupAndConfirmedResult() throws Exception {
+    var o=funded();long settlement=reserve(target(o,LocalDateTime.of(2026,10,1,9,0)));
+    var sent=new java.util.concurrent.CountDownLatch(1);
+    var resume=new java.util.concurrent.CountDownLatch(1);
+    when(payoutGateway.resolveRecipient(30L)).thenReturn("test-recipient-30");
+    when(payoutGateway.request(any())).thenAnswer(call->{
+      sent.countDown();
+      if(!resume.await(10,java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("test timeout");
+      throw new IllegalStateException("test response lost");
+    });
+    var pool=java.util.concurrent.Executors.newSingleThreadExecutor();
+    try {
+      var running=pool.submit(()->payouts.execute(settlement));
+      assertThat(sent.await(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      block(o);
+      assertThat(state(settlement)).isEqualTo("PAYOUT_REQUESTED");
+      resume.countDown();running.get(10,java.util.concurrent.TimeUnit.SECONDS);
+      var saved=jdbc.queryForMap("SELECT reference,recipient,amount,currency FROM payment_payout_commands WHERE settlement_id=?",settlement);
+      when(payoutGateway.lookup((String)saved.get("reference"))).thenReturn(Optional.of(
+          new com.workernotfound.payment.external.payout.PayoutGateway.Result((String)saved.get("reference"),(String)saved.get("recipient"),
+              (BigDecimal)saved.get("amount"),(String)saved.get("currency"),"provider-"+settlement,
+              com.workernotfound.payment.external.payout.PayoutGateway.Status.SUCCEEDED,OffsetDateTime.now())));
+      jdbc.update("UPDATE payment_payout_commands SET lease_until='2000-01-01',next_attempt_at='2000-01-01' WHERE settlement_id=?",settlement);
+      payouts.execute(settlement);
+      assertThat(state(settlement)).isEqualTo("PAID");
+      assertThat(jdbc.queryForObject("SELECT settlement_paid_amount FROM payment_deposits WHERE job_post_id=?",BigDecimal.class,o.jobPostId())).isEqualByComparingTo("600");
+      assertThat(jdbc.queryForObject("SELECT funding_blocked FROM payment_deposits WHERE job_post_id=?",Boolean.class,o.jobPostId())).isTrue();
+      verify(payoutGateway,times(1)).request(any());
+      verify(payoutGateway,times(1)).lookup((String)saved.get("reference"));
+      verify(payoutGateway,times(1)).resolveRecipient(30L);
+    } finally {resume.countDown();pool.shutdownNow();}
+  }
+
 }

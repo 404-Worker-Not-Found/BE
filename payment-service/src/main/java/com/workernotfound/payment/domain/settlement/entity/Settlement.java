@@ -78,8 +78,13 @@ public class Settlement {
   }
 
   public void completePayout() {
+    completePayout(LocalDateTime.now());
+  }
+
+  public void completePayout(LocalDateTime confirmedPaidAt) {
+    if (confirmedPaidAt == null) throw new IllegalArgumentException("확인된 지급 시각이 필요합니다.");
     transition(SettlementStatus.PAID);
-    paidAt = LocalDateTime.now();
+    paidAt = confirmedPaidAt;
   }
 
   public boolean hasSameCompletion(Long matchingId, Long jobPostId, Long ownerMemberId,

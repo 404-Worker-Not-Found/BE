@@ -1961,4 +1961,59 @@ Related files:
 - 참여자 식별은 payment-service가 이미 검증한 MatchConfirmed 대상만 사용한다. 근무 시간대에서 이상 확인 시각과 확정 시각을 비교해, 사건 전 확정의 지연 도착은 포함하고 사건 이후 새 확정은 제외한다.
 - 알림은 안정적인 수신 명령 ID로 notification-service 내부 API에 전달하며, 수신 기록·알림을 한 트랜잭션으로 저장한다. 전송 실패·응답 유실은 같은 내용으로 재시도한다.
 - 점주 알림은 공고 단위이며 근로자 알림은 해당 확정 근무를 참조한다. 기존 알림 주체 제약에서 이 점주 공고 알림만 제한적으로 허용한다.
-- #132/#133 이후 V12로 배포한다. 실제 PG 대사·운영자 수동 복구·권한 감사·장기 실패 알림은 출시 보강이다.
+- #132/#133과 기존 V12·V13 이후 V14로 순차 배포한다. 실제 PG 대사·운영자 수동 복구·권한 감사·장기 실패 알림은 출시 보강이다.
+
+## 2026-10-28 - Refund Review Resume (Tentative Policy, #108 First Unit)
+
+Decision:
+- The user asked the agent to pick a high-priority unresolved issue and work on it unattended. #108 was the only open issue without a PR; its first unit is operator listing and resuming of review-flagged refunds, which `refund-design.md` already assigned to #108. Blocked-deposit recovery depends on the open #104/#105 PRs and remains later work. Policy values are tentative.
+- Operators call payment-service internal APIs with `X-Internal-Secret`, like the refund request API. No operator account or role exists yet, so the command records a caller-supplied `operatorId` and `note` as the audit trail.
+- Only `PROVIDER_MISMATCH` and `IDEMPOTENCY_WINDOW_EXPIRED` reviews resume. `UNEXPLAINED_CANCELLATION` and refunds of funding-blocked deposits are rejected because the ledger must be repaired first. The request must name the review reason the operator confirmed; a different or no-longer-current reason is rejected.
+- Resume changes no amount or status and calls no provider. It clears `review_required`/`failure_code`, keeps `attempts`, resets `first_attempted_at`, and sets `next_attempt_at` to now. The next execution re-queries first and resends with the same `refund-{refundId}` key only when not applied.
+- Resume commands follow the refund command pattern: fingerprinted key, same key replays the first decision, reuse with different content is `PAYMENT-409-002`, business rejections are persisted so a rejected key never later succeeds.
+- Lock order is deposit → resume command → refund, because inserting the command takes a shared FK lock on the refund row.
+
+Reason:
+- Review-flagged refunds keep their amount reserved and block later refunds of the same order indefinitely; configuration errors such as `UNAUTHORIZED_KEY` end up there after 14 days with no way back.
+- Re-query before resend already proves whether a cancel was applied, so resuming the same refund is safe without releasing reserved money by hand.
+
+Implication for agents:
+- Do not add operator paths that release refund reservations or mark refunds `FAILED`/`SUCCEEDED` without a confirmed provider result.
+- Do not insert rows with a foreign key to `payment_refunds` before locking the deposit in flows that also lock the refund.
+- Ask the user before changing which review reasons resume or replacing the internal-secret operator model.
+
+Related files:
+- `docs/architecture/refund-design.md`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundReviewCommandService.java`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/refund/repository/RefundReviewRepository.java`
+- `payment-service/src/main/resources/db/migration/V12__create_payment_refund_review_resumptions.sql`
+
+## 2026-10-28 - MVP Work Termination Coordination
+
+Decision:
+- Under the user's MVP-first instruction, consume terminal work facts using dedicated durable consumer groups and retain eventId receipts plus a per-work fact barrier.
+- Match a terminal work against the completed confirmation Saga and participants under application → matching → Saga locks. WorkCompleted moves matching to COMPLETED and keeps the selected application; cancellation/no-show move matching and selected application to CANCELED. Existing public application-cancellation deadlines do not change.
+- For cancellation/no-show, payment uses the recorded MatchConfirmed target, never whichever replacement lock happens to be active. Normal active LOCKED money returns in full to the same deposit's available balance without PG refund or penalty.
+- Keep funding-blocked, inactive and settlement-transferred resources for review; hold a still payable transferred settlement. Do not claw back PAID money or declare an unknown payout failed. A terminal-work barrier prevents later completion from reserving already released money.
+- Missing confirmation and transient persistence errors stay pending. Contract mismatches are recorded without mutating another work or payment. Source histories, balance mutations and receipts commit together.
+
+Reason:
+- MVP needs a complete internal lifecycle without duplicating money or leaving every finished matching CONFIRMED. Actual refunds, payouts and operator recovery require separate contracts and provider verification.
+
+Implication for agents:
+- Follow `docs/mvp-release-gaps.md` for deferred launch work. Do not treat record/notification or lock release as actual provider refund/payment completion.
+
+Related files:
+- `docs/architecture/work-termination-coordination.md`
+- `docs/mvp-release-gaps.md`
+
+## 2026-10-28 - MVP Settlement Payout Execution
+
+- 사용자의 MVP 우선 구현 지시에 따라 실제 지급 계약 전에는 지급 실행을 기본 비활성화하고, 지급 흐름은 테스트 대역으로 검증한다. 실제 PG 어댑터가 없이 실행을 켜면 시작 실패하며 운영 성공 대역은 제공하지 않는다.
+- 지급 가능 시각은 기존 공통 `WORK_ATTENDANCE_TIME_ZONE`(기본 Asia/Seoul)에서 비교하고, 임대·재조회 시각은 UTC를 사용한다.
+- 근무 완료 후 기존 대기 기간이 지난 정상 RESERVED 정산만 최초 지급을 요청한다. 정산당 하나의 참조·수취인·금액·통화를 첫 외부 호출 전에 저장한다.
+- 첫 시도 이후에는 기존 참조 조회만 수행한다. 응답 유실·프로세스 종료·조회 부재를 실패로 추정해 새로 보내지 않는다. 조회의 확정 부재 및 불일치는 REVIEW_REQUIRED와 예약액 유지로 처리한다. 운영 복구 API는 출시 보강 항목이다.
+- 확정 성공 시에만 예약액을 지급액으로 바꾸고, 실패는 PAYOUT_FAILED로 남기며 예약액은 유지한다. lease 점유 token으로 이전 실행의 결과 반영을 차단한다.
+- 본인 역할의 점주·근로자만 정산을 조회할 수 있다. 공개 API에 수취인·provider 식별자를 포함하지 않는다.
+- #132 종료 연동을 먼저 병합하며, 지급 명령·준비 재시도 V13 마이그레이션은 develop의 V12 이후 순차 배포한다. 배포된 V12는 변경하지 않고 outOfOrder를 사용하지 않는다. 수취인 등록·KYC·실제 지급 연동·수수료·세금·운영 대사는 별도 보강한다.
+- 지급 준비 실패는 RESERVED·예약액을 유지하고 UTC 재확인 시각·실패 횟수·사유를 저장한다. 기본 5분 대기와 미시도 후보 우선 조회로 뒤의 정상 지급을 막지 않으며, 기존 요청의 결과 조회는 계속한다. lease는 기본 1분으로 설정 가능하며 provider 요청·조회 전체 타임아웃보다 길어야 한다.

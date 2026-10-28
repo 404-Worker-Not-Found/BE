@@ -19,7 +19,7 @@ public abstract class IntegrationTestSupport {
     REDIS.start();
   }
 
-  // 잠금 대기 관찰(performance_schema)에만 컨테이너 관리자 연결을 쓴다. 애플리케이션 계정 권한은 그대로 둔다.
+  // 잠금 대기 관찰과 격리된 업그레이드 테스트 스키마에만 관리자 연결을 쓴다. 앱 계정 권한은 유지한다.
   protected static Connection openRootConnection() throws SQLException {
     return DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
   }
@@ -33,6 +33,7 @@ public abstract class IntegrationTestSupport {
     registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
     // 정산 이벤트 소비자 빈은 만들되 스케줄러가 테스트의 직접 호출과 경쟁하지 않도록 첫 실행을 미룬다.
     registry.add("payment.settlement-events.initial-delay", () -> "1h");
+    registry.add("payment.work-termination.initial-delay-ms", () -> "3600000");
     registry.add("payment.jwt.secret", () -> "payment-test-jwt-secret-with-at-least-32-bytes");
     registry.add("payment.funding-incidents.initial-delay", () -> "1h");
     registry.add("payment.recovery.enabled", () -> "false");

@@ -37,6 +37,7 @@ public class SettlementReservationService {
   private final SettlementTargetRepository targets;
   private final MatchingEventReceiptRepository matchingReceipts;
   private final SettlementProperties properties;
+  private final WorkTerminationRepository terminations;
 
   @Transactional
   public SettlementReservationResult reserve(WorkCompletion completion) {
@@ -44,6 +45,7 @@ public class SettlementReservationService {
     Optional<Long> activePaymentId = commands.findActivePaymentForUpdate(completion.matchingId());
     Optional<Settlement> existing = settlements.findByWorkId(completion.workId());
     if (existing.isPresent()) return replay(existing.get(), completion);
+    if (terminations.findDecision(completion.workId()).isPresent()) return SettlementReservationResult.rejected(WORK_CONFLICT);
     Optional<SettlementTarget> confirmedTarget = targets.findById(completion.matchingId());
     if (confirmedTarget.isEmpty()) return missingTarget(completion.matchingId());
     SettlementTarget target = confirmedTarget.get();
