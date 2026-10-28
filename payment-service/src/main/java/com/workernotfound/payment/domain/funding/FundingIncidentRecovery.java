@@ -19,7 +19,10 @@ public class FundingIncidentRecovery {
   public void recover() {
     for(long id:incidents.findUnattached()) {
       try { incidents.attach(id); }
-      catch(RuntimeException e) { log.warn("예치 이상 대상 연결 실패: incidentId={}, type={}",id,e.getClass().getSimpleName()); }
+      catch(RuntimeException e) {
+        incidents.deferAttachment(id);
+        log.warn("예치 이상 대상 연결 재시도: incidentId={}, type={}",id,e.getClass().getSimpleName());
+      }
     }
     for(int i=0;i<20;i++) {
       var delivery=incidents.claim();if(delivery==null) break;

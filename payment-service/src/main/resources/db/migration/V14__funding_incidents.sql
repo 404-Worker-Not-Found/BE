@@ -1,4 +1,4 @@
--- V10/V11은 #132/#133의 선행 마이그레이션이다.
+-- 기존 V12와 #133의 V13 이후 순차 적용한다.
 CREATE TABLE payment_funding_incidents (
  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
  order_id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -6,6 +6,7 @@ CREATE TABLE payment_funding_incidents (
  job_post_id BIGINT NOT NULL,
  owner_member_id BIGINT NOT NULL,
  occurred_at DATETIME(6) NOT NULL,
+ attach_retry_at DATETIME(6),
  UNIQUE KEY uk_funding_incident (order_id, funding_revision),
  KEY idx_funding_incident_job (job_post_id, id),
  CONSTRAINT fk_incident_order FOREIGN KEY (order_id) REFERENCES payment_orders(id)

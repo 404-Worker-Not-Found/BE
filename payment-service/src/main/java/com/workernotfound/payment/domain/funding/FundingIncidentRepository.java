@@ -47,10 +47,16 @@ public class FundingIncidentRepository {
   }
 
   public List<Long> findUnattached() {
-    return jdbc.queryForList("SELECT DISTINCT i.id FROM payment_funding_incidents i JOIN payment_settlement_targets t"
-        + " ON t.job_post_id=i.job_post_id AND t.confirmed_at<=i.occurred_at LEFT JOIN payment_funding_incident_deliveries r ON r.incident_id=i.id"
+    return jdbc.queryForList("SELECT i.id FROM payment_funding_incidents i WHERE"
+        + " (i.attach_retry_at IS NULL OR i.attach_retry_at<=CURRENT_TIMESTAMP(6)) AND EXISTS ("
+        + " SELECT 1 FROM payment_settlement_targets t LEFT JOIN payment_funding_incident_deliveries r ON r.incident_id=i.id"
         + " AND r.member_id=t.worker_member_id AND r.member_role='WORKER' AND r.work_id=t.work_id"
-        + " WHERE r.id IS NULL ORDER BY i.id LIMIT 20", Long.class);
+        + " WHERE t.job_post_id=i.job_post_id AND t.confirmed_at<=i.occurred_at AND r.id IS NULL)"
+        + " ORDER BY COALESCE(i.attach_retry_at,'1000-01-01 00:00:00'),i.id LIMIT 20", Long.class);
+  }
+
+  public void deferAttachment(long id) {
+    jdbc.update("UPDATE payment_funding_incidents SET attach_retry_at=DATE_ADD(CURRENT_TIMESTAMP(6),INTERVAL 30 SECOND) WHERE id=?",id);
   }
 
   @Transactional

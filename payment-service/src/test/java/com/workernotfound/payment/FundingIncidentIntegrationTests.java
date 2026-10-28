@@ -178,4 +178,28 @@ class FundingIncidentIntegrationTests extends IntegrationTestSupport {
     } finally {resume.countDown();pool.shutdownNow();}
   }
 
+  @Test void failedWorkerAttachmentBatchDoesNotStarveLaterIncident() {
+    while(!incidents.findUnattached().isEmpty()) {
+      for(long id:incidents.findUnattached()) incidents.attach(id);
+    }
+    var failed=new ArrayList<Long>();
+    for(int i=0;i<20;i++) {
+      var o=funded();targets.record(target(o,LocalDateTime.of(2026,10,1,9,0)));block(o);
+      failed.add(incident(o));
+      doThrow(new IllegalStateException("test attachment failure")).when(incidents).attach(incident(o));
+    }
+    var healthy=funded();targets.record(target(healthy,LocalDateTime.of(2026,10,1,9,0)));block(healthy);
+    recovery.recover();
+    assertThat(incidents.findUnattached()).containsExactly(incident(healthy));
+    for(long id:failed) jdbc.update("UPDATE payment_funding_incidents SET attach_retry_at='2000-01-01' WHERE id=?",id);
+    recovery.recover();
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment_funding_incident_deliveries WHERE incident_id=? AND member_role='WORKER'",
+        Long.class,incident(healthy))).isEqualTo(1);
+    long recovered=failed.get(0);
+    doCallRealMethod().when(incidents).attach(recovered);
+    jdbc.update("UPDATE payment_funding_incidents SET attach_retry_at='2000-01-01' WHERE id=?",recovered);
+    recovery.recover();
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment_funding_incident_deliveries WHERE incident_id=? AND member_role='WORKER'",Long.class,recovered)).isEqualTo(1);
+  }
+
 }
