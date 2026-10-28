@@ -9,8 +9,8 @@
 - job-service의 예약 해제는 `RESERVED`에만 허용되고 `CONSUMED`는 거절한다. 확정 취소로 자리를 반환하려면 별도 계약이 필요하다.
 - matching-service의 기존 취소 처리는 `PENDING` 제안용이다. 확정 근무 종료를 전파하는 경로는 없다.
 - payment-service에는 매칭 잠금 해제가 있지만 PG 환불과는 다르다. PG 환불은 #107의 별도 명령이며 실제 토스 취소 검증 후 호출자 연결이라는 선행 조건이 있다.
-- 근무 이벤트는 `work:domain-events`에 저장하며 notification-service는 현재 출근·시작·완료만 소비한다.
-- 근무 이벤트 revision은 현재 상태에 따라 1·2·3으로 고정된다. 취소·노쇼를 추가할 때 기존 이벤트의 revision·payload 해석을 깨뜨리지 않아야 한다.
+- 근무 이벤트는 `work:domain-events`에 저장하며 notification-service는 출근·시작·완료·동의 취소·노쇼와 취소 요청 상태 이벤트를 소비한다.
+- 기존 출근·시작·완료 이벤트 revision 1·2·3을 유지하고, 노쇼는 4, 동의 취소는 5를 쓴다. 취소 요청 상태 이벤트는 별도 `WORK_CANCELLATION` aggregate에서 revision 1·2를 사용한다.
 
 ## 사용자와 확정한 제품 정책
 
