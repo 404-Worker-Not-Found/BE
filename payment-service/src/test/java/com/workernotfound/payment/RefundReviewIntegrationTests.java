@@ -7,16 +7,20 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.workernotfound.payment.domain.payment.entity.PaymentDeposit;
+import com.workernotfound.payment.domain.payment.exception.PaymentErrorCode;
 import com.workernotfound.payment.domain.payment.repository.PaymentDepositRepository;
 import com.workernotfound.payment.domain.refund.dto.request.RefundRequest;
+import com.workernotfound.payment.domain.refund.dto.request.RefundReviewResumeRequest;
 import com.workernotfound.payment.domain.refund.dto.response.*;
 import com.workernotfound.payment.domain.refund.service.*;
 import com.workernotfound.payment.external.job.FundingJobClient;
 import com.workernotfound.payment.external.toss.*;
+import com.workernotfound.payment.global.exception.BusinessException;
 import com.workernotfound.payment.support.IntegrationTestSupport;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -103,6 +107,28 @@ class RefundReviewIntegrationTests extends IntegrationTestSupport {
 
   RefundResponse read(long refundId) { return refunds.getRefund(refundId); }
 
+  RefundReviewResumeRequest resumeRequest(String reviewReason) {
+    return new RefundReviewResumeRequest("ops.kim", reviewReason, "토스 설정 확인 후 재개");
+  }
+
+  RefundResponse resume(long refundId, String key, String reviewReason) {
+    return refunds.resumeReview(refundId, key, resumeRequest(reviewReason));
+  }
+
+  void assertRejected(PaymentErrorCode code, Runnable action) {
+    assertThatThrownBy(action::run).isInstanceOfSatisfying(BusinessException.class,
+        exception -> assertThat(exception.getErrorCode()).isEqualTo(code));
+  }
+
+  long count(String sql, Object... args) {
+    return jdbc.queryForObject(sql, Long.class, args);
+  }
+
+  BigDecimal balance(long job, String column) {
+    return jdbc.queryForObject("SELECT " + column + " FROM payment_deposits WHERE job_post_id = ?",
+        BigDecimal.class, job);
+  }
+
   @Test
   void reviewListShowsOnlyStoppedRefundsWithResumability() {
     long mismatched = providerMismatch(deposit());
@@ -138,6 +164,149 @@ class RefundReviewIntegrationTests extends IntegrationTestSupport {
     assertThat(empty.reviews()).isEmpty();
     assertThat(empty.nextAfterRefundId()).isEqualTo(expired);
     assertThat(empty.hasNext()).isFalse();
+  }
+
+  @Test
+  void resumedProviderMismatchQueriesFirstAndUnblocksLaterRefundsOfOrder() {
+    long job = deposit();
+    long refundId = providerMismatch(job);
+    long later = refund(job, "2000");
+    executions.execute(later);
+    executions.execute(refundId);
+    verify(toss, times(1)).cancel(any(), any(), any(), any());
+
+    RefundResponse resumed = resume(refundId, UUID.randomUUID().toString(), "PROVIDER_MISMATCH");
+    assertThat(resumed.status()).isEqualTo("REQUESTED");
+    assertThat(resumed.reviewRequired()).isFalse();
+    assertThat(resumed.failureCode()).isNull();
+    assertThat(balance(job, "refund_reserved_amount")).isEqualByComparingTo("5000");
+    assertThat(count("SELECT COUNT(*) FROM payment_refund_histories WHERE refund_id = ? AND"
+        + " previous_status = 'REQUESTED' AND next_status = 'REQUESTED' AND reason = 'REVIEW_RESUMED'",
+        refundId)).isEqualTo(1);
+    assertThat(count("SELECT COUNT(*) FROM payment_refund_review_resumptions WHERE refund_id = ? AND"
+        + " operator_id = 'ops.kim' AND note = '토스 설정 확인 후 재개' AND resumed_reason = 'PROVIDER_MISMATCH'"
+        + " AND rejection IS NULL", refundId)).isEqualTo(1);
+
+    // 첫 취소가 PG에 반영돼 있었다면 다시 보내지 않고 조회로 성공을 확정한다.
+    when(toss.getPayment(paymentKey(job))).thenReturn(payment(job, orderId(job), "7000", cancel("tx-m", "3000")));
+    executions.execute(refundId);
+    assertThat(read(refundId).status()).isEqualTo("SUCCEEDED");
+    assertThat(balance(job, "refunded_amount")).isEqualByComparingTo("3000");
+    verify(toss, times(1)).cancel(any(), any(), any(), any());
+
+    cancelReturns(job, payment(job, orderId(job), "5000", cancel("tx-m", "3000"), cancel("tx-l", "2000")));
+    executions.execute(later);
+    assertThat(read(later).status()).isEqualTo("SUCCEEDED");
+    assertThat(balance(job, "refunded_amount")).isEqualByComparingTo("5000");
+  }
+
+  @Test
+  void resumedExpiredWindowRestartsWindowAndResendsOnlyAfterQueryShowsNotApplied() {
+    long job = deposit();
+    long refundId = idempotencyWindowExpired(job);
+    resume(refundId, UUID.randomUUID().toString(), "IDEMPOTENCY_WINDOW_EXPIRED");
+    assertThat(jdbc.queryForObject("SELECT first_attempted_at IS NULL FROM payment_refunds WHERE id = ?",
+        Boolean.class, refundId)).isTrue();
+    assertThat(jdbc.queryForObject("SELECT attempts FROM payment_refunds WHERE id = ?", Integer.class, refundId))
+        .isEqualTo(2);
+
+    reset(toss);
+    when(toss.getPayment(paymentKey(job))).thenReturn(payment(job, orderId(job), "10000"));
+    cancelReturns(job, payment(job, orderId(job), "7000", cancel("tx-r", "3000")));
+    executions.execute(refundId);
+
+    var order = inOrder(toss);
+    order.verify(toss).getPayment(paymentKey(job));
+    order.verify(toss).cancel(eq(paymentKey(job)), any(), eq(REASON), eq("refund-" + refundId));
+    assertThat(read(refundId).status()).isEqualTo("SUCCEEDED");
+    assertThat(jdbc.queryForObject("SELECT first_attempted_at IS NOT NULL FROM payment_refunds WHERE id = ?",
+        Boolean.class, refundId)).isTrue();
+  }
+
+  @Test
+  void sameKeyReplaysFirstDecisionAndRejectedKeyNeverSucceeds() {
+    long job = deposit();
+    long refundId = providerMismatch(job);
+    String key = UUID.randomUUID().toString();
+    resume(refundId, key, "PROVIDER_MISMATCH");
+    assertThat(resume(refundId, key, "PROVIDER_MISMATCH").reviewRequired()).isFalse();
+    assertThat(count("SELECT COUNT(*) FROM payment_refund_histories WHERE refund_id = ? AND reason ="
+        + " 'REVIEW_RESUMED'", refundId)).isEqualTo(1);
+    assertRejected(PaymentErrorCode.COMMAND_CONFLICT, () -> refunds.resumeReview(refundId, key,
+        new RefundReviewResumeRequest("ops.kim", "PROVIDER_MISMATCH", "다른 메모")));
+    long other = providerMismatch(deposit());
+    assertRejected(PaymentErrorCode.COMMAND_CONFLICT, () -> resume(other, key, "PROVIDER_MISMATCH"));
+
+    // 이미 재개한 환불에 새 키를 쓰면 거절되고, 같은 환불이 다시 검토로 멈춰도 그 키는 성공하지 않는다.
+    String late = UUID.randomUUID().toString();
+    assertRejected(PaymentErrorCode.REFUND_REVIEW_MISMATCH, () -> resume(refundId, late, "PROVIDER_MISMATCH"));
+    when(toss.getPayment(paymentKey(job))).thenReturn(payment(job, "other-order", "7000"));
+    executions.execute(refundId);
+    assertThat(read(refundId).reviewRequired()).isTrue();
+    assertRejected(PaymentErrorCode.REFUND_REVIEW_MISMATCH, () -> resume(refundId, late, "PROVIDER_MISMATCH"));
+    assertThat(resume(refundId, UUID.randomUUID().toString(), "PROVIDER_MISMATCH").reviewRequired()).isFalse();
+  }
+
+  @Test
+  void unresumableReviewsAreRejectedWithoutChangingRefund() {
+    long unexplained = unexplainedCancellation(deposit());
+    assertRejected(PaymentErrorCode.REFUND_REVIEW_NOT_RESUMABLE,
+        () -> resume(unexplained, UUID.randomUUID().toString(), "UNEXPLAINED_CANCELLATION"));
+    assertThat(read(unexplained).reviewRequired()).isTrue();
+    assertThat(read(unexplained).failureCode()).isEqualTo("UNEXPLAINED_CANCELLATION");
+
+    long blockedJob = deposit();
+    long blocked = providerMismatch(blockedJob);
+    jdbc.update("UPDATE payment_deposits SET funding_blocked = TRUE WHERE job_post_id = ?", blockedJob);
+    assertRejected(PaymentErrorCode.FUNDING_BLOCKED,
+        () -> resume(blocked, UUID.randomUUID().toString(), "PROVIDER_MISMATCH"));
+    assertRejected(PaymentErrorCode.REFUND_REVIEW_MISMATCH,
+        () -> resume(blocked, UUID.randomUUID().toString(), "IDEMPOTENCY_WINDOW_EXPIRED"));
+    assertThat(read(blocked).reviewRequired()).isTrue();
+    assertThat(count("SELECT COUNT(*) FROM payment_refund_review_resumptions WHERE refund_id IN (?, ?) AND"
+        + " rejection IS NOT NULL AND resumed_reason IS NULL", unexplained, blocked)).isEqualTo(3);
+
+    long pendingJob = deposit();
+    long pending = refund(pendingJob, "1000");
+    assertRejected(PaymentErrorCode.REFUND_REVIEW_MISMATCH,
+        () -> resume(pending, UUID.randomUUID().toString(), "PROVIDER_MISMATCH"));
+    assertThat(jdbc.queryForObject("SELECT next_attempt_at IS NULL FROM payment_refunds WHERE id = ?",
+        Boolean.class, pending)).isTrue();
+
+    String missingKey = UUID.randomUUID().toString();
+    assertRejected(PaymentErrorCode.REFUND_NOT_FOUND,
+        () -> resume(Long.MAX_VALUE, missingKey, "PROVIDER_MISMATCH"));
+    assertThat(count("SELECT COUNT(*) FROM payment_refund_review_resumptions WHERE command_key = ?", missingKey))
+        .isZero();
+  }
+
+  @Test
+  void simultaneousResumesWithDifferentKeysResumeOnce() throws Exception {
+    long refundId = providerMismatch(deposit());
+    var executor = Executors.newFixedThreadPool(2);
+    var start = new CountDownLatch(1);
+    try {
+      List<Future<String>> results = new ArrayList<>();
+      for (int index = 0; index < 2; index++) {
+        results.add(executor.submit(() -> {
+          start.await();
+          try {
+            resume(refundId, UUID.randomUUID().toString(), "PROVIDER_MISMATCH");
+            return "RESUMED";
+          } catch (BusinessException exception) {
+            return ((PaymentErrorCode) exception.getErrorCode()).name();
+          }
+        }));
+      }
+      start.countDown();
+      List<String> outcomes = new ArrayList<>();
+      for (Future<String> result : results) outcomes.add(result.get(10, TimeUnit.SECONDS));
+      assertThat(outcomes).containsExactlyInAnyOrder("RESUMED", "REFUND_REVIEW_MISMATCH");
+    } finally {
+      executor.shutdown();
+    }
+    assertThat(count("SELECT COUNT(*) FROM payment_refund_histories WHERE refund_id = ? AND reason ="
+        + " 'REVIEW_RESUMED'", refundId)).isEqualTo(1);
   }
 
   @Test

@@ -16,7 +16,9 @@ public enum PaymentErrorCode implements ErrorCode {
   ACTIVE_LOCK_EXISTS("PAYMENT-409-003", "매칭에 활성 결제 잠금이 이미 존재합니다.", HttpStatus.CONFLICT),
   INSUFFICIENT_DEPOSIT("PAYMENT-409-004", "예치 잔액이 부족합니다.", HttpStatus.CONFLICT),
   DEPOSIT_MISMATCH("PAYMENT-409-005", "예치 소유자 또는 통화가 일치하지 않습니다.", HttpStatus.CONFLICT),
-  LOCK_TRANSFERRED_TO_SETTLEMENT("PAYMENT-409-007", "정산으로 이관된 결제 잠금은 해제할 수 없습니다.", HttpStatus.CONFLICT);
+  LOCK_TRANSFERRED_TO_SETTLEMENT("PAYMENT-409-007", "정산으로 이관된 결제 잠금은 해제할 수 없습니다.", HttpStatus.CONFLICT),
+  REFUND_REVIEW_MISMATCH("PAYMENT-409-008", "검토 중인 환불이 아니거나 검토 사유가 다릅니다.", HttpStatus.CONFLICT),
+  REFUND_REVIEW_NOT_RESUMABLE("PAYMENT-409-009", "자동 실행을 재개할 수 없는 검토 사유입니다.", HttpStatus.CONFLICT);
   private final String code;
   private final String message;
   private final HttpStatus httpStatus;

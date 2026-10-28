@@ -2,6 +2,7 @@ package com.workernotfound.payment.domain.refund.service;
 
 import com.workernotfound.payment.domain.payment.exception.PaymentErrorCode;
 import com.workernotfound.payment.domain.refund.dto.request.RefundRequest;
+import com.workernotfound.payment.domain.refund.dto.request.RefundReviewResumeRequest;
 import com.workernotfound.payment.domain.refund.dto.response.*;
 import com.workernotfound.payment.domain.refund.repository.PaymentRefundRepository;
 import com.workernotfound.payment.domain.refund.repository.RefundReviewRepository;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class RefundApplicationService {
   private final RefundCommandService commands;
+  private final RefundReviewCommandService reviewCommands;
   private final PaymentRefundRepository refunds;
   private final RefundReviewRepository reviews;
 
@@ -22,6 +24,14 @@ public class RefundApplicationService {
     var outcome = commands.request(key, request);
     if (outcome.rejection() != null) throw new BusinessException(outcome.rejection());
     return getRefund(outcome.refundId());
+  }
+
+  // 같은 키의 재요청은 처음 판단을 돌려준다. 재개한 환불은 다음 실행 주기에 결제를 먼저 조회한다.
+  public RefundResponse resumeReview(Long refundId, String key, RefundReviewResumeRequest request) {
+    reviewCommands.resume(refundId, key, request).ifPresent(rejection -> {
+      throw new BusinessException(rejection);
+    });
+    return getRefund(refundId);
   }
 
   @Transactional(readOnly = true)
