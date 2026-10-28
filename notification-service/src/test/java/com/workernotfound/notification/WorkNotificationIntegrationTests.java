@@ -75,6 +75,54 @@ class WorkNotificationIntegrationTests extends IntegrationTestSupport {
   }
 
   @Test
+  void cancellationEventsPreserveParticipantRoutingAndRequestAggregate() throws Exception {
+    for (String type : List.of("WorkCancellationRequested", "WorkCancellationRejected", "WorkCancellationWithdrawn", "WorkCancellationExpired", "WorkCanceled")) {
+      var base = event("WorkCheckedIn", "WORKER");
+      boolean system = type.equals("WorkCancellationExpired");
+      String state = switch (type) {
+        case "WorkCancellationRequested" -> "PENDING";
+        case "WorkCancellationRejected" -> "REJECTED";
+        case "WorkCancellationWithdrawn" -> "WITHDRAWN";
+        case "WorkCancellationExpired" -> "EXPIRED";
+        default -> "CANCELED";
+      };
+      boolean requestAggregate = type.startsWith("WorkCancellation");
+      var event = new WorkNotificationEvent(base.eventId(), type, requestAggregate ? base.workId() + 5 : base.workId(),
+          type.equals("WorkCancellationRequested") ? 1L : requestAggregate ? 2L : 5L, 1, base.occurredAt(),
+          base.workId(), base.matchingId(), base.jobPostId(), base.ownerMemberId(), base.workerMemberId(),
+          system ? null : base.workerMemberId(), system ? "SYSTEM" : "WORKER", state,
+          base.workDate(), base.startTime(), base.endTime(), base.endTimeNextDay());
+      var envelope = new HashMap<>(fields(event));
+      if (requestAggregate) envelope.put("aggregateType", "WORK_CANCELLATION");
+      redis.opsForStream().add(StreamRecords.newRecord().in(STREAM).ofMap(envelope));
+      consumer.poll(); events.receive(event);
+      assertThat(notifications.getNotifications(member(base.ownerMemberId(), "OWNER"), null, 20).content())
+          .hasSize(1).allSatisfy(notice -> assertThat(notice.type()).isEqualTo(type));
+      assertThat(notifications.getNotifications(member(base.workerMemberId(), "WORKER"), null, 20).content())
+          .hasSize(system ? 1 : 0);
+    }
+  }
+
+  @Test
+  void systemNoShowNotifiesBothParticipantsOnceThroughStream() throws Exception {
+    var base = event("WorkCheckedIn", "WORKER");
+    var noShow = new WorkNotificationEvent(base.eventId(), "WorkNoShow", base.workId(), 4L, 1,
+        base.occurredAt(), base.workId(), base.matchingId(), base.jobPostId(), base.ownerMemberId(),
+        base.workerMemberId(), null, "SYSTEM", "NO_SHOW", base.workDate(), base.startTime(), base.endTime(), base.endTimeNextDay());
+    redis.opsForStream().add(StreamRecords.newRecord().in(STREAM).ofMap(fields(noShow)));
+    consumer.poll();
+    events.receive(noShow);
+    assertThat(notifications.getNotifications(member(base.ownerMemberId(), "OWNER"), null, 20).content())
+        .hasSize(1).allSatisfy(notice -> assertThat(notice.type()).isEqualTo("WorkNoShow"));
+    assertThat(notifications.getNotifications(member(base.workerMemberId(), "WORKER"), null, 20).content())
+        .hasSize(1).allSatisfy(notice -> assertThat(notice.type()).isEqualTo("WorkNoShow"));
+    var malformed = new WorkNotificationEvent(UUID.randomUUID().toString(), "WorkNoShow", base.workId(), 4L, 1,
+        base.occurredAt(), base.workId(), base.matchingId(), base.jobPostId(), base.ownerMemberId(),
+        base.workerMemberId(), base.workerMemberId(), "SYSTEM", "NO_SHOW", base.workDate(), base.startTime(), base.endTime(), base.endTimeNextDay());
+    assertThatThrownBy(() -> events.receive(malformed)).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void eachTransitionNotifiesOnlyTheOtherParticipantAndExposesWorkLink() throws Exception {
     for (var event : List.of(event("WorkCheckedIn", "WORKER"), event("WorkStarted", "OWNER"),
         event("WorkCompleted", "OWNER"), event("WorkCompleted", "WORKER"))) {

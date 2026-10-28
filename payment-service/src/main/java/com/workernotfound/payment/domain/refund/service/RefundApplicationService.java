@@ -21,7 +21,8 @@ public class RefundApplicationService {
 
   // 같은 명령의 재요청은 처음 만든 환불의 현재 상태를 돌려준다.
   public RefundResponse request(String key, RefundRequest request) {
-    var outcome = commands.request(key, request);
+    var outcome = commands.request(key, new RefundCommand(request.jobPostId(), request.ownerMemberId(),
+        request.amount(), request.currency(), request.reason()));
     if (outcome.rejection() != null) throw new BusinessException(outcome.rejection());
     return getRefund(outcome.refundId());
   }

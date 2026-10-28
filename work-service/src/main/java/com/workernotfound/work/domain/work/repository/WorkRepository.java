@@ -9,6 +9,14 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface WorkRepository extends JpaRepository<Work, Long> {
+  @Query("select w.id from Work w where w.status = com.workernotfound.work.domain.work.entity.enums.WorkStatus.SCHEDULED"
+      + " and w.confirmedAt is not null and w.checkedInAt is null"
+      + " and w.latitude is not null and w.longitude is not null"
+      + " and (w.workDate < :date or (w.workDate = :date and w.startTime <= :time))"
+      + " order by w.workDate, w.startTime, w.id")
+  java.util.List<Long> findNoShowCandidates(@Param("date") java.time.LocalDate date,
+      @Param("time") java.time.LocalTime time, org.springframework.data.domain.Pageable pageable);
+
   @Query(
       "select w from Work w where w.confirmedAt is not null and "
           + "((:role = 'OWNER' and w.ownerMemberId = :memberId) or "

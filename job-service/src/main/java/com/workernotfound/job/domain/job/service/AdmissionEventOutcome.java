@@ -1,5 +1,7 @@
 package com.workernotfound.job.domain.job.service;
 
+import com.workernotfound.job.domain.job.entity.enums.AdmissionConsumptionResult;
+
 /**
  * 커밋된 {@code ApplicationSubmitted} 처리 결과다. 소비자는 이 값을 받은 뒤에만 ACK한다.
  *

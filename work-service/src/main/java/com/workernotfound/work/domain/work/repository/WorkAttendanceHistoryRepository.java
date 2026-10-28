@@ -10,6 +10,11 @@ import org.springframework.stereotype.Repository;
 public class WorkAttendanceHistoryRepository {
   private final JdbcTemplate jdbc;
 
+  public void recordNoShow(Long workId, LocalDateTime at) {
+    jdbc.update("INSERT INTO work_status_histories (work_id, previous_status, next_status, system_actor, occurred_at) "
+        + "VALUES (?, 'SCHEDULED', 'NO_SHOW', TRUE, ?)", workId, at);
+  }
+
   public void record(Long workId, String previous, String next, Long actorMemberId, LocalDateTime at) {
     jdbc.update("INSERT INTO work_status_histories (work_id, previous_status, next_status, actor_member_id, occurred_at) "
         + "VALUES (?, ?, ?, ?, ?)", workId, previous, next, actorMemberId, at);

@@ -13,12 +13,16 @@ public record WorkLifecycleEvent(String eventId, String eventType, Long aggregat
       case CHECKED_IN -> 1;
       case IN_PROGRESS -> 2;
       case COMPLETED -> 3;
+      case NO_SHOW -> 4;
+      case CANCELED -> 5;
       default -> throw new IllegalStateException("발행할 수 없는 근무 상태입니다.");
     };
     String type = switch (work.getStatus()) {
       case CHECKED_IN -> "WorkCheckedIn";
       case IN_PROGRESS -> "WorkStarted";
       case COMPLETED -> "WorkCompleted";
+      case NO_SHOW -> "WorkNoShow";
+      case CANCELED -> "WorkCanceled";
       default -> throw new IllegalStateException("발행할 수 없는 근무 상태입니다.");
     };
     return new WorkLifecycleEvent(UUID.randomUUID().toString(), type, work.getId(), revision, 1, at,
