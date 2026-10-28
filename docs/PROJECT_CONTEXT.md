@@ -386,3 +386,5 @@ Likely next steps:
 These questions are not yet settled in code:
 
 - What deployment target and environment strategy will be used?
+
+- #108 MVP: verified funding anomalies now persist an immutable order/funding-revision incident with payout holds and durable recipient commands in the same order → deposit transaction. Existing work/check-in and balances stay unchanged. Unrequested RESERVED/PAYOUT_FAILED settlements become ON_HOLD; existing PAYOUT_REQUESTED results still require reconciliation. Incident alerts use a secret-protected idempotent internal notification endpoint; later-arriving pre-incident confirmations add missing workers. No automatic cancellation, money restoration or hold resumption is provided. See `docs/architecture/funding-incident-mvp.md`.

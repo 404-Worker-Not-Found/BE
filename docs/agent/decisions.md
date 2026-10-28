@@ -1953,3 +1953,12 @@ Related files:
 - `docs/architecture/work-cancellation-design.md`
 - `docs/architecture/work-scheduled-design.md`
 - `docs/architecture/notification-design.md`
+
+## 2026-10-28 - Funding Incident MVP Policy
+
+- 사용자는 #108에서 확정 근무·출근 유지, 새 지급 보류, 이상 기록과 참여자 알림을 선택했다. 자동 취소·자금 복구·정산 재개는 하지 않는다.
+- 실제 주문 차단과 같은 트랜잭션에서 주문/funding revision별 이상 기록, 지급 이전 정산 보류·이력, 점주 알림 명령을 저장한다. 금액 항목과 이미 요청/완료된 지급은 변경하지 않는다.
+- 참여자 식별은 payment-service가 이미 검증한 MatchConfirmed 대상만 사용한다. 근무 시간대에서 이상 확인 시각과 확정 시각을 비교해, 사건 전 확정의 지연 도착은 포함하고 사건 이후 새 확정은 제외한다.
+- 알림은 안정적인 수신 명령 ID로 notification-service 내부 API에 전달하며, 수신 기록·알림을 한 트랜잭션으로 저장한다. 전송 실패·응답 유실은 같은 내용으로 재시도한다.
+- 점주 알림은 공고 단위이며 근로자 알림은 해당 확정 근무를 참조한다. 기존 알림 주체 제약에서 이 점주 공고 알림만 제한적으로 허용한다.
+- #132/#133 이후 V12로 배포한다. 실제 PG 대사·운영자 수동 복구·권한 감사·장기 실패 알림은 출시 보강이다.

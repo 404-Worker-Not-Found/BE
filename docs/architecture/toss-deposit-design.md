@@ -56,7 +56,7 @@ POST /api/jobs/internal/{jobPostId}/funding-status
 - 공고에 아직 주문이 연결되지 않았지만 최신 주문 생성 명령의 스냅샷과 같으면 연결 대기로 보고 409 `JOB-409-013`을 기록 없이 응답한다. payment-service의 같은 명령 재전송이 job-service의 주문 연결 뒤 정상 처리된다. 연결 대기 알림만으로 주문을 연결하지 않는다. 그 밖의 주문·스냅샷 불일치는 409 `JOB-409-011`이다.
 - funded=true이고 아직 PAYMENT_PENDING이며 지원 마감·근무 시작 전인 공고만 OPEN으로 바꾸고 상태 이력(`SYSTEM:FUNDING_CONFIRMED`)을 남긴다. 공개 상태 변경과 수신·revision 기록을 같은 공고 DB 트랜잭션에서 처리한다. 이미 OPEN·MATCHING이면 이력 없이 200 `FUNDING_CONFIRMED`다.
 - 이미 마감된 공고(CLOSED)나 지원 마감·근무 시작이 지난 결제 대기 공고에는 예치가 늦게 완료돼도 공개하지 않는다. 결제 수신 사실과 사유(`skipReason`)를 보존하고 환불 검토 대상(`refund_review_required`)으로 남긴다. 적용할 수 없는 업무 상태도 수신·기록했다면 200 success(`PUBLICATION_SKIPPED`)로 응답해 불필요한 재전송을 종료한다. 실제 환불은 실행하지 않는다.
-- funded=false는 토스에서 확인한 취소·부분취소 또는 결제 검토 필요 상태다. 공고 상태는 바꾸지 않고 `funding_blocked`로 신규 지원 승인·신규 자리 예약·차단 뒤의 최초 자리 확정을 막는다(200 `FUNDING_BLOCKED`). 이미 확정된 자리와 진행 중인 근무·매칭은 별도 복구 정책으로 처리한다. 더 높은 funded=true revision은 차단을 해제하지만 마감 공고를 재개하지 않는다.
+- funded=false는 토스에서 확인한 취소·부분취소 또는 결제 검토 필요 상태다. 공고 상태는 바꾸지 않고 `funding_blocked`로 신규 지원 승인·신규 자리 예약·차단 뒤의 최초 자리 확정을 막는다(200 `FUNDING_BLOCKED`). 확정 후 예치 이상은 [#108 MVP 정책](funding-incident-mvp.md)에 따라 근무·출근을 유지하고 새 지급을 보류하며 기록·참여자 알림을 남긴다. 자동 취소·자금 복구·정산 재개는 하지 않는다. 더 높은 funded=true revision은 차단을 해제하지만 마감 공고를 재개하지 않는다.
 - 성공 응답은 ApiResponse success=true다. 타임아웃·5xx·실패 envelope와 모든 4xx는 같은 명령으로 재시도한다(현재 payment-service 구현). 인증 실패, 잘못된 요청, 주문·스냅샷 불일치, 멱등 키 충돌은 200으로 묶지 않으며 재전송으로 해소되지 않으면 운영 확인 대상이다.
 
 예치 완료와 공고 공개는 서로 다른 서비스의 상태다. 프론트엔드는 DEPOSITED만 보고 ‘공고 공개 완료’로 표시하면 안 되며 공고 상태를 조회해야 한다. 새 revision이 전송 중 생겨도 이전 revision의 응답이 최신 알림을 완료 처리하지 못하도록 token/revision 조건으로 보호한다.

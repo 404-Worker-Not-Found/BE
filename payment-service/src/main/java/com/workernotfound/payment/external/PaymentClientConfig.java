@@ -26,6 +26,10 @@ public class PaymentClientConfig {
   @Bean
   public RestClient fundingJobRestClient(
       @Value("${payment.job-service.base-url}") String url, InternalApiProperties properties) {
+    return internalClient(url, properties);
+  }
+
+  private RestClient internalClient(String url, InternalApiProperties properties) {
     URI uri = URI.create(url);
     boolean local =
         "http".equals(uri.getScheme())
@@ -33,6 +37,11 @@ public class PaymentClientConfig {
     if (!"https".equals(uri.getScheme()) && !local)
       throw new IllegalArgumentException("공고 서비스 URL은 HTTPS 또는 loopback HTTP여야 합니다.");
     return builder(url).defaultHeader("X-Internal-Secret", properties.secret()).build();
+  }
+
+  @Bean
+  public RestClient fundingIncidentRestClient(@Value("${payment.notification-service.base-url:http://localhost:8088}") String url, InternalApiProperties properties) {
+    return internalClient(url, properties);
   }
 
   private RestClient.Builder builder(String url) {

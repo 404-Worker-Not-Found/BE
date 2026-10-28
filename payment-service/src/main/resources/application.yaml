@@ -38,6 +38,10 @@ payment:
     poll-interval: ${PAYMENT_SETTLEMENT_EVENTS_POLL_INTERVAL:1s}
     initial-delay: ${PAYMENT_SETTLEMENT_EVENTS_INITIAL_DELAY:0s}
     batch-size: ${PAYMENT_SETTLEMENT_EVENTS_BATCH_SIZE:100}
+  funding-incidents:
+    enabled: ${PAYMENT_FUNDING_INCIDENTS_ENABLED:true}
+  notification-service:
+    base-url: ${NOTIFICATION_SERVICE_BASE_URL:http://localhost:8088}
   recovery:
     enabled: true
     interval: 30s
