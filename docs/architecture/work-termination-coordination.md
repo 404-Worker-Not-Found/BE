@@ -25,3 +25,7 @@ PR #131의 WorkCompleted(3), WorkNoShow(4), WorkCanceled(5) v1을 소비한다. 
 | 확정 대상 미도착·DB 장애·스키마 해석 불가 | pending, 재시도 |
 
 완료된 근무의 선정 지원은 SELECTED 사실을 유지하고 매칭만 COMPLETED로 끝낸다. 취소·노쇼는 선정 지원을 CANCELED로 바꾸며 원인을 이력에 남긴다. 기존 APPLIED 지원 취소 API의 마감·권한 규칙을 우회하는 공개 API는 추가하지 않는다.
+
+## 소비자 설정
+
+결제 종료 소비자는 `PAYMENT_SETTLEMENT_EVENTS_ENABLED`와 `PAYMENT_WORK_TERMINATION_ENABLED`가 모두 켜졌을 때 활성화한다(기본 둘 다 true). 어느 하나를 끄면 생성하지 않는다. 정산 이벤트를 끈 상태에서만 등록되는 설정 빈을 참조해 애플리케이션 시작이 실패하지 않도록 같은 의존 조건을 적용한다.

@@ -11,7 +11,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 @Slf4j
-@ConditionalOnProperty(name = "payment.work-termination.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = {"payment.work-termination.enabled", "payment.settlement-events.enabled"},
+    havingValue = "true", matchIfMissing = true)
 public class WorkTerminationEventConsumer extends SettlementStreamConsumer {
   static final String GROUP = "payment-work-termination-v1";
   private final WorkTerminationEventParser parser;

@@ -128,6 +128,8 @@ Current `matching-service` scaffold:
 
 Current matching application implementation:
 
+- Work terminal-event consumers (#104/#105 MVP) reconcile confirmed work IDs and participants against the completed Saga. WorkCompleted closes a matching as COMPLETED; WorkCanceled/WorkNoShow close the matching and selected application as CANCELED with histories and deduplication. No recruitment reopening or trust penalties are applied.
+
 - JWT-authenticated `WORKER` members can create, read, list, and cancel their own applications.
 - Application creation validates an `ACTIVE` `WORKER` through the existing member-service internal API.
 - The matching-service client for the job-service application-admission contract is implemented, and the job-service endpoint is available. matching-service maps both the documented symbolic codes and job-service domain codes (`JOB-409-001`~`003`) to application errors.
@@ -292,7 +294,6 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - Local HTTP/MySQL ports are 8083/3309. `./scripts/local-run.sh job` runs the service; repository verification includes its MySQL integration tests.
 - See `docs/architecture/job-post-design.md`.
 
-- Work terminal-event consumers (#104/#105 MVP) reconcile confirmed work IDs and participants against the completed Saga. WorkCompleted closes a matching as COMPLETED; WorkCanceled/WorkNoShow close the matching and selected application as CANCELED with histories and deduplication. No recruitment reopening or trust penalties are applied.
 
 ## Work Service Context
 
