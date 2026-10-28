@@ -69,3 +69,9 @@ notification-service는 회원별 인앱 알림과 읽음 상태를 전용 MySQL
 ### 이벤트 종류 확장 시 배포 순서
 
 새 취소·노쇼 이벤트를 발행하는 work-service보다 notification-service를 먼저 배포한다. 기존 `notification-work-v1` 소비자는 지원하지 않는 이벤트를 ACK하므로, 생산자를 먼저 배포하면 새 이벤트의 알림이 누락되고 같은 그룹에서 자동 재수신되지 않는다. 기존 소비자 인스턴스가 모두 교체된 뒤 생산자를 배포한다.
+
+## 예치 이상 알림 (#108 MVP)
+
+`POST /api/notifications/internal/funding-incidents`는 내부 공유 시크릿과 `Idempotency-Key`로 보호한다. payment-service가 불변 사건과 수신 명령을 먼저 저장하고, HTTP 응답 유실 시 같은 키·본문을 재전송한다. 같은 키의 다른 내용은 거절하며, 정상 중복은 읽음 상태나 알림 수를 바꾸지 않는다.
+
+`FUNDING_REVIEW_REQUIRED` 알림은 점주에게 공고 단위(`jobPostId`), 근로자에게 확정 근무 단위(`jobPostId`, `matchingId`, `workId`)로 전달한다. 자동 취소/환불/복구를 뜻하지 않는다. 화면에서는 “공고의 예치금 확인이 필요합니다. 새 지급은 확인 전까지 보류됩니다.”와 같이 안내할 수 있다. PG 응답 전문·계좌·개인 사유는 전달하지 않는다. 새 수신 API를 지급 서비스의 알림 작업자보다 먼저 배포한다.

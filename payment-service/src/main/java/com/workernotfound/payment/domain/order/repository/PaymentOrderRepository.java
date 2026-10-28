@@ -14,6 +14,7 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 public class PaymentOrderRepository {
   private final JdbcTemplate jdbc;
+  private final com.workernotfound.payment.domain.funding.FundingIncidentRepository incidents;
 
   public record Order(
       String id,
@@ -179,12 +180,14 @@ public class PaymentOrderRepository {
     notifyFunding(order.id(), true);
   }
 
+  @org.springframework.transaction.annotation.Transactional
   public void block(Order order) {
     jdbc.update(
         "UPDATE payment_deposits SET funding_blocked=TRUE,version=version+1 WHERE job_post_id=?",
         order.jobId());
     transition(order.id(), "REVIEW_REQUIRED");
     notifyFunding(order.id(), false);
+    incidents.record(order.id());
   }
 
   private void notifyFunding(String id, boolean funded) {

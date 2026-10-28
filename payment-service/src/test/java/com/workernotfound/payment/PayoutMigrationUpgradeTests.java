@@ -16,7 +16,7 @@ class PayoutMigrationUpgradeTests extends IntegrationTestSupport {
 
   @Test void appliesPayoutSchemaAfterAlreadyAppliedDevelopV12WithoutOutOfOrder() throws Exception {
     for (var resource : new PathMatchingResourcePatternResolver().getResources("classpath:db/migration/*.sql")) {
-      if (resource.getFilename().endsWith("__settlement_payout_commands.sql")) continue;
+      if (Integer.parseInt(resource.getFilename().split("__")[0].substring(1)) > 12) continue;
       try (var input = resource.getInputStream()) {
         Files.copy(input, baseline.resolve(resource.getFilename()));
       }
@@ -31,8 +31,8 @@ class PayoutMigrationUpgradeTests extends IntegrationTestSupport {
         assertThat(old.info().current().getVersion().getVersion()).isEqualTo("12");
         var current = Flyway.configure().dataSource(dataSource).schemas(schema).defaultSchema(schema)
             .locations("classpath:db/migration").load();
-        assertThat(current.migrate().migrationsExecuted).isEqualTo(1);
-        assertThat(current.info().current().getVersion().getVersion()).isEqualTo("13");
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(2);
+        assertThat(current.info().current().getVersion().getVersion()).isEqualTo("14");
         try (var statement = root.createStatement(); var result = statement.executeQuery(
             "SELECT COUNT(*) FROM `" + schema + "`.payment_payout_commands")) {
           assertThat(result.next()).isTrue();
