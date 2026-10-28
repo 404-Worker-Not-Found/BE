@@ -9,6 +9,12 @@ spring:
   jpa:
     hibernate:
       ddl-auto: ${MEMBER_JPA_DDL_AUTO:none}
+  data:
+    redis:
+      # 근무 이벤트 Stream은 발행 서비스와 같은 matching Redis를 쓴다.
+      host: ${MATCHING_REDIS_HOST:localhost}
+      port: ${MATCHING_REDIS_PORT:6381}
+      timeout: 2s
 
 server:
   port: ${MEMBER_SERVICE_PORT:8082}
@@ -23,3 +29,16 @@ member:
     secret: ${AUTH_JWT_SECRET}
   internal:
     secret: ${INTERNAL_API_SECRET}
+  schedule:
+    # 근무 완료 시각을 해석하는 근무 일정 시간대. work-service와 같은 설정을 쓴다.
+    time-zone: ${WORK_ATTENDANCE_TIME_ZONE:Asia/Seoul}
+  review:
+    # 근무 완료 후 리뷰를 쓸 수 있는 기간(임시 정책).
+    write-period: ${MEMBER_REVIEW_WRITE_PERIOD:14d}
+  review-events:
+    # WorkCompleted로 리뷰할 수 있는 근무를 기록한다.
+    enabled: ${MEMBER_REVIEW_EVENTS_ENABLED:true}
+    work-stream: ${WORK_OUTBOX_STREAM_KEY:work:domain-events}
+    poll-interval: ${MEMBER_REVIEW_EVENTS_POLL_INTERVAL:1s}
+    initial-delay: ${MEMBER_REVIEW_EVENTS_INITIAL_DELAY:0s}
+    batch-size: ${MEMBER_REVIEW_EVENTS_BATCH_SIZE:100}
