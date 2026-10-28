@@ -1954,6 +1954,31 @@ Related files:
 - `docs/architecture/work-scheduled-design.md`
 - `docs/architecture/notification-design.md`
 
+## 2026-10-28 - Refund Review Resume (Tentative Policy, #108 First Unit)
+
+Decision:
+- The user asked the agent to pick a high-priority unresolved issue and work on it unattended. #108 was the only open issue without a PR; its first unit is operator listing and resuming of review-flagged refunds, which `refund-design.md` already assigned to #108. Blocked-deposit recovery depends on the open #104/#105 PRs and remains later work. Policy values are tentative.
+- Operators call payment-service internal APIs with `X-Internal-Secret`, like the refund request API. No operator account or role exists yet, so the command records a caller-supplied `operatorId` and `note` as the audit trail.
+- Only `PROVIDER_MISMATCH` and `IDEMPOTENCY_WINDOW_EXPIRED` reviews resume. `UNEXPLAINED_CANCELLATION` and refunds of funding-blocked deposits are rejected because the ledger must be repaired first. The request must name the review reason the operator confirmed; a different or no-longer-current reason is rejected.
+- Resume changes no amount or status and calls no provider. It clears `review_required`/`failure_code`, keeps `attempts`, resets `first_attempted_at`, and sets `next_attempt_at` to now. The next execution re-queries first and resends with the same `refund-{refundId}` key only when not applied.
+- Resume commands follow the refund command pattern: fingerprinted key, same key replays the first decision, reuse with different content is `PAYMENT-409-002`, business rejections are persisted so a rejected key never later succeeds.
+- Lock order is deposit → resume command → refund, because inserting the command takes a shared FK lock on the refund row.
+
+Reason:
+- Review-flagged refunds keep their amount reserved and block later refunds of the same order indefinitely; configuration errors such as `UNAUTHORIZED_KEY` end up there after 14 days with no way back.
+- Re-query before resend already proves whether a cancel was applied, so resuming the same refund is safe without releasing reserved money by hand.
+
+Implication for agents:
+- Do not add operator paths that release refund reservations or mark refunds `FAILED`/`SUCCEEDED` without a confirmed provider result.
+- Do not insert rows with a foreign key to `payment_refunds` before locking the deposit in flows that also lock the refund.
+- Ask the user before changing which review reasons resume or replacing the internal-secret operator model.
+
+Related files:
+- `docs/architecture/refund-design.md`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundReviewCommandService.java`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/refund/repository/RefundReviewRepository.java`
+- `payment-service/src/main/resources/db/migration/V12__create_payment_refund_review_resumptions.sql`
+
 ## 2026-10-28 - MVP Work Termination Coordination
 
 Decision:

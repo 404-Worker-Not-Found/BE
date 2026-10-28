@@ -28,4 +28,4 @@ PR #131의 WorkCompleted(3), WorkNoShow(4), WorkCanceled(5) v1을 소비한다. 
 
 ## 소비자 설정
 
-결제 종료 소비자는 `PAYMENT_SETTLEMENT_EVENTS_ENABLED`와 `PAYMENT_WORK_TERMINATION_ENABLED`가 모두 켜졌을 때 활성화한다(기본 둘 다 true). 어느 하나를 끄면 생성하지 않는다. 정산 이벤트를 끈 상태에서만 등록되는 설정 빈을 참조해 애플리케이션 시작이 실패하지 않도록 같은 의존 조건을 적용한다.
+결제 종료 소비자는 `PAYMENT_SETTLEMENT_EVENTS_ENABLED`와 `PAYMENT_WORK_TERMINATION_ENABLED`가 모두 켜졌을 때 활성화한다(기본 둘 다 true). 어느 하나를 끄면 생성하지 않는다. 정산 이벤트를 켠 상태에서만 등록되는 설정 빈을 참조해 애플리케이션 시작이 실패하지 않도록 같은 의존 조건을 적용한다.
