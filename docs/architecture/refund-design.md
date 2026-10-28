@@ -6,11 +6,12 @@
 
 - 첫 단위(2026-10-22): 환불 정책, 금액 불변식, 환불 상태, 환불 요청 명령과 결과 조회 계약. payment-service는 예치의 가용 잔액에서 환불 금액을 예약하고 `REQUESTED` 환불을 만든다.
 - 두 번째 단위(2026-10-22): `REQUESTED` 환불을 토스 결제 취소로 실행하고, 응답 유실·타임아웃을 같은 환불로 복구하며, 확정된 PG 결과만 `SUCCEEDED`·`FAILED`로 반영한다. 결제 재조회·웹훅이 이쪽 환불을 외부 취소로 오인해 예치를 차단하지 않게 했다([PG 환불 실행](#pg-환불-실행)).
+- #108 첫 단위(2026-10-28): 검토 대상 환불의 운영자 조회와 같은 환불의 자동 실행 재개([검토 대상 환불 운영자 확인·재개](#검토-대상-환불-운영자-확인재개)). 정책은 잠정이다.
 
 아래는 구현하지 않는다.
 
 - job-service의 환불 검토 화면·조회 API, 공고 자동 환불 트리거, 점주 직접 요청 API
-- 검토 대상(`review_required`) 환불의 운영자 조회·수동 재개, 차단된 예치의 환불(#108)
+- 설명되지 않는 취소(`UNEXPLAINED_CANCELLATION`)로 멈춘 환불과 차단된 예치의 장부 복구·환불(#108 후속)
 - 실제 토스 테스트 환경 환불 확인
 
 **호출자 연결 전 확인**: 자동 테스트는 토스 대역으로만 검증했다. job-service나 운영 도구를 연결하기 전에 실제 토스 테스트 결제의 부분·전체 취소와 웹훅 수신을 확인한다.
@@ -53,7 +54,7 @@
 
 - 응답 유실·타임아웃·5xx는 결과 미확정이다. `REQUESTED`를 유지하고 같은 환불로 조회·재시도한다. 새 환불로 다시 실행하지 않는다.
 - `FAILED`에는 토스 오류 코드(`failure_code`)가 남는다.
-- **검토 필요**(`review_required=true`)는 상태가 아니라 표시다. 상태는 `REQUESTED`이고 금액도 환불 예약에 남은 채 자동 실행만 멈춘다. 사유는 `failure_code`에 `PROVIDER_MISMATCH`, `UNEXPLAINED_CANCELLATION`, `IDEMPOTENCY_WINDOW_EXPIRED` 중 하나로 남는다. 운영 확인·재개는 후속 범위다.
+- **검토 필요**(`review_required=true`)는 상태가 아니라 표시다. 상태는 `REQUESTED`이고 금액도 환불 예약에 남은 채 자동 실행만 멈춘다. 사유는 `failure_code`에 `PROVIDER_MISMATCH`, `UNEXPLAINED_CANCELLATION`, `IDEMPOTENCY_WINDOW_EXPIRED` 중 하나로 남는다. 운영자는 `PROVIDER_MISMATCH`·`IDEMPOTENCY_WINDOW_EXPIRED`만 같은 환불의 자동 실행으로 재개할 수 있다([검토 대상 환불 운영자 확인·재개](#검토-대상-환불-운영자-확인재개)).
 - 모든 전이와 검토 전환은 `payment_refund_histories`에 이전·다음 상태, 사유, 시각으로 남긴다. 결과가 확정되면 `completed_at`이 생긴다(`ck_refund_completed`).
 
 ## 내부 API
@@ -100,7 +101,8 @@
 | --- | --- |
 | `payment_refunds` | 예치·주문 ID, 공고·점주 스냅샷, 정수 KRW 금액, 사유, 상태, 요청·완료 시각. 금액·통화·상태·완료 시각 CHECK. V9에서 실행 임대(`lease_token`·`lease_until`), 시도 횟수·첫 시도 시각·다음 시도 시각, 검토 표시, 실패 코드, 토스 취소 거래 키를 추가 |
 | `payment_refund_commands` | 명령 키, SHA-256 fingerprint, 성공한 환불 ID 또는 업무 거절 |
-| `payment_refund_histories` | 환불 상태 전이와 사유(V9) |
+| `payment_refund_histories` | 환불 상태 전이와 사유(V9). 운영자 재개는 `REQUESTED → REQUESTED`, 사유 `REVIEW_RESUMED` |
+| `payment_refund_review_resumptions` | 운영자 재개 명령 키, fingerprint, 환불 ID, 운영자 ID, 메모, 재개한 검토 사유 또는 업무 거절, 요청 시각(V12) |
 
 fingerprint는 `REFUND:v1:{jobPostId}:{ownerMemberId}:{금액(뒤 0 제거)}:{currency}:{reason}`의 SHA-256이다. 사유는 콜론을 포함할 수 있어 마지막에 둔다.
 
@@ -149,9 +151,12 @@ fingerprint는 `REFUND:v1:{jobPostId}:{ownerMemberId}:{금액(뒤 0 제거)}:{cu
 
 | 분류 | 토스 응답 | 처리 |
 | --- | --- | --- |
-| 확정 거절 | `ALREADY_CANCELED_PAYMENT`, `ALREADY_REFUND_PAYMENT`, `EXCEED_CANCEL_AMOUNT_DISCOUNT_AMOUNT`, `EXCEED_CANCEL_LIMIT`, `EXCEED_MAX_REFUND_DUE`, `INVALID_REQUEST`, `NOT_ALLOWED_PARTIAL_REFUND`, `NOT_CANCELABLE_AMOUNT`, `NOT_CANCELABLE_PAYMENT`, `NOT_CANCELABLE_PAYMENT_FOR_DORMANT_USER`, `NOT_FOUND_PAYMENT`, `NOT_MATCHES_REFUNDABLE_AMOUNT`, `REFUND_REJECTED` | 결제를 조회해 위 표로 판단한다. 반영되지 않았을 때만 `FAILED` |
-| 결과 미확정 | 그 밖의 코드(`PROVIDER_ERROR`, `FORBIDDEN_CONSECUTIVE_REQUEST`, `UNAUTHORIZED_KEY` 등), 코드 없음, 5xx, 타임아웃·네트워크 오류, 토스 비활성 | `REQUESTED` 유지, 30·60·120·240초(최대 300초) 뒤 재시도 |
+| 확정 거절 후보 (HTTP 400) | `ALREADY_CANCELED_PAYMENT`, `ALREADY_REFUND_PAYMENT`, `EXCEED_CANCEL_AMOUNT_DISCOUNT_AMOUNT`, `INVALID_REQUEST`, `NOT_MATCHES_REFUNDABLE_AMOUNT`, `REFUND_REJECTED` | 결제를 조회해 위 표로 판단한다. 반영되지 않았을 때만 `FAILED` |
+| 확정 거절 후보 (HTTP 403) | `EXCEED_CANCEL_LIMIT`, `EXCEED_MAX_REFUND_DUE`, `NOT_ALLOWED_PARTIAL_REFUND`, `NOT_CANCELABLE_AMOUNT`, `NOT_CANCELABLE_PAYMENT`, `NOT_CANCELABLE_PAYMENT_FOR_DORMANT_USER` | 위와 동일 |
+| 확정 거절 후보 (HTTP 404) | `NOT_FOUND_PAYMENT` | 위와 동일 |
+| 결과 미확정 | 위 상태·코드 조합 이외의 응답(`PROVIDER_ERROR`, `FORBIDDEN_CONSECUTIVE_REQUEST`, `UNAUTHORIZED_KEY` 등), 상태·코드 없음, 모든 5xx, 타임아웃·네트워크 오류, 토스 비활성 | `REQUESTED` 유지, 30·60·120·240초(최대 300초) 뒤 재시도 |
 
+- 상태·코드 조합은 [토스 공식 결제 취소 오류 계약](https://docs.tosspayments.com/reference/error-codes)(2026-10-28 확인)을 따른다. 기존 허용 코드 13개만 사용하며, 알려진 코드라도 HTTP 상태가 다르면 확정 거절로 보지 않는다.
 - 확정 거절 코드라도 조회로 반영 여부를 확인한다. 예를 들어 `ALREADY_CANCELED_PAYMENT`인데 합계가 이 환불을 포함하면 성공이다. 오류 분류가 틀려도 반영된 환불을 실패로 기록해 금액을 다시 쓰는 일은 없다.
 - 오류 응답 본문은 보관·로그하지 않는다. 대문자·숫자·밑줄 64자 이하의 `code`만 꺼낸다.
 
@@ -170,14 +175,73 @@ fingerprint는 `REFUND:v1:{jobPostId}:{ownerMemberId}:{금액(뒤 0 제거)}:{cu
 
 장부가 바뀌지 않았는데 취소 합계가 0이거나(`PARTIAL_CANCELED`인데 잔액이 그대로인 경우 포함) 위와 다르면 기존처럼 외부 취소로 보고 차단한다. 오래된 조회를 보류한 뒤 새 조회에서 확인한 설명되지 않는 취소도 차단한다.
 
+## 검토 대상 환불 운영자 확인·재개
+
+#108 첫 단위(2026-10-28)다. 검토 표시로 멈춘 환불은 금액이 환불 예약에 묶인 채 자동 실행되지 않고, 같은 주문의 뒤 환불도 함께 멈춘다. 토스 인증 키 오류처럼 14일 안에 해결되지 않은 오류도 여기에 남으므로, 운영자가 원인을 확인한 뒤 같은 환불을 다시 실행할 경로를 둔다. 아래 정책은 잠정이며 운영 도구·권한 체계가 정해지면 다시 확인한다.
+
+### 재개 정책 (잠정)
+
+| 검토 사유 | 재개 | 이유 |
+| --- | --- | --- |
+| `PROVIDER_MISMATCH` | 허용 | 응답 식별 정보만 맞지 않았고 장부는 바뀌지 않았다. 설정·PG 상태를 확인한 뒤 같은 환불로 다시 조회한다. |
+| `IDEMPOTENCY_WINDOW_EXPIRED` | 허용 | 같은 키 재전송만 멈춘 상태다. 재개 뒤에도 결제를 먼저 조회해 반영되지 않았을 때만 보낸다. |
+| `UNEXPLAINED_CANCELLATION` | 거절 `PAYMENT-409-009` | 예치가 차단됐고 PG 취소 합계가 장부와 다르다. 차단된 예치의 장부 복구가 먼저다(#108 후속). |
+| 예치 차단(`funding_blocked`) | 거절 `PAYMENT-409-006` | 실행 대상에서 빠지는 예치다. 재개해도 실행되지 않으므로 받지 않는다. |
+
+- 재개는 금액·상태를 바꾸지 않고 PG를 호출하지 않는다. 검토 표시와 `failure_code`를 지우고 바로 실행 대상(`next_attempt_at` = 현재)으로 돌린다. 원래 사유는 이력과 재개 명령에 남는다.
+- 시도 횟수는 유지한다. 재개한 환불은 이미 PG에 보냈을 수 있으므로 다음 실행이 항상 결제를 먼저 조회해 반영됐으면 `SUCCEEDED`로 확정하고, 반영되지 않았을 때만 같은 멱등 키(`refund-{refundId}`)로 다시 보낸다.
+- 멱등 키 유효 기간은 재개 뒤 첫 점유부터 다시 센다(`first_attempted_at` 초기화). 토스가 원래 키를 잊었더라도 재전송 전 조회로 반영 여부를 확인하므로 같은 금액을 두 번 취소하지 않는다.
+- 결과를 확인할 수 없는 예약은 여전히 자동으로 풀지 않는다. 운영자가 예약을 해제하거나 `FAILED`로 바꾸는 경로는 두지 않는다.
+
+### 내부 API
+
+모든 요청은 `X-Internal-Secret`이 필요하다. 별도 운영자 계정·역할이 아직 없으므로 운영 도구가 내부 비밀값으로 호출하고, 요청한 운영자 ID와 메모를 감사 기록으로 남긴다.
+
+**검토 대상 목록** `GET /api/payments/internal/refunds/reviews?afterRefundId=0&size=20`
+
+- `REQUESTED`이고 검토 표시가 있는 환불을 ID 오름차순으로 반환한다. `afterRefundId` >= 0, `size` 1~100(기본 20).
+- 응답 `data`: `reviews`, `nextAfterRefundId`, `hasNext`. `hasNext` 동안 `nextAfterRefundId`로 이어서 조회하고, 빈 응답은 입력 커서를 그대로 돌려준다.
+- 항목: `refundId`(문자열), `jobPostId`, `ownerMemberId`, `orderId`, `amount`, `currency`, `reason`, `reviewReason`, `attempts`, `requestedAt`, `firstAttemptedAt`, `fundingBlocked`, `resumable`. `resumable`은 잠그지 않은 조회 시점 값이고, 재개 요청이 잠근 뒤 다시 판단한다.
+
+**재개** `POST /api/payments/internal/refunds/{refundId}/review-resumptions`
+
+헤더: `Idempotency-Key` (1~128자 공백 없는 ASCII)
+
+```json
+{"operatorId":"ops.kim","reviewReason":"IDEMPOTENCY_WINDOW_EXPIRED","note":"토스 시크릿 키 교체 후 재개"}
+```
+
+- `operatorId`는 영문·숫자·`.`·`_`·`@`·`-` 1~64자, `reviewReason`은 대문자·밑줄 1~64자, `note`는 공백이 아닌 200자 이하다. `reviewReason`은 운영자가 확인한 사유이며 지금 사유와 같아야 한다.
+- 응답 `data`는 [환불 조회](#환불-조회)와 같다. 성공하면 `status=REQUESTED`, `reviewRequired=false`다.
+- fingerprint는 `REFUND_REVIEW_RESUME:v1:{refundId}:{reviewReason}:{operatorId}:{note}`의 SHA-256이다. 앞 값들에는 콜론이 없어 메모를 마지막에 둔다.
+
+| 결과 | 코드 | 영속화 |
+| --- | --- | --- |
+| 재개 | 200 | 환불 검토 해제·이력(`REVIEW_RESUMED`)·재개 명령(`resumed_reason`) |
+| 같은 키·같은 요청 | 200, 환불의 현재 상태 | 없음 |
+| 검토 중이 아니거나(이미 재개·확정) 사유가 다름 | `PAYMENT-409-008` | 명령에 거절 기록 |
+| 재개할 수 없는 사유(`UNEXPLAINED_CANCELLATION`) | `PAYMENT-409-009` | 명령에 거절 기록 |
+| 예치 차단 | `PAYMENT-409-006` | 명령에 거절 기록 |
+| 명령 키 재사용 | `PAYMENT-409-002` | 없음 |
+| 환불 없음 | 404 `PAYMENT-404-002` | 없음 |
+| 요청 검증 실패 | 400 | 없음 |
+
+- 거절된 키는 나중에 같은 환불이 다시 검토로 멈춰도 성공하지 않는다. 검토 한 번마다 새 키를 쓴다.
+- 서로 다른 키로 동시에 재개하면 하나만 재개하고 나머지는 `PAYMENT-409-008`이다.
+
+### 동시성
+
+재개의 잠금 순서는 `예치 → 재개 명령 → 환불`이다. 재개 명령 저장은 FK 검사로 환불 행을 공유 잠금하므로 예치보다 먼저 하지 않는다(먼저 하면 서로 다른 키의 동시 재개가 환불 공유 잠금과 예치 잠금을 엇갈려 잡아 교착이 생긴다). 결과 저장(`주문 → 예치 → 환불`)·결제 재조회(`주문 → 예치`)와 예치·환불 순서가 같다. 실행 점유는 검토 표시가 없는 환불만 `SKIP LOCKED`로 잡으므로 재개 중인 환불을 기다리지 않는다.
+
 ## 후속 작업
 
 1. 실제 토스 테스트 환경에서 부분·전체 취소, 같은 키 재요청, 웹훅 수신 확인. 그 뒤 호출자 연결.
-2. 검토 대상 환불의 운영자 조회·원인 확인·수동 재개 경로와 차단된 예치의 환불(#108). 토스 인증 키 오류(`UNAUTHORIZED_KEY`)처럼 14일 안에 해결되지 않은 오류도 검토 대상(`IDEMPOTENCY_WINDOW_EXPIRED`)으로 남고 환불 예약이 유지되므로, 설정을 고친 뒤 재개하려면 이 경로가 필요하다. 결과를 확인할 수 없는 예약은 자동으로 풀지 않는다.
+2. 설명되지 않는 취소로 차단된 예치의 장부 복구와 그 예치의 환불(#108 후속). 검토 대상 환불의 조회·재개는 2026-10-28에 구현했고, 운영자 계정·역할 기반 권한과 운영 화면은 아직 없다.
 3. job-service 환불 검토 기록(`job_payment_refund_reviews`)과 환불 요청 연결, 점주 직접 요청 API.
 
 ## 검증
 
 - 첫 단위: MySQL Testcontainers 통합 테스트로 가용 잔액 예약, 같은 키 재요청, 거절 영속화, 잠금 금액 보호, 차단·불일치 예치, 동시 환불·잠금 경쟁, 이력 저장 실패 롤백, CHECK 제약, HTTP 계약·인증·입력 검증을 확인했다.
 - 두 번째 단위: 토스 게이트웨이 대역과 MySQL Testcontainers로 성공 반영, 응답 유실 뒤 조회로 성공 확정(재전송 없음), 미반영 미확정 오류의 같은 키 재전송, 조회로 확인한 확정 거절의 실패와 금액 복귀, 거절 코드보다 취소 합계 우선, 재시도 대상 코드, 설명되지 않는 취소의 검토·예치 차단, 응답 식별 불일치, 주문 내 순차 실행, 멱등 키 유효 기간 초과, 차단 예치 미실행, 임대를 넘겨받은 뒤 이전 작업자의 저장 무시, 진행 중·확정 환불로 설명되는 결제 재조회의 차단 제외를 확인했다. HTTP 클라이언트는 `MockRestServiceServer`로 요청 본문·멱등 키·오류 코드 추출을 확인했다.
+- #108 첫 단위: 토스 게이트웨이 대역과 MySQL Testcontainers로 검토 목록의 대상·커서·재개 가능 여부, 재개 뒤 조회 우선 실행(반영된 취소는 재전송 없이 성공), 멱등 기간 초과 재개 뒤 조회 후 같은 키 재전송, 같은 주문 뒤 환불의 실행 재개, 같은 키 재요청·키 재사용·거절 키 유지, 재개할 수 없는 사유·차단 예치·사유 불일치·검토 아닌 환불 거절, 서로 다른 키 동시 재개, HTTP 인증·입력 검증·오류 코드·Swagger를 확인했다.
 - 실제 토스 API는 호출하지 않았다.

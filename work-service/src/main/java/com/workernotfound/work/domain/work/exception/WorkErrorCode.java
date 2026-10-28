@@ -17,7 +17,11 @@ public enum WorkErrorCode implements ErrorCode {
   CHECK_IN_TIME_NOT_ALLOWED("WORK-409-006", "출근 가능한 시간이 아닙니다.", HttpStatus.CONFLICT),
   CHECK_IN_TOO_FAR("WORK-409-007", "출근 인정 반경 밖입니다.", HttpStatus.CONFLICT),
   START_TOO_EARLY("WORK-409-008", "예정 근무 시작 시각 전입니다.", HttpStatus.CONFLICT),
-  COMPLETION_TOO_EARLY("WORK-409-009", "예정 근무 종료 시각 전입니다.", HttpStatus.CONFLICT);
+  COMPLETION_TOO_EARLY("WORK-409-009", "예정 근무 종료 시각 전입니다.", HttpStatus.CONFLICT),
+  CANCELLATION_STATE_CONFLICT("WORK-409-010", "현재 취소 요청 상태에서 처리할 수 없습니다.", HttpStatus.CONFLICT),
+  CANCELLATION_EXPIRED("WORK-409-011", "근무 취소를 동의할 수 있는 기한이 지났습니다.", HttpStatus.CONFLICT),
+  CANCELLATION_PENDING("WORK-409-012", "이미 동의 대기 중인 취소 요청이 있습니다.", HttpStatus.CONFLICT),
+  CANCELLATION_NOT_FOUND("WORK-404-002", "취소 요청을 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
   private final String code;
   private final String message;
   private final HttpStatus httpStatus;

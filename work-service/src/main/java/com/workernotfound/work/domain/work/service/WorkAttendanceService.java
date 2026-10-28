@@ -25,6 +25,7 @@ public class WorkAttendanceService {
   private final AttendanceProperties properties;
   private final Clock clock;
   private final WorkEventRecorder events;
+  private final WorkCancellationExpiryService cancellationExpiry;
 
   @Transactional
   public WorkResponse checkIn(AuthenticatedMember member, Long workId, CheckInRequest request) {
@@ -34,6 +35,7 @@ public class WorkAttendanceService {
     var decision = policy.checkIn(work, request, now);
     String previous = work.getStatus().name();
     work.checkIn(now, decision.distanceMeters(), decision.policy());
+    cancellationExpiry.expirePending(work, now);
     history.record(workId, previous, work.getStatus().name(), member.memberId(), now);
     events.record(work, member.memberId(), member.role(), now);
     return WorkResponse.from(work);

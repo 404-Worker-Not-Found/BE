@@ -5,5 +5,6 @@ public enum MatchingStatus {
 	CONFIRMED,
 	DECLINED,
 	EXPIRED,
-	CANCELED
+	CANCELED,
+	COMPLETED
 }

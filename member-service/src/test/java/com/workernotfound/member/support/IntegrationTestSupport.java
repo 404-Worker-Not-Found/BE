@@ -5,6 +5,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 
 @SpringBootTest
@@ -17,8 +18,11 @@ public abstract class IntegrationTestSupport {
 		.withUsername("test")
 		.withPassword("test");
 
+	static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7.4-alpine").withExposedPorts(6379);
+
 	static {
 		MYSQL.start();
+		REDIS.start();
 	}
 
 	@DynamicPropertySource
@@ -30,5 +34,10 @@ public abstract class IntegrationTestSupport {
 		registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
 		registry.add("member.internal.secret", () -> "test-internal-secret");
 		registry.add("member.jwt.secret", () -> "test-jwt-secret-key-for-member-service-token-tests");
+		registry.add("spring.data.redis.host", REDIS::getHost);
+		registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
+		// 리뷰 대상 근무 소비자는 테스트가 직접 poll한다. 백그라운드 실행이 테스트 순서에 끼어들지 않게 첫 실행을 미룬다.
+		registry.add("member.review-events.initial-delay", () -> "1h");
+		registry.add("member.review-events.poll-interval", () -> "1h");
 	}
 }

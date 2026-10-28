@@ -62,6 +62,8 @@ public class Work {
   private LocalDateTime checkedInAt;
   private LocalDateTime startedAt;
   private LocalDateTime completedAt;
+  private LocalDateTime noShowAt;
+  private LocalDateTime noShowDeadline;
   private Double checkInDistanceMeters;
   @Column(length = 64) private String attendancePolicy;
 
@@ -126,6 +128,26 @@ public class Work {
     requireStatus(WorkStatus.IN_PROGRESS);
     status = WorkStatus.COMPLETED;
     completedAt = now;
+  }
+
+  public void markNoShow(LocalDateTime now, LocalDateTime deadline) {
+    requireStatus(WorkStatus.SCHEDULED);
+    if (confirmedAt == null || checkedInAt != null)
+      throw new BusinessException(WorkErrorCode.WORK_STATE_CONFLICT);
+    status = WorkStatus.NO_SHOW;
+    noShowAt = now;
+    noShowDeadline = deadline;
+  }
+
+  public boolean canRequestCancellation(LocalDateTime now) {
+    return confirmedAt != null && status == WorkStatus.SCHEDULED && checkedInAt == null
+        && now.isBefore(scheduledStart());
+  }
+
+  public void cancelByAgreement(LocalDateTime now) {
+    if (!canRequestCancellation(now)) throw new BusinessException(WorkErrorCode.CANCELLATION_EXPIRED);
+    status = WorkStatus.CANCELED;
+    canceledAt = now;
   }
 
   private void requireStatus(WorkStatus expected) {

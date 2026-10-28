@@ -1,6 +1,7 @@
 package com.workernotfound.work.domain.outbox;
 
 import com.workernotfound.work.domain.work.event.WorkLifecycleEvent;
+import com.workernotfound.work.domain.work.event.WorkCancellationEvent;
 import java.time.LocalDateTime;
 import java.util.*;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,14 @@ public class WorkOutboxRepository {
         + "AND (lease_until IS NULL OR lease_until <= ?) ORDER BY id LIMIT ?", Long.class, now, now, limit);
   }
 
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void appendCancellation(WorkCancellationEvent event, String payload) {
+    jdbc.update("INSERT INTO work_outbox (event_id, work_id, cancellation_request_id, event_type, revision, schema_version, "
+        + "occurred_at, payload, next_attempt_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        event.eventId(), event.workId(), event.aggregateId(), event.eventType(), event.revision(), event.version(),
+        event.occurredAt(), payload, event.occurredAt());
+  }
+
   @Transactional
   public Optional<WorkOutboxMessage> claim(long id, String token, LocalDateTime now, LocalDateTime until) {
     int changed = jdbc.update("UPDATE work_outbox SET lease_token = ?, lease_until = ? "
@@ -35,7 +44,8 @@ public class WorkOutboxRepository {
     return jdbc.query("SELECT * FROM work_outbox WHERE id = ? AND lease_token = ?", (rs, row) ->
         new WorkOutboxMessage(rs.getLong("id"), rs.getString("event_id"), rs.getLong("work_id"),
             rs.getString("event_type"), rs.getLong("revision"), rs.getInt("schema_version"),
-            rs.getTimestamp("occurred_at").toLocalDateTime(), rs.getString("payload"), rs.getInt("retry_count")),
+            rs.getTimestamp("occurred_at").toLocalDateTime(), rs.getString("payload"), rs.getInt("retry_count"),
+            rs.getString("aggregate_type"), rs.getLong("aggregate_id")),
         id, token).stream().findFirst();
   }
 

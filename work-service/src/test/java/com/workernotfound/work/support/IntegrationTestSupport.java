@@ -28,6 +28,8 @@ public abstract class IntegrationTestSupport {
     registry.add("work.jwt.secret", () -> "work-test-jwt-secret-for-integration-only");
     registry.add("work.outbox.enabled", () -> "false");
     registry.add("work.events.initial-delay-ms", () -> "3600000");
+    registry.add("work.no-show.initial-delay-ms", () -> "3600000");
+    registry.add("work.cancellation-expiry.initial-delay-ms", () -> "3600000");
     registry.add("work.internal.secret", () -> "work-test-internal-secret");
   }
 }

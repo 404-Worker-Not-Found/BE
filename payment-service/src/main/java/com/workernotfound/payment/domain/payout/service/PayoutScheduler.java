@@ -3,9 +3,11 @@ package com.workernotfound.payment.domain.payout.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.stereotype.Component;
 
 @Component
+@EnableScheduling
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "payment.payout.enabled", havingValue = "true")
 public class PayoutScheduler {

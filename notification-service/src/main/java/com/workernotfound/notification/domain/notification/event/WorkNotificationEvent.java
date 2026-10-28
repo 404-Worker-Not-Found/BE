@@ -11,7 +11,7 @@ public record WorkNotificationEvent(
     @NotNull @Positive Long revision, @NotNull Integer version, @NotNull LocalDateTime occurredAt,
     @NotNull @Positive Long workId, @NotNull @Positive Long matchingId,
     @NotNull @Positive Long jobPostId, @NotNull @Positive Long ownerMemberId,
-    @NotNull @Positive Long workerMemberId, @NotNull @Positive Long actorMemberId,
+    @NotNull @Positive Long workerMemberId, @Positive Long actorMemberId,
     @NotBlank String actorRole, @NotBlank String status,
     @NotNull LocalDate workDate, @NotNull LocalTime startTime, @NotNull LocalTime endTime,
     @NotNull Boolean endTimeNextDay) {}
