@@ -1,6 +1,7 @@
 package com.workernotfound.job.domain.job.service;
 
 import com.jayway.jsonpath.JsonPath;
+import com.workernotfound.job.domain.job.entity.enums.AdmissionConsumptionResult;
 import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.entity.JobApplicationAdmission;
 import com.workernotfound.job.domain.job.entity.JobPost;

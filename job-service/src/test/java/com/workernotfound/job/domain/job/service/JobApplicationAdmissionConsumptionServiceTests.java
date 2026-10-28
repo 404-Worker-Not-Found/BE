@@ -2,6 +2,7 @@ package com.workernotfound.job.domain.job.service;
 
 import com.workernotfound.job.domain.job.entity.JobApplicationAdmission;
 import com.workernotfound.job.domain.job.entity.JobPost;
+import com.workernotfound.job.domain.job.entity.enums.AdmissionConsumptionResult;
 import com.workernotfound.job.domain.job.entity.enums.ApplicationAdmissionStatus;
 import com.workernotfound.job.domain.job.exception.JobErrorCode;
 import com.workernotfound.job.domain.job.repository.JobApplicationAdmissionRepository;

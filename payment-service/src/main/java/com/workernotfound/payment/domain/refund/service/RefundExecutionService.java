@@ -2,6 +2,7 @@ package com.workernotfound.payment.domain.refund.service;
 
 import com.workernotfound.payment.domain.refund.repository.RefundExecutionRepository.Claim;
 import com.workernotfound.payment.external.toss.*;
+import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,11 +19,13 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class RefundExecutionService {
   // 같은 요청을 다시 보내도 결과가 바뀌지 않는 결제 취소 거절. 일시 오류·인증 오류·알 수 없는 코드는 결과 미확정으로 재시도한다.
-  private static final Set<String> DEFINITIVE_REJECTIONS = Set.of(
-      "ALREADY_CANCELED_PAYMENT", "ALREADY_REFUND_PAYMENT", "EXCEED_CANCEL_AMOUNT_DISCOUNT_AMOUNT",
-      "EXCEED_CANCEL_LIMIT", "EXCEED_MAX_REFUND_DUE", "INVALID_REQUEST", "NOT_ALLOWED_PARTIAL_REFUND",
-      "NOT_CANCELABLE_AMOUNT", "NOT_CANCELABLE_PAYMENT", "NOT_CANCELABLE_PAYMENT_FOR_DORMANT_USER",
-      "NOT_FOUND_PAYMENT", "NOT_MATCHES_REFUNDABLE_AMOUNT", "REFUND_REJECTED");
+  private static final Map<Integer, Set<String>> DEFINITIVE_REJECTIONS = Map.of(
+      400, Set.of("ALREADY_CANCELED_PAYMENT", "ALREADY_REFUND_PAYMENT",
+          "EXCEED_CANCEL_AMOUNT_DISCOUNT_AMOUNT", "INVALID_REQUEST",
+          "NOT_MATCHES_REFUNDABLE_AMOUNT", "REFUND_REJECTED"),
+      403, Set.of("EXCEED_CANCEL_LIMIT", "EXCEED_MAX_REFUND_DUE", "NOT_ALLOWED_PARTIAL_REFUND",
+          "NOT_CANCELABLE_AMOUNT", "NOT_CANCELABLE_PAYMENT", "NOT_CANCELABLE_PAYMENT_FOR_DORMANT_USER"),
+      404, Set.of("NOT_FOUND_PAYMENT"));
 
   private final RefundExecutionTransactionService transactions;
   private final TossGateway toss;
@@ -75,7 +78,9 @@ public class RefundExecutionService {
   }
 
   private boolean isDefinitiveRejection(TossClientException exception) {
-    return exception.remoteCode() != null && DEFINITIVE_REJECTIONS.contains(exception.remoteCode());
+    return exception.remoteStatus() != null && exception.remoteCode() != null
+        && DEFINITIVE_REJECTIONS.getOrDefault(exception.remoteStatus(), Set.of())
+            .contains(exception.remoteCode());
   }
 
   private void retry(Claim claim, RuntimeException cause) {
