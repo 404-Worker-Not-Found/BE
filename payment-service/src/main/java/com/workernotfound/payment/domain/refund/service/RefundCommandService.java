@@ -3,7 +3,6 @@ package com.workernotfound.payment.domain.refund.service;
 import com.workernotfound.payment.domain.payment.entity.PaymentDeposit;
 import com.workernotfound.payment.domain.payment.exception.PaymentErrorCode;
 import com.workernotfound.payment.domain.payment.repository.PaymentDepositRepository;
-import com.workernotfound.payment.domain.refund.dto.request.RefundRequest;
 import com.workernotfound.payment.domain.refund.entity.*;
 import com.workernotfound.payment.domain.refund.repository.*;
 import com.workernotfound.payment.global.exception.BusinessException;
@@ -29,7 +28,7 @@ public class RefundCommandService {
   private final RefundCommandRepository commands;
 
   @Transactional
-  public Outcome request(String key, RefundRequest request) {
+  public Outcome request(String key, RefundCommand request) {
     var command = lockCommand(key, request.fingerprintPayload());
     if (command.refundId() != null || command.rejection() != null) return outcome(command);
     try {
@@ -39,7 +38,7 @@ public class RefundCommandService {
     }
   }
 
-  private Outcome reserveRefund(String key, RefundRequest request) {
+  private Outcome reserveRefund(String key, RefundCommand request) {
     PaymentDeposit deposit = deposits.findByJobPostIdForUpdate(request.jobPostId())
         .orElseThrow(() -> new BusinessException(PaymentErrorCode.DEPOSIT_NOT_FOUND));
     deposit.reserveRefund(request.ownerMemberId(), request.currency(), request.amount());
@@ -70,7 +69,7 @@ public class RefundCommandService {
     return new Outcome(null, rejection);
   }
 
-  private PaymentRefund newRefund(RefundRequest request, PaymentDeposit deposit, String orderId) {
+  private PaymentRefund newRefund(RefundCommand request, PaymentDeposit deposit, String orderId) {
     return PaymentRefund.builder().depositId(deposit.getId()).orderId(orderId)
         .jobPostId(deposit.getJobPostId()).ownerMemberId(deposit.getOwnerMemberId())
         .amount(request.amount()).currency(deposit.getCurrency()).reason(request.reason()).build();
