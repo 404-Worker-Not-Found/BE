@@ -28,7 +28,7 @@
 
 ## 상태와 후속 작업
 
-상태 이름은 `SCHEDULED`, `CHECKED_IN`, `IN_PROGRESS`, `COMPLETED`, `CANCELED`, `FAILED`, `NO_SHOW`다. 근무 상태 전이는 `SCHEDULED -> CHECKED_IN -> IN_PROGRESS -> COMPLETED`와 미확정 근무의 `SCHEDULED -> CANCELED` 보상을 처리한다. 매칭 확정은 상태 전이와 별개로 `confirmed_at`과 `confirmation_revision`에 기록한다. 노쇼 처리와 사용자 취소는 후속 작업이다. 완료 API는 결제 해제나 정산을 직접 호출하지 않는다. payment-service가 `WorkCompleted`를 소비해 정산을 예약한다([정산 설계](settlement-design.md)).
+상태 이름은 `SCHEDULED`, `CHECKED_IN`, `IN_PROGRESS`, `COMPLETED`, `CANCELED`, `FAILED`, `NO_SHOW`다. 근무 상태 전이는 `SCHEDULED -> CHECKED_IN -> IN_PROGRESS -> COMPLETED`와 미확정 근무의 `SCHEDULED -> CANCELED` 보상을 처리한다. 매칭 확정은 상태 전이와 별개로 `confirmed_at`과 `confirmation_revision`에 기록한다. 확정 근무의 양측 동의 취소·자동 노쇼 상태와 알림 기반은 [취소·노쇼 설계](work-cancellation-design.md)에 정의한다. 자리·매칭·금융 종료 연결과 이의 제기는 후속 계약이다. 완료 API는 결제 해제나 정산을 직접 호출하지 않는다. payment-service가 `WorkCompleted`를 소비해 정산을 예약한다([정산 설계](settlement-design.md)).
 
 자정을 넘는 근무도 일정 스냅샷으로 보관한다. 생성 요청의 `endTimeNextDay`는 선택이다. 없거나 null이면 요청 역직렬화 시점에 시각으로 채운다(종료 시각이 시작 시각 이하이면 true). 이 필드가 없던 이전 형식의 재시도가 저장된 명령을 조회하기 전에 400으로 거절되면, matching Saga가 확정적 실패로 보고 보상하면서 이미 만든 근무를 취소하지 못하기 때문이다. 명시적으로 전달한 값은 같은 규칙과 일치해야 하며 어긋나면 400이다. 시작·종료 시각이 없으면 채우지 않고 Bean Validation이 400으로 거절한다. `works.end_time_next_day`(V3)에 저장하고 본인 근무 조회 응답에 포함한다. V3 이전 행은 `end_time <= start_time`으로 채웠다. 익일 여부가 시각으로 결정되므로 생성 명령 지문은 필드 추가 전 형식을 그대로 유지한다. 따라서 이전 형식 요청, 같은 의미의 명시 요청, null 요청은 같은 키에서 같은 `workId`를 반환하고, 이전 버전이 저장한 명령의 재시도도 충돌하지 않는다. `MatchConfirmed` v1 이벤트는 바꾸지 않았으며, 일정 의미가 필요한 소비자는 같은 규칙으로 익일 여부를 판단한다. 과거 날짜를 일괄 거부하면 복구 명령이 실패할 수 있으므로 현재 시각에 따른 만료 조건을 추가하지 않는다.
 
@@ -94,8 +94,10 @@
 | `WorkCheckedIn` | `CHECKED_IN` | 1 |
 | `WorkStarted` | `IN_PROGRESS` | 2 |
 | `WorkCompleted` | `COMPLETED` | 3 |
+| `WorkNoShow` | `NO_SHOW` | 4 |
+| `WorkCanceled` | `CANCELED`(상대방 동의 취소) | 5 |
 
-현재 상태 머신은 각 단계를 한 번만 통과하므로 revision을 위처럼 고정하며 `(work_id, revision)`을 유일하게 제한한다. 재개·재출근 같은 역전이가 추가되면 revision 정책도 확장해야 한다. 기존 완료/출근 행을 마이그레이션 시 추정하여 발행하지 않는다.
+각 근무 생명주기는 단계를 한 번만 통과하므로 위 revision을 고정한다. V8부터 Outbox는 `(aggregate_type, aggregate_id, revision)`을 유일하게 제한한다. WORK의 기존 식별자·revision은 유지하고 반복 가능한 취소 요청은 WORK_CANCELLATION/요청 ID와 revision 1(요청)·2(거절/철회/만료)로 분리한다. 재개·재출근 같은 역전이가 추가되면 revision 정책도 확장해야 한다. 기존 완료/출근 행을 마이그레이션 시 추정하여 발행하지 않는다.
 
 - Stream 기본값은 `work:domain-events`다. matching 이벤트 Stream과 분리한다.
 - envelope: `eventId`, `aggregateType=WORK`, `aggregateId=workId`, `eventType`, `revision`, `version=1`, `occurredAt`, `payload`.
@@ -121,3 +123,15 @@ member/job/matching/payment/work/chat을 각각 실제 Java 프로세스로 실�
 - 좌표 없는 기존 근무의 409 `WORK-409-005`, 공고 변경 후 예약 재시도의 최초 좌표 유지, 결과 불명 이후 Saga의 동일 좌표·명령 키 재시도는 서비스 통합·계약 테스트로 검증했다. 기존 데이터 업그레이드의 실제 운영 실행은 수행하지 않았다.
 
 실제 회원가입·로그인, 실제 국세청/Toss, 제품 프런트엔드와 모바일 GPS 측정·위조 탐지, 운영 배포는 검증하지 않았다. job-service의 기존 `StubBusinessValidator`에 의한 사업장 소유권 확인은 아직 실제 member-service 연동이 아니며 이 연결 검증도 이를 입증하지 않는다. 검증 종료 후 전용 프로세스·컨테이너와 테스트 비밀값을 제거했다.
+
+## 확정 근무 취소·자동 노쇼 기반 (2026-10-28)
+
+[취소·노쇼 설계](work-cancellation-design.md)의 첫 단위다. 기존 Saga 보상은 변경하지 않는다.
+
+- 참여자 JWT로 `/api/works/me/{workId}/cancellations`에 취소 요청(POST)·최근 20건 조회(GET)을 제공한다. POST는 `Idempotency-Key`와 1~500자 사유를 받는다. 키 범위는 근무·요청자이며 앞뒤 공백을 뺀 사유가 다르면 409다.
+- `/{requestId}/approve`, `/reject`, `/withdraw`는 POST다. 상대방만 동의·거절하고 요청자만 철회한다. 동의 전에는 근무가 유지되고, 동의 시 CANCELED·이력·요청 결과·Outbox를 함께 저장한다. 다른 참여자/요청 ID는 404로 숨긴다.
+- 공고 시작 시각 또는 GPS 출근 중 빠른 때가 기한이다. 시작 시각과 같은 순간은 이미 만료다. 대기 중 출근은 허용하며 그 트랜잭션에서 취소 요청을 만료시킨다. 시간 경과는 1분 주기의 만료 작업이 보완한다. 늦은 동의는 EXPIRED를 커밋한 뒤 WORK-409-011을 반환한다.
+- GPS 출근 허용 마지막 순간에는 출근할 수 있다. 그 이후에도 SCHEDULED인 확정 근무를 NO_SHOW로 바꾸고 noShowAt/noShowDeadline 및 SYSTEM 이력·이벤트를 저장한다. 출근 좌표가 없거나 custom 출근 정책이면 자동 노쇼를 적용하지 않는다.
+- `WORK_NO_SHOW_ENABLED=false`, `WORK_CANCELLATION_EXPIRY_ENABLED=false`로 각각의 주기 작업을 끈다. API의 기한 검사와 출근 시 요청 만료는 유지한다. 기본 주기는 60초이며 실패한 행은 다음 주기에 다시 검증한다.
+- 요청자는 취소 사유를 적지만 사유 전문을 Redis나 알림에 싣지 않는다. 권한 있는 참여자만 요청 조회에서 확인한다.
+- 자동 재모집·확정 자리 반환·매칭 상태 종료·결제 잠금 해제·PG 환불·패널티·채팅 시스템 메시지·이의 제기 처리는 이 첫 단위의 완료 범위가 아니다. 기존 금융·매칭 차단을 임의로 해제하지 않는다.

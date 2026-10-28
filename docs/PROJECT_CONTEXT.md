@@ -304,10 +304,12 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - JWT-authenticated owners and workers can list and read only their own confirmed work through `/api/works/me`. Unconfirmed and unrelated work returns no list entry or 404 detail. Confirmation is separate from `SCHEDULED` and blocks Saga compensation.
 - Confirmed workers can GPS check in; owners confirm work start and, by default, completion. Each transition locks the work row and writes actor history atomically; retries retain the first timestamp. Default attendance policy is 100 meters and start ±30 minutes in Asia/Seoul. Completion is allowed after scheduled end. Radius, windows, time zone, completion role and early completion are configurable; `AttendancePolicy` is replaceable.
 - Matching persists and forwards optional job latitude/longitude into scheduled work. Legacy work remains queryable but cannot GPS check in without a trusted location snapshot. job-service seat reservations now persist immutable latitude/longitude snapshots from the stored job and replay them on the original reservation key. Pre-V16 reservations retain null coordinates without backfill.
-- WorkCheckedIn, WorkStarted and WorkCompleted v1 are written to a transactional Outbox with work status/history, then relayed to a dedicated Redis Stream using fenced leases and retries. Duplicate deliveries retain the event ID; consumers must deduplicate and use work revision to handle reordering. The notification consumer and the payment-service settlement consumer (WorkCompleted only) are connected.
-- User cancellation, no-show handling and worker payout remain future work. MySQL and Redis integration tests cover confirmation, pending recovery, query authorization and attendance transitions.
+- WorkCheckedIn, WorkStarted, WorkCompleted, WorkNoShow and agreement WorkCanceled v1, plus cancellation-request status events under the separate WORK_CANCELLATION aggregate, are written to a transactional Outbox with work status/history, then relayed to a dedicated Redis Stream using fenced leases and retries. Duplicate deliveries retain the event ID; consumers must deduplicate and use work revision to handle reordering. The notification consumer and the payment-service settlement consumer (WorkCompleted only) are connected.
+- External worker payout remains future work; the implemented cancellation/no-show foundation is described below. MySQL and Redis integration tests cover confirmation, pending recovery, query authorization and attendance transitions.
 - MySQL integration tests cover command retries, conflicts, concurrent creation/cancellation, internal authentication, and Swagger access.
 - Local execution is available through `./scripts/local-run.sh work`; the service uses port 8086 and its local MySQL uses port 3311.
+
+- Confirmed-work cancellation foundation (#104): participants request cancellation with a reason and the other participant must consent before the scheduled start or GPS check-in, whichever occurs first. Check-in stays available and expires pending requests. Request/reject/withdraw/expiry and agreement cancellation persist in one local transaction with Outbox events; no automatic re-recruitment, payment release/refund, or trust penalty is performed. GPS-only automatic no-show marking runs strictly after the configured late window, skips missing-location work, and records the decision time/deadline plus a system history/event.
 
 ## Chat Service Context
 
@@ -353,6 +355,8 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - JWT-authenticated members can list only their own role's notifications, query unread counts and idempotently mark individual notifications read. Responses omit other participants and payment identifiers.
 - Local HTTP/MySQL ports are 8088/3314. Runtime configuration, local-run and repository verification include the new service. Notification delivery currently uses REST queries; push and other event types remain future work.
 - See `docs/architecture/notification-design.md`.
+
+- Work notification consumers also handle mutual cancellation request outcomes, WorkCanceled and WorkNoShow. System expiry/no-show events require a null actor ID and SYSTEM role and notify both participants; participant actions notify the other participant. Existing event fingerprints and lifecycle revisions remain compatible.
 
 ## Error Handling State
 
