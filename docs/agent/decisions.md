@@ -1872,6 +1872,41 @@ Related files:
 - `matching-service/src/main/java/com/workernotfound/matching/domain/application/service/ApplicationApplicationService.java`
 - `matching-service/src/main/java/com/workernotfound/matching/domain/matching/service/MatchingConfirmationService.java`
 
+## 2026-10-28 - Refund Ledger Snapshot for Payment Re-query
+
+Decision:
+- A DEPOSITED order query captures the confirmed refund total under order → deposit locks before provider I/O. Result saving takes the same locks and retries without applying the response if that total changed, including for a DONE response.
+- Retry uses the existing order backoff and the pre-I/O webhook revision. It releases the lease without changing order status, deposit balances, funding block, or funding notifications.
+- With an unchanged ledger, existing confirmed/in-flight refund coverage and unexplained external cancellation blocking still apply.
+
+Reason:
+- A provider response can predate the next completed refund; comparing that old total with the latest ledger can incorrectly block a normally refunded deposit.
+
+Implication for agents:
+- Keep provider I/O outside database transactions and preserve order → deposit lock order. Do not interpret an arbitrary lower canceled total as proof of an internal refund.
+
+Related files:
+- `docs/architecture/refund-design.md`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/order/service/OrderTransactionService.java`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundLedger.java`
+
+## 2026-10-28 - Refund Rejection HTTP Status and Code Pairs
+
+Decision:
+- Refund execution recognizes only the existing 13 definitive rejection codes paired with their documented Toss cancel HTTP status (400, 403, or 404), as listed in `docs/architecture/refund-design.md`.
+- All 5xx, missing status/code, unknown codes and mismatched pairs keep the refund REQUESTED and its amount reserved. Recovery re-queries and retries with the same refund and provider idempotency key.
+- An allowed pair still requires a provider re-query proving the cancellation was not applied before FAILED releases the reserved amount. A confirmed applied cancellation takes priority over a rejection code.
+
+Reason:
+- An error code alone cannot prove rejection when the provider's HTTP status indicates an unknown outcome.
+
+Implication for agents:
+- Preserve both remote HTTP status and code until classification; do not broaden the allowlist to all 4xx or release money on a 5xx.
+
+Related files:
+- `docs/architecture/refund-design.md`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/RefundExecutionService.java`
+
 ## 2026-10-28 - Mutual Reviews After Work Completion (Tentative Policy)
 
 Decision:

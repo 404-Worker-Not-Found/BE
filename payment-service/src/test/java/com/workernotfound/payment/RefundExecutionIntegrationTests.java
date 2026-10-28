@@ -16,8 +16,11 @@ import com.workernotfound.payment.support.IntegrationTestSupport;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -158,6 +161,57 @@ class RefundExecutionIntegrationTests extends IntegrationTestSupport {
     verify(toss, times(1)).cancel(any(), any(), any(), any());
   }
 
+  @ParameterizedTest
+  @CsvSource({"0,2000", "1000,2000", "1000,9000"})
+  void delayedRequeryRetriesWhenRefundLedgerChanges(String previous, String next) throws Exception {
+    long job = deposit();
+    BigDecimal previousAmount = new BigDecimal(previous);
+    if (previousAmount.signum() > 0) {
+      long first = refund(job, previous);
+      cancelReturns(job, payment(job, new BigDecimal("10000").subtract(previousAmount).toPlainString()));
+      executions.execute(first);
+    }
+    String oldBalance = new BigDecimal("10000").subtract(previousAmount).toPlainString();
+    long second = refund(job, next);
+    var queried = new CountDownLatch(1);
+    var resume = new CountDownLatch(1);
+    when(toss.getPayment(paymentKey(job))).thenAnswer(invocation -> {
+      queried.countDown();
+      if (!resume.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("조회 재개 시간 초과");
+      return payment(job, oldBalance);
+    });
+    var executor = Executors.newSingleThreadExecutor();
+    var recovery = executor.submit(() -> orders.recover(orderId(job)));
+    String latestBalance = new BigDecimal(oldBalance).subtract(new BigDecimal(next)).toPlainString();
+    try {
+      assertThat(queried.await(10, TimeUnit.SECONDS)).isTrue();
+      cancelReturns(job, payment(job, latestBalance));
+      executions.execute(second);
+      assertThat(read(second).status()).isEqualTo("SUCCEEDED");
+    } finally {
+      resume.countDown();
+      executor.shutdown();
+    }
+    recovery.get(10, TimeUnit.SECONDS);
+
+    assertThat(orderStatus(job)).isEqualTo("DEPOSITED");
+    assertThat(blocked(job)).isFalse();
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment_funding_notifications WHERE order_id = ?"
+        + " AND funded = FALSE", Long.class, orderId(job))).isZero();
+    assertThat(jdbc.queryForObject("SELECT next_check_at IS NOT NULL AND lease_token IS NULL"
+        + " FROM payment_orders WHERE id = ?", Boolean.class, orderId(job))).isTrue();
+    requery(job, payment(job, latestBalance));
+    assertThat(orderStatus(job)).isEqualTo("DEPOSITED");
+    assertThat(blocked(job)).isFalse();
+    assertThat(jdbc.queryForObject("SELECT next_check_at FROM payment_orders WHERE id = ?",
+        java.time.LocalDateTime.class, orderId(job))).isNull();
+    if (new BigDecimal(latestBalance).signum() > 0) {
+      requery(job, payment(job, new BigDecimal(latestBalance).subtract(BigDecimal.ONE).toPlainString()));
+      assertThat(orderStatus(job)).isEqualTo("REVIEW_REQUIRED");
+      assertThat(blocked(job)).isTrue();
+    }
+  }
+
   @Test
   void unknownFailureNotAppliedAtProviderResendsWithSameKey() {
     long job = deposit();
@@ -174,23 +228,61 @@ class RefundExecutionIntegrationTests extends IntegrationTestSupport {
     assertThat(read(refundId).status()).isEqualTo("SUCCEEDED");
   }
 
-  @Test
-  void definitiveRejectionFailsOnlyAfterQueryConfirmsNotApplied() {
+  @ParameterizedTest
+  @CsvSource({
+      "400,ALREADY_CANCELED_PAYMENT", "400,ALREADY_REFUND_PAYMENT",
+      "400,EXCEED_CANCEL_AMOUNT_DISCOUNT_AMOUNT", "400,INVALID_REQUEST",
+      "400,NOT_MATCHES_REFUNDABLE_AMOUNT", "400,REFUND_REJECTED",
+      "403,EXCEED_CANCEL_LIMIT", "403,EXCEED_MAX_REFUND_DUE", "403,NOT_ALLOWED_PARTIAL_REFUND",
+      "403,NOT_CANCELABLE_AMOUNT", "403,NOT_CANCELABLE_PAYMENT",
+      "403,NOT_CANCELABLE_PAYMENT_FOR_DORMANT_USER", "404,NOT_FOUND_PAYMENT"
+  })
+  void definitiveRejectionFailsOnlyAfterQueryConfirmsNotApplied(int status, String code) {
     long job = deposit();
     long refundId = refund(job, "3000");
-    cancelFails(job, 403, "NOT_CANCELABLE_AMOUNT");
+    cancelFails(job, status, code);
     when(toss.getPayment(paymentKey(job))).thenReturn(payment(job, "10000"));
     executions.execute(refundId);
 
     RefundResponse refund = read(refundId);
     assertThat(refund.status()).isEqualTo("FAILED");
-    assertThat(refund.failureCode()).isEqualTo("NOT_CANCELABLE_AMOUNT");
+    assertThat(refund.failureCode()).isEqualTo(code);
     assertThat(balance(job, "refund_reserved_amount")).isEqualByComparingTo("0");
     assertThat(balance(job, "refunded_amount")).isEqualByComparingTo("0");
     assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment_refund_histories WHERE refund_id = ? AND"
-        + " next_status = 'FAILED' AND reason = 'NOT_CANCELABLE_AMOUNT'", Long.class, refundId)).isEqualTo(1);
+        + " next_status = 'FAILED' AND reason = ?", Long.class, refundId, code)).isEqualTo(1);
     // 실패한 환불 금액은 다시 쓸 수 있다.
     assertThat(read(refund(job, "10000")).status()).isEqualTo("REQUESTED");
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+      "500,INVALID_REQUEST", "503,NOT_CANCELABLE_AMOUNT", "500,NOT_FOUND_PAYMENT",
+      "400,NOT_CANCELABLE_AMOUNT", "403,INVALID_REQUEST", "404,INVALID_REQUEST",
+      "401,INVALID_REQUEST", "429,INVALID_REQUEST", ",INVALID_REQUEST", "400,",
+      "400,UNKNOWN_ERROR"
+  })
+  void mismatchedRejectionKeepsReservedAmountAndRetriesSameRefund(Integer status, String code) {
+    long job = deposit();
+    long refundId = refund(job, "3000");
+    cancelFails(job, status, code);
+    when(toss.getPayment(paymentKey(job))).thenReturn(payment(job, "10000"));
+    executions.execute(refundId);
+
+    assertThat(read(refundId).status()).isEqualTo("REQUESTED");
+    assertThat(read(refundId).reviewRequired()).isFalse();
+    assertThat(balance(job, "refund_reserved_amount")).isEqualByComparingTo("3000");
+    assertThat(balance(job, "refunded_amount")).isEqualByComparingTo("0");
+    assertThat(blocked(job)).isFalse();
+    verify(toss, never()).getPayment(paymentKey(job));
+
+    cancelReturns(job, payment(job, "7000", cancel("tx-retry", "3000")));
+    makeDue(refundId);
+    executions.execute(refundId);
+    assertThat(read(refundId).status()).isEqualTo("SUCCEEDED");
+    assertThat(balance(job, "refund_reserved_amount")).isEqualByComparingTo("0");
+    assertThat(balance(job, "refunded_amount")).isEqualByComparingTo("3000");
+    verify(toss, times(2)).cancel(eq(paymentKey(job)), any(), eq(REASON), eq("refund-" + refundId));
   }
 
   @Test

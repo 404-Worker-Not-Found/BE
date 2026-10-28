@@ -149,9 +149,12 @@ fingerprint는 `REFUND:v1:{jobPostId}:{ownerMemberId}:{금액(뒤 0 제거)}:{cu
 
 | 분류 | 토스 응답 | 처리 |
 | --- | --- | --- |
-| 확정 거절 | `ALREADY_CANCELED_PAYMENT`, `ALREADY_REFUND_PAYMENT`, `EXCEED_CANCEL_AMOUNT_DISCOUNT_AMOUNT`, `EXCEED_CANCEL_LIMIT`, `EXCEED_MAX_REFUND_DUE`, `INVALID_REQUEST`, `NOT_ALLOWED_PARTIAL_REFUND`, `NOT_CANCELABLE_AMOUNT`, `NOT_CANCELABLE_PAYMENT`, `NOT_CANCELABLE_PAYMENT_FOR_DORMANT_USER`, `NOT_FOUND_PAYMENT`, `NOT_MATCHES_REFUNDABLE_AMOUNT`, `REFUND_REJECTED` | 결제를 조회해 위 표로 판단한다. 반영되지 않았을 때만 `FAILED` |
-| 결과 미확정 | 그 밖의 코드(`PROVIDER_ERROR`, `FORBIDDEN_CONSECUTIVE_REQUEST`, `UNAUTHORIZED_KEY` 등), 코드 없음, 5xx, 타임아웃·네트워크 오류, 토스 비활성 | `REQUESTED` 유지, 30·60·120·240초(최대 300초) 뒤 재시도 |
+| 확정 거절 후보 (HTTP 400) | `ALREADY_CANCELED_PAYMENT`, `ALREADY_REFUND_PAYMENT`, `EXCEED_CANCEL_AMOUNT_DISCOUNT_AMOUNT`, `INVALID_REQUEST`, `NOT_MATCHES_REFUNDABLE_AMOUNT`, `REFUND_REJECTED` | 결제를 조회해 위 표로 판단한다. 반영되지 않았을 때만 `FAILED` |
+| 확정 거절 후보 (HTTP 403) | `EXCEED_CANCEL_LIMIT`, `EXCEED_MAX_REFUND_DUE`, `NOT_ALLOWED_PARTIAL_REFUND`, `NOT_CANCELABLE_AMOUNT`, `NOT_CANCELABLE_PAYMENT`, `NOT_CANCELABLE_PAYMENT_FOR_DORMANT_USER` | 위와 동일 |
+| 확정 거절 후보 (HTTP 404) | `NOT_FOUND_PAYMENT` | 위와 동일 |
+| 결과 미확정 | 위 상태·코드 조합 이외의 응답(`PROVIDER_ERROR`, `FORBIDDEN_CONSECUTIVE_REQUEST`, `UNAUTHORIZED_KEY` 등), 상태·코드 없음, 모든 5xx, 타임아웃·네트워크 오류, 토스 비활성 | `REQUESTED` 유지, 30·60·120·240초(최대 300초) 뒤 재시도 |
 
+- 상태·코드 조합은 [토스 공식 결제 취소 오류 계약](https://docs.tosspayments.com/reference/error-codes)(2026-10-28 확인)을 따른다. 기존 허용 코드 13개만 사용하며, 알려진 코드라도 HTTP 상태가 다르면 확정 거절로 보지 않는다.
 - 확정 거절 코드라도 조회로 반영 여부를 확인한다. 예를 들어 `ALREADY_CANCELED_PAYMENT`인데 합계가 이 환불을 포함하면 성공이다. 오류 분류가 틀려도 반영된 환불을 실패로 기록해 금액을 다시 쓰는 일은 없다.
 - 오류 응답 본문은 보관·로그하지 않는다. 대문자·숫자·밑줄 64자 이하의 `code`만 꺼낸다.
 
@@ -166,7 +169,9 @@ fingerprint는 `REFUND:v1:{jobPostId}:{ownerMemberId}:{금액(뒤 0 제거)}:{cu
 - 확정된 환불 합계(`refunded_amount`)와 같다.
 - 확정된 환불 합계 + 이 주문의 진행 중 환불(시도 횟수 1 이상, 검토 표시 없음) 금액과 같다. PG에는 반영됐지만 결과 저장 전인 경우다. 점유가 PG 호출 전에 커밋되므로 재조회가 이 환불을 놓치지 않는다.
 
-취소 합계가 0이거나(`PARTIAL_CANCELED`인데 잔액이 그대로인 경우 포함) 위와 다르면 기존처럼 외부 취소로 보고 차단한다.
+결제 재조회는 PG 호출 전 주문 → 예치 순서의 짧은 트랜잭션에서 환불 완료액을 점유 정보에 보관한다. 결과 저장 시 같은 순서로 잠근 뒤 완료액이 바뀌었으면 응답을 적용하지 않고 기존 주문 재조회 백오프로 재조회한다. 조회 중 다음 환불이 완료되면 이전 PG 합계를 최신 장부와 비교할 수 없기 때문이다. `DONE` 응답도 같은 검사를 적용하며, PG 호출 중 DB 잠금을 유지하지 않는다. 이 재조회에서는 주문·예치·funding 알림을 바꾸지 않고, 점유를 해제하며 조회 전에 보관한 웹훅 revision을 기준으로 다음 조회를 예약한다.
+
+장부가 바뀌지 않았는데 취소 합계가 0이거나(`PARTIAL_CANCELED`인데 잔액이 그대로인 경우 포함) 위와 다르면 기존처럼 외부 취소로 보고 차단한다. 오래된 조회를 보류한 뒤 새 조회에서 확인한 설명되지 않는 취소도 차단한다.
 
 ## 후속 작업
 
