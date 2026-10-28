@@ -1,4 +1,4 @@
--- V10은 #132의 근무 종료 연동이 사용한다. #132를 먼저 병합·배포한다.
+-- 현재 develop에서 이미 적용 가능한 V12 이후에 지급 스키마를 추가한다.
 CREATE TABLE payment_payout_commands (
  settlement_id BIGINT NOT NULL PRIMARY KEY,
  reference VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -22,3 +22,9 @@ CREATE TABLE payment_payout_commands (
  CONSTRAINT ck_payout_currency CHECK (currency = 'KRW'),
  CONSTRAINT ck_payout_status CHECK (status IN ('AWAITING_RESULT', 'SUCCEEDED', 'FAILED', 'REVIEW_REQUIRED'))
 );
+
+ALTER TABLE payment_settlements
+ ADD COLUMN payout_next_check_at DATETIME(6),
+ ADD COLUMN payout_check_failures INT NOT NULL DEFAULT 0,
+ ADD COLUMN payout_check_reason VARCHAR(40),
+ ADD INDEX idx_settlement_payout_check (status,payout_next_check_at);

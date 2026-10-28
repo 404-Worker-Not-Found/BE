@@ -32,7 +32,7 @@ import org.springframework.test.context.bean.override.mockito.*;
 import org.springframework.test.web.servlet.MockMvc;
 
 @AutoConfigureMockMvc
-@TestPropertySource(properties = {"payment.payout.enabled=true", "payment.payout.initial-delay=1h", "WORK_ATTENDANCE_TIME_ZONE=UTC"})
+@TestPropertySource(properties = {"payment.payout.enabled=true", "payment.payout.initial-delay=1h", "WORK_ATTENDANCE_TIME_ZONE=UTC", "payment.payout.lease-duration=2m"})
 class PayoutIntegrationTests extends IntegrationTestSupport {
   static final AtomicLong IDS = new AtomicLong(2_000_000);
   static final Instant NOW = Instant.parse("2026-10-28T00:00:00Z");
@@ -45,16 +45,18 @@ class PayoutIntegrationTests extends IntegrationTestSupport {
   @Autowired SettlementTargetService targets;
   @Autowired SettlementReservationService settlements;
   @Autowired JdbcTemplate jdbc;
+  @Autowired jakarta.persistence.EntityManager entityManager;
   @Autowired MockMvc mvc;
   @MockitoBean PayoutGateway gateway;
   @MockitoBean Clock payoutClock;
   @MockitoSpyBean SettlementHistoryRepository histories;
   final List<Long> created = new ArrayList<>();
+  Instant testNow = NOW;
 
   record Fixture(long job, long id) {}
 
   @BeforeEach void setup() {
-    when(payoutClock.instant()).thenReturn(NOW);
+    when(payoutClock.instant()).thenAnswer(call -> testNow);
     when(gateway.resolveRecipient(30)).thenReturn("test-seller-30");
   }
 
@@ -63,17 +65,19 @@ class PayoutIntegrationTests extends IntegrationTestSupport {
     for (long id : created) jdbc.update("DELETE FROM payment_payout_commands WHERE settlement_id=?", id);
   }
 
-  Fixture fixture(LocalDateTime payableAt) {
+  Fixture fixture(LocalDateTime payableAt) { return fixture(payableAt, 30L); }
+
+  Fixture fixture(LocalDateTime payableAt, long workerId) {
     long job = IDS.incrementAndGet(), matching = IDS.incrementAndGet(), work = IDS.incrementAndGet();
     deposits.saveAndFlush(PaymentDeposit.builder().jobPostId(job).ownerMemberId(20L).currency("KRW")
         .depositedAmount(new BigDecimal("1000")).build());
     long payment = Long.parseLong(payments.lock(UUID.randomUUID().toString(), new PaymentLockRequest(
-        matching, job, 20L, 30L, new BigDecimal("600"), "KRW")).paymentId());
+        matching, job, 20L, workerId, new BigDecimal("600"), "KRW")).paymentId());
     LocalDateTime completed = payableAt.minusHours(24);
     targets.record(new MatchConfirmation(UUID.randomUUID().toString(), matching, 4L, work, payment,
-        job, 20L, 30L, new BigDecimal("600"), "KRW", completed.minusHours(1)));
+        job, 20L, workerId, new BigDecimal("600"), "KRW", completed.minusHours(1)));
     long id = settlements.reserve(new WorkCompletion(UUID.randomUUID().toString(), work, matching, job,
-        20L, 30L, completed)).settlementId();
+        20L, workerId, completed)).settlementId();
     created.add(id);
     return new Fixture(job, id);
   }
@@ -86,7 +90,7 @@ class PayoutIntegrationTests extends IntegrationTestSupport {
   }
   Result result(Request request, Status status) {
     return new Result(request.reference(), request.recipient(), request.amount(), request.currency(), "provider-" + request.reference(),
-        status, status == Status.SUCCEEDED ? NOW.atOffset(ZoneOffset.UTC) : null);
+        status, status == Status.SUCCEEDED ? testNow.atOffset(ZoneOffset.UTC) : null);
   }
   String settlementStatus(Fixture f) {
     return jdbc.queryForObject("SELECT status FROM payment_settlements WHERE id=?", String.class, f.id());
@@ -99,6 +103,66 @@ class PayoutIntegrationTests extends IntegrationTestSupport {
   }
   void retryDue(Fixture f) {
     jdbc.update("UPDATE payment_payout_commands SET lease_until='2000-01-01', next_attempt_at='2000-01-01' WHERE settlement_id=?", f.id());
+  }
+
+  @Test
+  @org.springframework.transaction.annotation.Transactional
+  void unreadyFirstSettlementDoesNotStarveLaterBatchesEvenAfterItsRetryBecomesDue() {
+    jdbc.update("UPDATE payment_settlements SET payable_at=? WHERE status='RESERVED'", SCHEDULE_NOW.plusYears(1));
+    var blocked = due();
+    var healthy = fixture(SCHEDULE_NOW, 31L);
+    when(gateway.resolveRecipient(30)).thenThrow(new IllegalStateException("recipient unavailable"));
+    when(gateway.resolveRecipient(31)).thenReturn("test-seller-31");
+    when(gateway.request(any())).thenAnswer(call -> result(call.getArgument(0), Status.SUCCEEDED));
+    execution.executeDue(1);
+    assertThat(settlementStatus(blocked)).isEqualTo("RESERVED");
+    assertThat(commands.hasCommand(blocked.id())).isFalse();
+    testNow = NOW.plusSeconds(600);
+    execution.executeDue(1);
+    entityManager.flush();
+    assertThat(settlementStatus(healthy)).isEqualTo("PAID");
+    assertThat(balance(blocked, "settlement_reserved_amount")).isEqualByComparingTo("600");
+    verify(gateway, times(1)).request(any());
+  }
+
+  @Test void preflightCooldownSurvivesRetriesAndCanRecoverWithARecipient() {
+    var f = due();
+    when(gateway.resolveRecipient(30)).thenReturn(null);
+    execution.execute(f.id());
+    assertThat(commands.hasCommand(f.id())).isFalse();
+    assertThat(jdbc.queryForObject("SELECT payout_next_check_at FROM payment_settlements WHERE id=?",
+        LocalDateTime.class, f.id())).isEqualTo(LocalDateTime.ofInstant(NOW.plusSeconds(300), ZoneOffset.UTC));
+    when(gateway.resolveRecipient(30)).thenReturn("test-seller-30");
+    execution.execute(f.id());
+    verify(gateway, times(1)).resolveRecipient(30);
+    testNow = NOW.plusSeconds(300);
+    when(gateway.request(any())).thenAnswer(call -> result(call.getArgument(0), Status.SUCCEEDED));
+    execution.execute(f.id());
+    assertThat(settlementStatus(f)).isEqualTo("PAID");
+    verify(gateway, times(1)).request(any());
+  }
+
+  @Test void invalidOriginalLockIsDeferredWithoutReleasingMoney() {
+    var f = due();
+    jdbc.update("UPDATE payment_matching_slots SET active_payment_id=NULL WHERE matching_id=(SELECT matching_id FROM payment_settlements WHERE id=?)", f.id());
+    execution.execute(f.id());
+    assertThat(settlementStatus(f)).isEqualTo("RESERVED");
+    assertThat(jdbc.queryForObject("SELECT payout_check_failures FROM payment_settlements WHERE id=?", Integer.class, f.id())).isEqualTo(1);
+    assertThat(balance(f, "settlement_reserved_amount")).isEqualByComparingTo("600");
+    assertThat(commands.hasCommand(f.id())).isFalse();
+    verify(gateway, never()).request(any());
+  }
+
+  @Test void preparationDeferralCannotChangeAnAlreadyRequestedPayoutAndLeaseIsConfigured() {
+    var f = due();
+    Claim active = claim(f);
+    assertThat(jdbc.queryForObject("SELECT lease_until FROM payment_payout_commands WHERE settlement_id=?",
+        LocalDateTime.class, f.id())).isEqualTo(LocalDateTime.ofInstant(NOW.plusSeconds(120), ZoneOffset.UTC));
+    commands.deferPreparation(f.id(), LocalDateTime.ofInstant(NOW, ZoneOffset.UTC));
+    assertThat(jdbc.queryForObject("SELECT payout_check_failures FROM payment_settlements WHERE id=?", Integer.class, f.id())).isZero();
+    assertThat(settlementStatus(f)).isEqualTo("PAYOUT_REQUESTED");
+    transactions.settle(active, result(active.request(), Status.SUCCEEDED));
+    assertThat(settlementStatus(f)).isEqualTo("PAID");
   }
 
   @Test void paysExactlyOnceAtScheduleZoneBoundaryAndRecordsProviderTime() {

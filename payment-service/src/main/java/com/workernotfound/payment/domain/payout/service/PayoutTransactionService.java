@@ -36,6 +36,7 @@ public class PayoutTransactionService {
     var existing = commands.findCommandForUpdate(settlement.getId());
     if (existing.isPresent()) return reclaim(settlement, existing.get(), now);
     if (settlement.getStatus() != SettlementStatus.RESERVED || scheduleNow().isBefore(settlement.getPayableAt())) return null;
+    if (!commands.isPreparationDue(settlement.getId(), scheduleNow(), now)) return null;
     if (!locked.active()) throw new IllegalStateException("정산의 원래 잠금이 활성 TRANSFERRED 상태가 아닙니다.");
     if (locked.deposit().isFundingBlocked()) {
       settlement.hold(SettlementHoldReason.FUNDING_BLOCKED);

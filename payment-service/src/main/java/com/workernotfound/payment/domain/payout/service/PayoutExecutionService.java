@@ -22,10 +22,13 @@ public class PayoutExecutionService {
   @Value("${payment.payout.schedule-zone:Asia/Seoul}") private ZoneId scheduleZone;
 
   public void execute(long id) {
-    var references = commands.findReferences(id);
-    if (references.isEmpty()) return;
-    String recipient = commands.hasCommand(id) ? null : gateway.resolveRecipient(references.get().workerId());
-    Claim claim = transactions.claim(references.get(), recipient);
+    Claim claim;
+    try { claim = prepare(id); }
+    catch (RuntimeException exception) {
+      commands.deferPreparation(id, utcNow());
+      log.warn("지급 준비 재시도 예약: settlementId={}, type={}", id, exception.getClass().getSimpleName());
+      return;
+    }
     if (claim == null) return;
     try {
       if (claim.firstAttempt()) transactions.settle(claim, gateway.request(claim.request()));
@@ -39,6 +42,18 @@ public class PayoutExecutionService {
       transactions.retry(claim, false);
     }
   }
+
+  private Claim prepare(long id) {
+    var references = commands.findReferences(id);
+    if (references.isEmpty()) return null;
+    boolean hasCommand = commands.hasCommand(id);
+    if (!hasCommand && !commands.isPreparationDue(id,
+        LocalDateTime.ofInstant(payoutClock.instant(), scheduleZone), utcNow())) return null;
+    String recipient = hasCommand ? null : gateway.resolveRecipient(references.get().workerId());
+    return transactions.claim(references.get(), recipient);
+  }
+
+  private LocalDateTime utcNow() { return LocalDateTime.ofInstant(payoutClock.instant(), ZoneOffset.UTC); }
 
   public void executeDue(int limit) {
     if (limit < 1 || limit > 100) throw new IllegalArgumentException("지급 조회 크기는 1~100이어야 합니다.");
