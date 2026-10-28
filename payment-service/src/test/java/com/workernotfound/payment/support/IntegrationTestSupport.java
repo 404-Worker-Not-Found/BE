@@ -19,7 +19,7 @@ public abstract class IntegrationTestSupport {
     REDIS.start();
   }
 
-  // 잠금 대기 관찰(performance_schema)에만 컨테이너 관리자 연결을 쓴다. 애플리케이션 계정 권한은 그대로 둔다.
+  // 잠금 대기 관찰과 격리된 업그레이드 테스트 스키마에만 관리자 연결을 쓴다. 앱 계정 권한은 유지한다.
   protected static Connection openRootConnection() throws SQLException {
     return DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
   }

@@ -40,6 +40,12 @@ payment:
     poll-interval: ${PAYMENT_SETTLEMENT_EVENTS_POLL_INTERVAL:1s}
     initial-delay: ${PAYMENT_SETTLEMENT_EVENTS_INITIAL_DELAY:0s}
     batch-size: ${PAYMENT_SETTLEMENT_EVENTS_BATCH_SIZE:100}
+  payout:
+    # 실제 지급 어댑터·수취인 등록이 연결되기 전에는 켜지 않는다. 운영 성공 대역은 제공하지 않는다.
+    enabled: ${PAYMENT_PAYOUT_ENABLED:false}
+    schedule-zone: ${WORK_ATTENDANCE_TIME_ZONE:Asia/Seoul}
+    lease-duration: ${PAYMENT_PAYOUT_LEASE_DURATION:1m}
+    preparation-retry-delay: ${PAYMENT_PAYOUT_PREPARATION_RETRY_DELAY:5m}
   recovery:
     enabled: true
     interval: 30s

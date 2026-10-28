@@ -457,7 +457,7 @@ class OrderIntegrationTests extends IntegrationTestSupport {
     verifyNoInteractions(toss);
   }
 
-  String token(long member, String role) throws Exception {
+  static String token(long member, String role) throws Exception {
     var b64 = Base64.getUrlEncoder().withoutPadding();
     String header =
         b64.encodeToString("{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
