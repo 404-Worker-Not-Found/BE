@@ -83,6 +83,7 @@ member-service의 `PATCH /api/members/internal/{memberId}/contact`는 X-Internal
 이때 가용·잠금·정산 예약·환불 예약 금액은 모두 0이다. 종료된 예치와 그 공고의 DEPOSITED 주문은 탈퇴를 차단하지 않는다.
 남은 금액이 있거나 차단된 예치, 예치가 없는 DEPOSITED 주문, READY·CONFIRMING·REVIEW_REQUIRED 주문은 계속 차단한다.
 RELEASED 잠금은 환불이나 정산 종료의 증거로 취급하지 않는다.
+상호 리뷰([상호 리뷰 설계](member-review-design.md))는 탈퇴 차단 사유가 아니다. 탈퇴 준비·완료된 회원은 리뷰를 쓰거나 새로 받을 수 없고, 이미 남긴 리뷰와 평점 집계는 거래 증거로 남긴다.
 필요한 서비스가 응답하지 않아도 탈퇴를 완료하지 않는다.
 
 각 서비스는 본인 DB의 account_gates 행과 명령별 receipt를 사용한다.
