@@ -23,6 +23,9 @@ matching:
   schedule:
     # 공고 근무 일시를 해석하는 시간대. 같은 로컬 시각을 같은 순간으로 보도록 work-service와 같은 설정을 쓴다.
     time-zone: ${WORK_ATTENDANCE_TIME_ZONE:Asia/Seoul}
+  work-events:
+    enabled: ${MATCHING_WORK_EVENTS_ENABLED:true}
+    stream: ${WORK_OUTBOX_STREAM_KEY:work:domain-events}
   jwt:
     secret: ${AUTH_JWT_SECRET}
   member-service:

@@ -128,6 +128,8 @@ Current `matching-service` scaffold:
 
 Current matching application implementation:
 
+- Work terminal-event consumers (#104/#105 MVP) reconcile confirmed work IDs and participants against the completed Saga. WorkCompleted closes a matching as COMPLETED; WorkCanceled/WorkNoShow close the matching and selected application as CANCELED with histories and deduplication. No recruitment reopening or trust penalties are applied.
+
 - JWT-authenticated `WORKER` members can create, read, list, and cancel their own applications.
 - Application creation validates an `ACTIVE` `WORKER` through the existing member-service internal API.
 - The matching-service client for the job-service application-admission contract is implemented, and the job-service endpoint is available. matching-service maps both the documented symbolic codes and job-service domain codes (`JOB-409-001`~`003`) to application errors.
@@ -292,6 +294,7 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - Local HTTP/MySQL ports are 8083/3309. `./scripts/local-run.sh job` runs the service; repository verification includes its MySQL integration tests.
 - See `docs/architecture/job-post-design.md`.
 
+
 ## Work Service Context
 
 - `work-service` uses Java 17, Spring Boot 4.1.0, service-owned MySQL, Flyway, Spring Security, and Springdoc.
@@ -309,7 +312,7 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - MySQL integration tests cover command retries, conflicts, concurrent creation/cancellation, internal authentication, and Swagger access.
 - Local execution is available through `./scripts/local-run.sh work`; the service uses port 8086 and its local MySQL uses port 3311.
 
-- Confirmed-work cancellation foundation (#104): participants request cancellation with a reason and the other participant must consent before the scheduled start or GPS check-in, whichever occurs first. Check-in stays available and expires pending requests. Request/reject/withdraw/expiry and agreement cancellation persist in one local transaction with Outbox events; no automatic re-recruitment, payment release/refund, or trust penalty is performed. GPS-only automatic no-show marking runs strictly after the configured late window, skips missing-location work, and records the decision time/deadline plus a system history/event.
+- Confirmed-work cancellation foundation (#104): participants request cancellation with a reason and the other participant must consent before the scheduled start or GPS check-in, whichever occurs first. Check-in stays available and expires pending requests. Request/reject/withdraw/expiry and agreement cancellation persist in one local transaction with Outbox events; no automatic re-recruitment, PG refund, or trust penalty is performed. Work commands do not release funds themselves; the separate payment termination consumer is described in Payment Service Context. GPS-only automatic no-show marking runs strictly after the configured late window, skips missing-location work, and records the decision time/deadline plus a system history/event.
 
 ## Chat Service Context
 
@@ -345,6 +348,8 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - Refund failure requires an explicitly allowed Toss HTTP status/code pair and a re-query proving no cancellation was applied. All 5xx and mismatched/missing status/code responses preserve the reserved amount and retry the same refund/key (#123).
 - Order re-query snapshots the confirmed refund total before provider I/O. If it changes before the result is saved, the stale response is discarded and retried without changing the order, deposit, or funding notifications; unexplained cancellations from a fresh query still block funding (#122).
 - See `docs/architecture/payment-lock-design.md` for the boundary and follow-up work. See `docs/architecture/toss-deposit-design.md` for the provider and job/frontend contracts. Full matching acceptance still requires product frontend and job-service integration.
+
+- A dedicated work-termination consumer releases only the confirmed work's normal active payment lock on cancellation/no-show. Funding-blocked or settlement-transferred funds are durably marked REVIEW_REQUIRED; a transferable settlement is held. Termination records prevent a late completion from reusing released money. This is not a PG refund or an automatic resolution of blocked funds.
 
 ## Notification Service Context
 

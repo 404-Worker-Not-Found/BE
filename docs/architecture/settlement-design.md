@@ -75,7 +75,7 @@
 
 - `PAYOUT_REQUESTED`는 결과를 확인하기 전에는 보류하거나 다시 요청할 수 없다. 결과가 불명확하면 같은 지급 요청으로 조회·재시도한다(후속 단위).
 - `PAID`로 갈 때 예치의 정산 예약을 지급 완료로 옮긴다(`PaymentDeposit.completeSettlementPayout`).
-- 보류 사유는 `ON_HOLD`일 때만 존재한다. 현재 사유는 `FUNDING_BLOCKED`(예치 후 PG 취소·부분취소 확인) 하나이며, 정산 예약 시 예치가 차단 상태면 같은 트랜잭션에서 보류한다. #104의 취소·노쇼 판정이 보류 사유를 추가할 수 있다.
+- 보류 사유는 `ON_HOLD`일 때만 존재한다. 현재 사유는 `FUNDING_BLOCKED`(예치 후 PG 취소·부분취소 확인)와 `WORK_TERMINATED`(취소·노쇼 후 이미 생성된 지급 전 정산 보류)다. 예치 차단은 예약 시 같은 트랜잭션에서 반영한다. 근무 종료는 RESERVED/PAYOUT_FAILED 정산을 보류하고 TRANSFERRED 잠금을 해제하지 않는다. 보류 해제 조건은 후속 계약이며, PAYOUT_REQUESTED/PAID를 임의로 되돌리지 않는다.
 - 모든 전이는 `payment_settlement_histories`에 이전·다음 상태, 사유, 시각으로 남긴다.
 
 ## 업무 식별자와 중복 방지

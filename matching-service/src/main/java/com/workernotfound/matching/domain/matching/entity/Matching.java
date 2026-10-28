@@ -139,6 +139,12 @@ public class Matching extends BaseEntity {
 		this.revision++;
 	}
 
+	public void finishWork(boolean completed) {
+		if (status != MatchingStatus.CONFIRMED) throw new BusinessException(MatchingErrorCode.MATCHING_STATE_CONFLICT);
+		status = completed ? MatchingStatus.COMPLETED : MatchingStatus.CANCELED;
+		revision++;
+	}
+
 	public void confirm(LocalDateTime confirmedAt) {
 		if (status != MatchingStatus.PENDING) {
 			throw new BusinessException(MatchingErrorCode.MATCHING_STATE_CONFLICT);
