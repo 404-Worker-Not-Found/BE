@@ -19,7 +19,7 @@ class RunnerFailureTests(unittest.TestCase):
         try:
             command(sys.executable, '-c', 'import time; time.sleep(10)', sensitive, timeout=.1)
         except CommandFailure as error:
-            rendered = ''.join(traceback.format_exception(error))
+            rendered = ''.join(traceback.format_exception(type(error), error, error.__traceback__))
             self.assertNotIn(sensitive, rendered)
             self.assertNotIn('TimeoutExpired', rendered)
             self.assertIn('timed out', str(error))
