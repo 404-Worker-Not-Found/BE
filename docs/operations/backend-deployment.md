@@ -51,7 +51,7 @@ python3 --version
 
 태그는 선택한 커밋의 40자리 SHA다. **8개 이미지가 모두 발행된 워크플로 실행만 배포한다.** 부분 발행에 실패한 태그는 사용하지 않는다. 서버와 이미지의 커밋을 맞춘다.
 
-로컬에서 프록시 경로·내부 API 차단·CORS를 별도로 검증하려면 `python3 deploy/test-proxy.py`를 실행한다. Docker가 필요하며 임시 네트워크/컨테이너를 만들고 종료 시 정리한다. AWS나 실제 DB는 사용하지 않는다. 이 검사는 이미지 발행 전 워크플로에도 포함된다.
+로컬에서 프록시 경로·내부 API 차단·CORS를 별도로 검증하려면 `python3 deploy/test-proxy.py`를 실행한다. Docker가 필요하며 임시 네트워크/컨테이너를 만들고 종료 시 정리한다. AWS나 실제 DB는 사용하지 않는다. `python3 deploy/test-config.py`는 임시 설정과 실제 Compose CLI로 셸의 이전 이미지 태그 등이 배포 파일을 덮어쓰지 않는지, 잘못된 태그를 거부하는지 검사한다. 두 검사 모두 이미지 발행 전 워크플로에 포함된다.
 
 기본 이미지 이름은 `ghcr.io/404-worker-not-found/be/auth-service:<SHA>` 형식이다. 저장소를 옮기면 `IMAGE_PREFIX`도 변경한다. 조직의 Actions/package 정책에 따라 GHCR 쓰기 권한 허용이 필요할 수 있다.
 
@@ -73,6 +73,8 @@ openssl rand -hex 32
 ```
 
 마지막 명령을 각 비밀번호와 secret마다 따로 실행해 파일을 채운다. `.env.deploy`는 Git에서 제외된다. 로컬 `.env`를 복사하거나 `source`하지 않는다. `IMAGE_TAG`에는 전체 SHA, `API_DOMAIN`에는 스킴/포트 없는 호스트명, `FRONTEND_ORIGIN`에는 팀원이 확정한 `https://프로젝트.vercel.app`처럼 정확한 Origin을 넣는다. 끝에 `/`를 붙이지 않고 `*.vercel.app` 전체를 허용하지 않는다. 프론트 주소가 아직 없으면 예제의 예약된 Origin을 유지해도 서버 API의 비브라우저 확인은 가능하다.
+
+배포 스크립트는 Compose 파일의 보간 변수에 해당하는 셸 환경변수를 제거한 후 `.env.deploy`를 읽는다. 셸에 남아 있는 이전 `IMAGE_TAG`나 인증정보가 배포 파일을 덮어쓰지 않는다. Docker 연결·로그인용 `DOCKER_HOST`와 `DOCKER_CONFIG` 등은 유지한다.
 
 회원가입 실제 동작에는 Gmail 앱 비밀번호, SOLAPI 키/등록 발신번호, 점주 가입에는 국세청 API 키가 필요하다. OAuth도 제공자 설정과 프론트 redirect URI 등록이 필요하다. 비어 있으면 해당 기능이 성공했다고 간주하지 않는다. Toss는 테스트 키만 지원하며 `TOSS_ENABLED=false`일 때 결제로 자금을 확보해야 하는 공고 게시/매칭의 전체 흐름은 검증할 수 없다. 실결제 키를 넣지 않는다.
 

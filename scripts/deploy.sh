@@ -3,6 +3,20 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${DEPLOY_ENV_FILE:-${ROOT_DIR}/.env.deploy}"
+# The deployment file is authoritative; exported shell values must not override it.
+# Keep Docker connection/login settings such as DOCKER_HOST and DOCKER_CONFIG.
+COMPOSE_VARIABLES="$(python3 - "${ROOT_DIR}/compose.deploy.yml" <<'PY'
+import pathlib
+import re
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text()
+print("\n".join(sorted(set(re.findall(r"(?<!\$)\$\{([A-Z][A-Z0-9_]*)", text)))))
+PY
+)"
+while IFS= read -r compose_variable; do
+  unset "$compose_variable"
+done <<< "$COMPOSE_VARIABLES"
 COMPOSE=(docker compose --project-name wnf --env-file "$ENV_FILE" -f "${ROOT_DIR}/compose.deploy.yml")
 APPS=(auth-service member-service job-service matching-service work-service chat-service payment-service notification-service)
 

@@ -83,12 +83,18 @@ def main():
                     "-v", f"{upstream}:/etc/caddy/Caddyfile:ro", "caddy:2-alpine"))
             address = docker("port", proxy, "80/tcp")
             base = "http://" + address
-            for attempt in range(30):
+            ready_paths = ("/api/auth/login", "/api/members/me", "/api/jobs/search",
+                           "/api/applications", "/api/works/me", "/api/chat-rooms/me",
+                           "/api/payments/webhooks/toss", "/api/notifications/me")
+            deadline = time.monotonic() + 30
+            while True:
                 try:
-                    if request(base, "/api/jobs/search")[0] == 200:
+                    if all(request(base, path)[0] == 200 for path in ready_paths):
                         break
-                except (OSError, urllib.error.URLError):
+                except OSError:
                     pass
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("Proxy upstreams were not ready within 30 seconds.")
                 time.sleep(0.5)
             verify(base)
     finally:
