@@ -24,8 +24,12 @@ class CommandFailure(RuntimeError):
     pass
 
 
-def command(*args, **kwargs):
-    result = subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **kwargs)
+def command(*args, timeout=30, **kwargs):
+    try:
+        result = subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                timeout=timeout, **kwargs)
+    except subprocess.TimeoutExpired:
+        raise CommandFailure(f'{args[0]} timed out after {timeout}s') from None
     if result.returncode:
         # Arguments may contain generated credentials; do not expose them in tracebacks.
         raise CommandFailure(f'{args[0]} exited with status {result.returncode}')
@@ -121,7 +125,7 @@ class Journey:
 
     def sql(self, service, query):
         return command('docker', 'exec', '-e', 'MYSQL_PWD=' + self.db_password, self.mysql,
-                       'mysql', '-uroot', '-N', '-B', service, '-e', query)
+                       'mysql', '--protocol=TCP', '-h127.0.0.1', '-uroot', '-N', '-B', service, '-e', query, timeout=10)
 
     def redis(self, *args):
         return command('docker', 'exec', self.redis_name, 'redis-cli', *map(str, args))
@@ -153,7 +157,7 @@ class Journey:
             log = open(self.logs / (service + '-build.log'), 'w')
             try:
                 subprocess.run(['./gradlew', 'bootJar'], cwd=ROOT / (service + '-service'),
-                               stdout=log, stderr=subprocess.STDOUT, check=True)
+                               stdout=log, stderr=subprocess.STDOUT, check=True, timeout=900)
             finally:
                 log.close()
         self.mysql = 'wnf-journey-mysql-' + self.run_id
@@ -216,7 +220,9 @@ class Journey:
         email = f'journey{index}@example.invalid'
         phone = f'0109000{index:04d}'
         for channel, value in [('email', email), ('sms', phone)]:
-            self.redis('SET', f'auth:verification:{channel}:verified:SIGNUP:{value}', 'true', 'EX', 1800)
+            key = f'auth:verification:{channel}:verified:SIGNUP:{value}'
+            if self.redis('SET', key, 'true', 'EX', 1800) != 'OK' or self.redis('GET', key) != 'true':
+                raise AssertionError('Isolated verification fixture was not stored')
         body = dict(name='Journey ' + role, email=email, password='Journey-Test-123!', phoneNumber=phone, deviceId='journey')
         location = dict(address='서울특별시 중구 테스트', latitude=37.5665, longitude=126.9780)
         if role == 'owner':
@@ -334,21 +340,43 @@ class Journey:
             self.check(label + ' terminal propagation and money release')
 
     def close(self):
-        for process in self.processes:
-            if process.poll() is None:
-                process.terminate()
-        for process in self.processes:
+        failures = []
+        try:
+            for process in self.processes:
+                try:
+                    if process.poll() is None:
+                        process.terminate()
+                except Exception:
+                    failures.append('process termination')
+            for process in self.processes:
+                try:
+                    try:
+                        process.wait(timeout=15)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=5)
+                except Exception:
+                    failures.append('process exit')
+            for handle in self.handles:
+                try:
+                    handle.close()
+                except Exception:
+                    failures.append('log handle')
+        finally:
             try:
-                process.wait(timeout=15)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
-        for handle in self.handles:
-            handle.close()
-        for name in reversed(self.containers):
-            subprocess.run(['docker', 'rm', '-fv', name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.double.shutdown()
-        self.double.server_close()
+                for name in reversed(self.containers):
+                    try:
+                        command('docker', 'rm', '-fv', name)
+                    except (CommandFailure, OSError):
+                        failures.append(name)
+                        print(f'WARN could not remove container {name}; manual cleanup required', flush=True)
+            finally:
+                try:
+                    self.double.shutdown()
+                finally:
+                    self.double.server_close()
+        if failures:
+            raise CommandFailure('Cleanup incomplete: ' + ', '.join(failures))
 
 
 def interrupted(_signal, _frame):
@@ -364,6 +392,9 @@ def main():
         run.scenarios()
         print(f'PASS {len(run.checks)} checks; real providers/browser excluded', flush=True)
     finally:
+        # Cleanup is bounded; a second termination signal must not skip remaining resources.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
         run.close()
 
 
