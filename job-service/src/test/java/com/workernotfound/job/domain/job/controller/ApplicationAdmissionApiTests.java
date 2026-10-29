@@ -6,10 +6,13 @@ import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import com.workernotfound.job.domain.job.entity.enums.UrgencyLevel;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
 import com.workernotfound.job.support.IntegrationTestSupport;
+import com.workernotfound.job.support.MutableClock;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +38,27 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
 
     @Autowired
     private JobPostRepository jobPostRepository;
+
+    @Autowired
+    private MutableClock clock;
+
+    @Test
+    void returnsIdenticalAdmissionSnapshotWithNanosecondClock() throws Exception {
+        clock.fixAt(Instant.now().truncatedTo(ChronoUnit.SECONDS).plusNanos(123_456_789));
+        try {
+            JobPost jobPost = saveJobPost(JobStatus.OPEN, LocalDateTime.now(clock).plusHours(1));
+            String key = newKey();
+            String first = requestAdmission(jobPost.getId(), key, 100L)
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+            String replay = requestAdmission(jobPost.getId(), key, 100L)
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+            assertThat(com.jayway.jsonpath.JsonPath.<Object>read(replay, "$.data"))
+                    .isEqualTo(com.jayway.jsonpath.JsonPath.<Object>read(first, "$.data"));
+        } finally {
+            clock.reset();
+        }
+    }
 
     @Test
     void issuesAdmissionWithJobSnapshot() throws Exception {

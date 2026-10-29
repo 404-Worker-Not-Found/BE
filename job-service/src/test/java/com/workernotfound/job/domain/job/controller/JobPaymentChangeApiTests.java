@@ -10,9 +10,11 @@ import com.workernotfound.job.support.PaymentChangeTestSupport;
 import com.workernotfound.job.support.StubPaymentServer.RecordedRequest;
 import com.workernotfound.job.support.TestAccessTokens;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -33,6 +35,19 @@ class JobPaymentChangeApiTests extends PaymentChangeTestSupport {
 
     // 모레 09:00~13:00(240분), 시급 10,320원이면 1인 41,280원
     private static final long WAGE_PER_WORKER = 41_280L;
+
+    @Test
+    void rejectsDeadlineThatTruncatesBeforeCurrentTime() throws Exception {
+        LinkedJob job = createLinkedJob(1);
+        clock.fixAt(Instant.now().truncatedTo(ChronoUnit.SECONDS).plusNanos(123_456_789));
+        String deadline = now().plusNanos(111).toString();
+
+        changeTerms(job.jobPostId(), job.ownerMemberId(), newKey("precision"),
+                with(terms(job, 2), "applicationDeadline", deadline))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("JOB-400-002"));
+        assertNoChangeIssued(job);
+    }
 
     @Test
     void onlyAuthenticatedOwnerOfJobCanChangeOrRetry() throws Exception {

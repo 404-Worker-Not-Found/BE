@@ -2033,3 +2033,15 @@ Related files:
 - `docs/operations/backend-deployment.md`
 - `compose.deploy.yml`
 - `docs/PROJECT_CONTEXT.md`
+
+## 2026-10-29 - Stored Job Time Precision
+
+Decision:
+- Normalize admission `admittedAt`/`expiresAt` and job application deadlines to microseconds before initial persistence, including payment-term deadline updates. Keep the existing `DATETIME(6)` schema and schedule time zone.
+
+Reason:
+- Linux clocks can supply nanoseconds that MySQL rounds during storage. Initial admission responses then differ from idempotent replay responses, and a deadline fixed from the in-memory entity can precede the reloaded deadline.
+
+Related files:
+- `job-service/src/main/java/com/workernotfound/job/domain/job/entity/JobApplicationAdmission.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/entity/JobPost.java`

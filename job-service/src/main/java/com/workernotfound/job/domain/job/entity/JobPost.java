@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 
 @Getter
 @Entity
@@ -141,7 +142,7 @@ public class JobPost extends BaseEntity {
         this.latitude = latitude;
         this.longitude = longitude;
         this.urgencyLevel = urgencyLevel;
-        this.applicationDeadline = applicationDeadline;
+        this.applicationDeadline = toStoredTime(applicationDeadline);
         // 검증된 예치가 반영되기 전까지 비공개로 저장한다. 공개(OPEN) 전환은 예치 상태 수신(publishAfterFunding)이 맡는다.
         this.status = JobStatus.PAYMENT_PENDING;
     }
@@ -177,7 +178,11 @@ public class JobPost extends BaseEntity {
         this.baseHourlyWage = terms.baseHourlyWage();
         this.extraWage = terms.extraWage();
         this.recruitCount = terms.recruitCount();
-        this.applicationDeadline = terms.applicationDeadline();
+        this.applicationDeadline = toStoredTime(terms.applicationDeadline());
+    }
+
+    private static LocalDateTime toStoredTime(LocalDateTime time) {
+        return time == null ? null : time.truncatedTo(ChronoUnit.MICROS);
     }
 
     public boolean isLinkedToPaymentOrder(String orderId) {
