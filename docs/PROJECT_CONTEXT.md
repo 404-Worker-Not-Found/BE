@@ -270,6 +270,8 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 
 ## Job Service Context
 
+- Admission snapshot timestamps and job application deadlines are normalized to MySQL `DATETIME(6)` precision before persistence. Nanosecond-capable clocks must not change the initial/replayed admission response or the exact deadline boundary after reload (#142).
+
 - `job-service` uses Java 17, Spring Boot 4.1.0, service-owned MySQL, Flyway, Spring Security, and Springdoc.
 - It owns job posts and industry categories. Owners create jobs with `POST /api/jobs` (`OWNER` JWT). Search returns only `OPEN` jobs that are not funding-blocked. Detail reads are public (including funding-blocked jobs) for jobs that were ever published (`job_posts.published`, V19). `PAYMENT_PENDING` jobs and jobs closed before publication can be read only by the authenticated owner (by JWT `memberId`); others get 404.
 - New jobs are created as `PAYMENT_PENDING` (private). `PAYMENT_PENDING`/`OPEN`/`MATCHING`/`CLOSED` are defined. Implemented transitions are `PAYMENT_PENDING -> OPEN` after verified funding, recruitment completion to `CLOSED`, the deadline-based transitions, and owner manual close, all recorded in `job_status_histories`. Existing jobs created before V10 keep their status and have no payment order; they are not deposit-backed, so matching acceptance fails at the payment-lock step.

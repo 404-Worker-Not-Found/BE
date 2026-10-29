@@ -9,6 +9,7 @@ import com.workernotfound.job.global.account.AccountGateService;
 import com.workernotfound.job.global.exception.BusinessException;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +33,8 @@ public class JobCommandService {
         accountGates.requireActive(ownerId);
         categoryFindService.findCategory(request.categoryId());
         long totalDeposit = calculateTotalDeposit(request);
-        validateApplicationDeadline(request);
+        LocalDateTime applicationDeadline = request.applicationDeadline().truncatedTo(ChronoUnit.MICROS);
+        validateApplicationDeadline(request, applicationDeadline);
 
         JobPost jobPost = JobPost.builder()
                 .businessId(request.businessId())
@@ -52,7 +54,7 @@ public class JobCommandService {
                 .latitude(request.latitude())
                 .longitude(request.longitude())
                 .urgencyLevel(UrgencyLevel.valueOf(request.urgencyLevel()))
-                .applicationDeadline(request.applicationDeadline())
+                .applicationDeadline(applicationDeadline)
                 .build();
         // 저장된 버전을 결제용 버전으로 고정하기 위해 INSERT를 먼저 반영한다.
         JobPost saved = jobPostRepository.saveAndFlush(jobPost);
@@ -72,12 +74,12 @@ public class JobCommandService {
         return jobWageCalculator.calculateTotalExpectedWage(wagePerWorker, request.recruitCount());
     }
 
-    private void validateApplicationDeadline(CreateJobRequest request) {
+    private void validateApplicationDeadline(CreateJobRequest request, LocalDateTime applicationDeadline) {
         LocalDateTime now = LocalDateTime.now(clock);
-        if (!request.applicationDeadline().isAfter(now)) {
+        if (!applicationDeadline.isAfter(now)) {
             throw new BusinessException(JobErrorCode.INVALID_APPLICATION_DEADLINE, "지원 마감 시간은 현재 시간 이후여야 합니다.");
         }
-        if (!request.applicationDeadline().isBefore(request.workDate().atTime(request.startTime()))) {
+        if (!applicationDeadline.isBefore(request.workDate().atTime(request.startTime()))) {
             throw new BusinessException(JobErrorCode.INVALID_APPLICATION_DEADLINE, "지원 마감 시간은 근무 시작 시간 이전이어야 합니다.");
         }
     }
