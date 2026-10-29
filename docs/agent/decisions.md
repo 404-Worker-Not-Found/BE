@@ -2018,3 +2018,18 @@ Related files:
 - 본인 역할의 점주·근로자만 정산을 조회할 수 있다. 공개 API에 수취인·provider 식별자를 포함하지 않는다.
 - #132 종료 연동을 먼저 병합하며, 지급 명령·준비 재시도 V13 마이그레이션은 develop의 V12 이후 순차 배포한다. 배포된 V12는 변경하지 않고 outOfOrder를 사용하지 않는다. 수취인 등록·KYC·실제 지급 연동·수수료·세금·운영 대사는 별도 보강한다.
 - 지급 준비 실패는 RESERVED·예약액을 유지하고 UTC 재확인 시각·실패 횟수·사유를 저장한다. 기본 5분 대기와 미시도 후보 우선 조회로 뒤의 정상 지급을 막지 않으며, 기존 요청의 결과 조회는 계속한다. lease는 기본 1분으로 설정 가능하며 provider 요청·조회 전체 타임아웃보다 길어야 한다.
+
+## 2026-10-29 - Lightsail for Graduation Backend Deployment
+
+Decision:
+- The user chose AWS Lightsail after comparing costs and operational differences with EC2. The purpose is graduation project completion; actual user operation remains undecided.
+- The deployment scope is backend only. A teammate owns the frontend and expects to use Vercel. The user chose a free API subdomain; the runbook uses sslip.io with a static public IP.
+- The total November–December budget is KRW 300,000. Start with the prepared single-server 8GB configuration and verify actual load before resizing. Seoul is the selected region. The user approved adding `ap-northeast-2` to the organization-wide region SCP; this was saved and verified on 2026-10-29. Seoul was also enabled in the project account's visible-region list.
+
+Reason:
+- Predictable bundled pricing and a small initial operations scope fit a two-month graduation demonstration.
+
+Related files:
+- `docs/operations/backend-deployment.md`
+- `compose.deploy.yml`
+- `docs/PROJECT_CONTEXT.md`

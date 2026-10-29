@@ -1,0 +1,287 @@
+name: wnf
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-runtime-env: &runtime-env
+  SERVER_ADDRESS: "127.0.0.1"
+  JAVA_TOOL_OPTIONS: "-Xms64m -Xmx256m -XX:MaxMetaspaceSize=192m -XX:ReservedCodeCacheSize=64m -Xss512k -XX:+ExitOnOutOfMemoryError -Duser.timezone=Asia/Seoul"
+  SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
+  SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "1"
+  SERVER_TOMCAT_THREADS_MAX: "50"
+  SERVER_TOMCAT_THREADS_MIN_SPARE: "5"
+  SERVER_SHUTDOWN: graceful
+  SERVER_FORWARD_HEADERS_STRATEGY: framework
+  SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE: 30s
+  SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+  AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?Set AUTH_JWT_SECRET}
+  INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?Set INTERNAL_API_SECRET}
+  MATCHING_REDIS_HOST: matching-redis
+  MATCHING_REDIS_PORT: "6379"
+  MEMBER_SERVICE_BASE_URL: http://127.0.0.1:8082
+  JOB_SERVICE_BASE_URL: http://127.0.0.1:8083
+  MATCHING_SERVICE_BASE_URL: http://127.0.0.1:8084
+  WORK_SERVICE_BASE_URL: http://127.0.0.1:8086
+  CHAT_SERVICE_BASE_URL: http://127.0.0.1:8087
+  PAYMENT_SERVICE_BASE_URL: http://127.0.0.1:8085
+  NOTIFICATION_SERVICE_BASE_URL: http://127.0.0.1:8088
+  WORK_ATTENDANCE_TIME_ZONE: Asia/Seoul
+
+x-app: &app
+  restart: unless-stopped
+  init: true
+  mem_limit: 640m
+  stop_grace_period: 40s
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+  logging: *logging
+  network_mode: service:app-network
+  depends_on:
+    app-network:
+      condition: service_started
+    mysql:
+      condition: service_healthy
+    auth-redis:
+      condition: service_healthy
+    matching-redis:
+      condition: service_healthy
+
+services:
+  # Stable network namespace for loopback-only service-to-service HTTP.
+  # App/proxy replacement does not replace this namespace.
+  app-network:
+    image: alpine:3.22
+    command: ["sleep", "infinity"]
+    restart: unless-stopped
+    read_only: true
+    mem_limit: 16m
+    cap_drop: [ALL]
+    ports:
+      - "80:80"
+      - "443:443"
+    logging: *logging
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    mem_limit: 1536m
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?Set AUTH_DB_PASSWORD}
+      MEMBER_DB_PASSWORD: ${MEMBER_DB_PASSWORD:?Set MEMBER_DB_PASSWORD}
+      JOB_DB_PASSWORD: ${JOB_DB_PASSWORD:?Set JOB_DB_PASSWORD}
+      MATCHING_DB_PASSWORD: ${MATCHING_DB_PASSWORD:?Set MATCHING_DB_PASSWORD}
+      WORK_DB_PASSWORD: ${WORK_DB_PASSWORD:?Set WORK_DB_PASSWORD}
+      CHAT_DB_PASSWORD: ${CHAT_DB_PASSWORD:?Set CHAT_DB_PASSWORD}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD}
+      TZ: Asia/Seoul
+    # Copy the read-only bind mount before the official entrypoint sources it.
+    # This also supports hosts whose mounted files cannot be executed directly.
+    entrypoint:
+      - /bin/bash
+      - -c
+      - 'cp /opt/service-databases.sh /docker-entrypoint-initdb.d/01-service-databases.sh && chmod 0644 /docker-entrypoint-initdb.d/01-service-databases.sh && exec /usr/local/bin/docker-entrypoint.sh "$$@"'
+      - --
+    command: ["mysqld", "--innodb-buffer-pool-size=512M", "--max-connections=80", "--mysqlx=OFF"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./deploy/mysql-init.sh:/opt/service-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /var/lib/mysql/.service-databases-ready && MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysql --protocol=TCP -h127.0.0.1 -uroot -Nse 'SELECT 1' >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    logging: *logging
+
+  auth-redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    mem_limit: 128m
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "always", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - auth-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging: *logging
+
+  matching-redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    mem_limit: 256m
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "always", "--maxmemory", "160mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - matching-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging: *logging
+
+  auth-service:
+    <<: *app
+    image: ${IMAGE_PREFIX:?Set IMAGE_PREFIX}/auth-service:${IMAGE_TAG:?Set IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: auth-service
+    environment:
+      <<: *runtime-env
+      SERVER_PORT: "8081"
+      AUTH_DATASOURCE_URL: "jdbc:mysql://mysql:3306/auth_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
+      AUTH_DATASOURCE_USERNAME: auth_user
+      AUTH_DATASOURCE_PASSWORD: ${AUTH_DB_PASSWORD:?Set AUTH_DB_PASSWORD}
+      AUTH_REDIS_HOST: auth-redis
+      AUTH_REDIS_PORT: "6379"
+      AUTH_MAIL_USERNAME: ${AUTH_MAIL_USERNAME:-}
+      AUTH_MAIL_PASSWORD: ${AUTH_MAIL_PASSWORD:-}
+      AUTH_SOLAPI_API_KEY: ${AUTH_SOLAPI_API_KEY:-}
+      AUTH_SOLAPI_API_SECRET: ${AUTH_SOLAPI_API_SECRET:-}
+      AUTH_VERIFICATION_SMS_FROM: ${AUTH_VERIFICATION_SMS_FROM:-}
+      KAKAO_OAUTH_CLIENT_ID: ${KAKAO_OAUTH_CLIENT_ID:-}
+      KAKAO_OAUTH_CLIENT_SECRET: ${KAKAO_OAUTH_CLIENT_SECRET:-}
+      NAVER_OAUTH_CLIENT_ID: ${NAVER_OAUTH_CLIENT_ID:-}
+      NAVER_OAUTH_CLIENT_SECRET: ${NAVER_OAUTH_CLIENT_SECRET:-}
+
+  member-service:
+    <<: *app
+    image: ${IMAGE_PREFIX:?Set IMAGE_PREFIX}/member-service:${IMAGE_TAG:?Set IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: member-service
+    environment:
+      <<: *runtime-env
+      SERVER_PORT: "8082"
+      MEMBER_DATASOURCE_URL: "jdbc:mysql://mysql:3306/member_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
+      MEMBER_DATASOURCE_USERNAME: member_user
+      MEMBER_DATASOURCE_PASSWORD: ${MEMBER_DB_PASSWORD:?Set MEMBER_DB_PASSWORD}
+      NTS_BUSINESS_API_SERVICE_KEY: ${NTS_BUSINESS_API_SERVICE_KEY:-}
+
+  job-service:
+    <<: *app
+    image: ${IMAGE_PREFIX:?Set IMAGE_PREFIX}/job-service:${IMAGE_TAG:?Set IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: job-service
+    environment:
+      <<: *runtime-env
+      SERVER_PORT: "8083"
+      JOB_DATASOURCE_URL: "jdbc:mysql://mysql:3306/job_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
+      JOB_DATASOURCE_USERNAME: job_user
+      JOB_DATASOURCE_PASSWORD: ${JOB_DB_PASSWORD:?Set JOB_DB_PASSWORD}
+
+  matching-service:
+    <<: *app
+    image: ${IMAGE_PREFIX:?Set IMAGE_PREFIX}/matching-service:${IMAGE_TAG:?Set IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: matching-service
+    environment:
+      <<: *runtime-env
+      SERVER_PORT: "8084"
+      MATCHING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/matching_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
+      MATCHING_DATASOURCE_USERNAME: matching_user
+      MATCHING_DATASOURCE_PASSWORD: ${MATCHING_DB_PASSWORD:?Set MATCHING_DB_PASSWORD}
+
+  work-service:
+    <<: *app
+    image: ${IMAGE_PREFIX:?Set IMAGE_PREFIX}/work-service:${IMAGE_TAG:?Set IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: work-service
+    environment:
+      <<: *runtime-env
+      SERVER_PORT: "8086"
+      WORK_DATASOURCE_URL: "jdbc:mysql://mysql:3306/work_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
+      WORK_DATASOURCE_USERNAME: work_user
+      WORK_DATASOURCE_PASSWORD: ${WORK_DB_PASSWORD:?Set WORK_DB_PASSWORD}
+
+  chat-service:
+    <<: *app
+    image: ${IMAGE_PREFIX:?Set IMAGE_PREFIX}/chat-service:${IMAGE_TAG:?Set IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: chat-service
+    environment:
+      <<: *runtime-env
+      SERVER_PORT: "8087"
+      CHAT_DATASOURCE_URL: "jdbc:mysql://mysql:3306/chat_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
+      CHAT_DATASOURCE_USERNAME: chat_user
+      CHAT_DATASOURCE_PASSWORD: ${CHAT_DB_PASSWORD:?Set CHAT_DB_PASSWORD}
+      CHAT_WEBSOCKET_ALLOWED_ORIGINS: ${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN}
+
+  payment-service:
+    <<: *app
+    image: ${IMAGE_PREFIX:?Set IMAGE_PREFIX}/payment-service:${IMAGE_TAG:?Set IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: payment-service
+    environment:
+      <<: *runtime-env
+      SERVER_PORT: "8085"
+      PAYMENT_DATASOURCE_URL: "jdbc:mysql://mysql:3306/payment_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
+      PAYMENT_DATASOURCE_USERNAME: payment_user
+      PAYMENT_DATASOURCE_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD}
+      TOSS_ENABLED: ${TOSS_ENABLED:-false}
+      TOSS_SECRET_KEY: ${TOSS_SECRET_KEY:-}
+
+  notification-service:
+    <<: *app
+    image: ${IMAGE_PREFIX:?Set IMAGE_PREFIX}/notification-service:${IMAGE_TAG:?Set IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: notification-service
+    environment:
+      <<: *runtime-env
+      SERVER_PORT: "8088"
+      NOTIFICATION_DATASOURCE_URL: "jdbc:mysql://mysql:3306/notification_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
+      NOTIFICATION_DATASOURCE_USERNAME: notification_user
+      NOTIFICATION_DATASOURCE_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD}
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?Set API_DOMAIN}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN}
+    network_mode: service:app-network
+    depends_on:
+      app-network:
+        condition: service_started
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    logging: *logging
+
+volumes:
+  mysql-data:
+  auth-redis-data:
+  matching-redis-data:
+  caddy-data:
+  caddy-config:
