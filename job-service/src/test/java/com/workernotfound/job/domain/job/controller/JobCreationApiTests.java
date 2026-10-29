@@ -12,10 +12,13 @@ import com.workernotfound.job.global.security.JwtProperties;
 import com.workernotfound.job.support.IntegrationTestSupport;
 import com.workernotfound.job.support.JobPostFixture;
 import com.workernotfound.job.support.TestAccessTokens;
+import com.workernotfound.job.support.MutableClock;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
@@ -59,6 +62,26 @@ class JobCreationApiTests extends IntegrationTestSupport {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private MutableClock clock;
+
+    @Test
+    void rejectsDeadlineThatTruncatesBeforeCurrentTime() {
+        long ownerId = nextOwnerId();
+        clock.fixAt(Instant.now().truncatedTo(ChronoUnit.SECONDS).plusNanos(123_456_789));
+        try {
+            LocalDateTime deadline = LocalDateTime.now(clock).plusNanos(111);
+            assertThatThrownBy(() -> jobCommandService.create(ownerId,
+                    request(LocalTime.of(18, 0), 10_320, 2, deadline)))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                    .isEqualTo(JobErrorCode.INVALID_APPLICATION_DEADLINE);
+            assertThat(countJobsOf(ownerId)).isZero();
+        } finally {
+            clock.reset();
+        }
+    }
 
     @Test
     void createsJobPrivatelyAsPaymentPending() throws Exception {
@@ -155,12 +178,18 @@ class JobCreationApiTests extends IntegrationTestSupport {
     }
 
     private CreateJobRequest request(LocalTime endTime, int baseHourlyWage, int recruitCount) {
+        return request(endTime, baseHourlyWage, recruitCount,
+                TestSchedule.today().plusDays(1).atTime(LocalTime.NOON));
+    }
+
+    private CreateJobRequest request(LocalTime endTime, int baseHourlyWage, int recruitCount,
+                                    LocalDateTime applicationDeadline) {
         LocalDate workDate = TestSchedule.today().plusDays(2);
         return new CreateJobRequest(
                 1L, SEARCH_CATEGORY_ID, "테스트 상점", "서울시 마포구", "금액 경계 공고", "설명",
                 workDate, LocalTime.of(9, 0), endTime, false, baseHourlyWage, null, recruitCount,
                 new BigDecimal("37.5665000"), new BigDecimal("126.9780000"), "MEDIUM",
-                LocalDateTime.of(workDate.minusDays(1), LocalTime.NOON));
+                applicationDeadline);
     }
 
     private void assertInvalidAmount(org.assertj.core.api.ThrowableAssert.ThrowingCallable callable) {
