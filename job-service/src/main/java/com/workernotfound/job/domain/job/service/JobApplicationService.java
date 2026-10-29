@@ -17,6 +17,7 @@ import com.workernotfound.job.domain.job.dto.request.MatchingSeatReservationRequ
 import com.workernotfound.job.domain.job.dto.response.MatchingSeatReservationCommandResponse;
 import com.workernotfound.job.domain.job.dto.response.MatchingSeatReservationResponse;
 import com.workernotfound.job.domain.job.entity.JobApplicationAdmission;
+import com.workernotfound.job.domain.job.port.BusinessValidator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -25,6 +26,7 @@ import org.springframework.stereotype.Service;
 public class JobApplicationService {
 
     private final JobCommandService jobCommandService;
+    private final BusinessValidator businessValidator;
     private final JobFindService jobFindService;
     private final JobApplicationAdmissionCommandService jobApplicationAdmissionCommandService;
     private final MatchingSeatReservationCommandService matchingSeatReservationCommandService;
@@ -33,6 +35,8 @@ public class JobApplicationService {
     private final JobCloseCommandService jobCloseCommandService;
 
     public Long create(Long ownerId, CreateJobRequest request) {
+        // 소유권 HTTP 조회 동안 공고 DB 트랜잭션·계정 잠금을 유지하지 않는다.
+        businessValidator.validateOwnership(request.businessId(), ownerId);
         return jobCommandService.create(ownerId, request);
     }
 

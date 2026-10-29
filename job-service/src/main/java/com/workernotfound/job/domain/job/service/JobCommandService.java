@@ -4,7 +4,6 @@ import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.entity.JobPost;
 import com.workernotfound.job.domain.job.entity.enums.UrgencyLevel;
 import com.workernotfound.job.domain.job.exception.JobErrorCode;
-import com.workernotfound.job.domain.job.port.BusinessValidator;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
 import com.workernotfound.job.global.account.AccountGateService;
 import com.workernotfound.job.global.exception.BusinessException;
@@ -19,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class JobCommandService {
     private final AccountGateService accountGates;
     private final JobPostRepository jobPostRepository;
-    private final BusinessValidator businessValidator;
     private final CategoryFindService categoryFindService;
     private final JobWageCalculator jobWageCalculator;
     private final JobPaymentOrderCommandIssuer paymentOrderCommandIssuer;
@@ -32,7 +30,6 @@ public class JobCommandService {
     @Transactional
     public Long create(Long ownerId, CreateJobRequest request) {
         accountGates.requireActive(ownerId);
-        businessValidator.validateOwnership(request.businessId(), ownerId);
         categoryFindService.findCategory(request.categoryId());
         long totalDeposit = calculateTotalDeposit(request);
         validateApplicationDeadline(request);

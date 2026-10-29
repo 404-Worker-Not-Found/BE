@@ -2033,3 +2033,9 @@ Related files:
 - `docs/operations/backend-deployment.md`
 - `compose.deploy.yml`
 - `docs/PROJECT_CONTEXT.md`
+
+## 2026-10-29 - Registered Business Ownership for MVP
+
+- 사용자는 점주당 가입 시 등록 사업장 1개만 사용하는 MVP를 선택했다. 공고 `businessId`는 회원 ID가 아닌 기존 `ownerProfileId`이며 프론트는 본인 회원 조회의 값을 사용한다.
+- member-service는 내부 시크릿 아래 활성 OWNER의 등록 사업장 ID와 회원 ID만 반환한다. job-service는 JWT 점주와 요청 사업장을 대조하고 알려진 미등록·불일치는 거절하며, 조회 실패·응답 이상은 공고 저장을 중단한다.
+- HTTP 조회는 공고 저장 트랜잭션 밖이며 성공 후 기존 계정 장벽·공고/결제 명령 원자 저장을 유지한다. 기존 공고 식별자는 임의로 재기록하지 않는다. 여러 사업장·사업장 양도와 법적 대표자 확인은 이번 범위가 아니다.
