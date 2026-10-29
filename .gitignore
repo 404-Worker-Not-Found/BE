@@ -22,3 +22,6 @@ application-*.local.yaml
 **/*.p12
 **/*.jks
 **/secrets/
+
+# Server database backups
+/backups/

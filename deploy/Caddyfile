@@ -1,0 +1,52 @@
+{$API_DOMAIN} {
+    encode zstd gzip
+
+    route {
+        # The browser must never supply credentials for service-to-service APIs.
+        request_header -X-Internal-Secret
+
+        @internal path_regexp internal ^/api/[^/]+/internal(/|$)
+        respond @internal 404
+
+        @cors header Origin {$FRONTEND_ORIGIN}
+        header @cors {
+            Access-Control-Allow-Origin "{$FRONTEND_ORIGIN}"
+            Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+            Access-Control-Allow-Headers "Authorization, Content-Type, Idempotency-Key"
+            Access-Control-Max-Age "600"
+        }
+        header +Vary Origin
+
+        @preflight {
+            method OPTIONS
+            header Origin {$FRONTEND_ORIGIN}
+        }
+        respond @preflight 204
+        @otherPreflight method OPTIONS
+        respond @otherPreflight 403
+
+        # These owner-facing paths belong to matching, not job-service.
+        @applicants path_regexp applicants ^/api/jobs/[^/]+/applications(/|$)
+        reverse_proxy @applicants 127.0.0.1:8084
+
+        @auth path /api/auth /api/auth/*
+        reverse_proxy @auth 127.0.0.1:8081
+        @member path /api/members /api/members/*
+        reverse_proxy @member 127.0.0.1:8082
+        @job path /api/jobs /api/jobs/*
+        reverse_proxy @job 127.0.0.1:8083
+        @matching path /api/applications /api/applications/* /api/matchings /api/matchings/*
+        reverse_proxy @matching 127.0.0.1:8084
+        @work path /api/works /api/works/*
+        reverse_proxy @work 127.0.0.1:8086
+        @chat path /api/chat-rooms /api/chat-rooms/*
+        reverse_proxy @chat 127.0.0.1:8087
+        @payment path /api/payments /api/payments/*
+        reverse_proxy @payment 127.0.0.1:8085
+        @notification path /api/notifications /api/notifications/*
+        reverse_proxy @notification 127.0.0.1:8088
+
+        # Actuator, Swagger and all unlisted routes stay off the public endpoint.
+        respond 404
+    }
+}

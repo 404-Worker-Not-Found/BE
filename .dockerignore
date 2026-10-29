@@ -1,0 +1,7 @@
+**
+!deploy/
+!deploy/Dockerfile
+!*-service/
+!*-service/build/
+!*-service/build/libs/
+!*-service/build/libs/*-SNAPSHOT.jar
