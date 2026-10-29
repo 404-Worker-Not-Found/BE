@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 
 @Getter
 @Entity
@@ -104,8 +105,13 @@ public class JobApplicationAdmission extends BaseEntity {
         this.latitude = latitude;
         this.longitude = longitude;
         this.status = ApplicationAdmissionStatus.RESERVED;
-        this.admittedAt = admittedAt;
-        this.expiresAt = expiresAt;
+        // DATETIME(6)에 저장되기 전부터 최초 응답과 재조회 응답의 정밀도를 맞춘다.
+        this.admittedAt = toStoredTime(admittedAt);
+        this.expiresAt = toStoredTime(expiresAt);
+    }
+
+    private static LocalDateTime toStoredTime(LocalDateTime time) {
+        return time == null ? null : time.truncatedTo(ChronoUnit.MICROS);
     }
 
     public boolean isConsumed() {

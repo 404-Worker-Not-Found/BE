@@ -14,6 +14,7 @@ import com.workernotfound.job.support.IntegrationTestSupport;
 import com.workernotfound.job.support.JobPostFixture;
 import com.workernotfound.job.support.MutableClock;
 import com.workernotfound.job.support.TestAccessTokens;
+import com.workernotfound.job.support.TestSchedule;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -94,7 +95,8 @@ class JobDetailAccessApiTests extends IntegrationTestSupport {
 
     @Test
     void jobClosedBeforePublicationByDeadlineStaysVisibleOnlyToOwner() throws Exception {
-        JobPost pending = savePendingJob();
+        JobPost pending = jobPostRepository.save(JobPostFixture.jobPost()
+                .applicationDeadline(TestSchedule.now().plusHours(1).withNano(123_456_789)).build());
         LocalDateTime deadline = pending.getApplicationDeadline();
         clock.fixAt(deadline.atZone(clock.getZone()).toInstant());
         try {
