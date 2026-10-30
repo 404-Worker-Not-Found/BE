@@ -81,6 +81,10 @@ job:
     lease-duration: ${PAYMENT_ORDER_LEASE_DURATION:30s}
     retry-base-delay: ${PAYMENT_ORDER_RETRY_BASE_DELAY:2s}
     retry-max-delay: ${PAYMENT_ORDER_RETRY_MAX_DELAY:5m}
+  member-service:
+    base-url: ${MEMBER_SERVICE_BASE_URL:http://localhost:8082}
+    connect-timeout: ${JOB_MEMBER_SERVICE_CONNECT_TIMEOUT:3s}
+    call-timeout: ${JOB_MEMBER_SERVICE_CALL_TIMEOUT:5s}
   payment-service:
     base-url: ${PAYMENT_SERVICE_BASE_URL:http://localhost:8085}
     connect-timeout: ${PAYMENT_SERVICE_CONNECT_TIMEOUT:3s}

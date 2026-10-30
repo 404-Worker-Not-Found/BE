@@ -9,6 +9,8 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum JobErrorCode implements ErrorCode {
 
+    BUSINESS_NOT_OWNED("JOB-403-001", "등록한 본인 사업장으로만 공고를 만들 수 있습니다.", HttpStatus.FORBIDDEN),
+    BUSINESS_VERIFICATION_UNAVAILABLE("JOB-503-001", "사업장 소유권을 확인할 수 없습니다. 잠시 후 다시 시도해주세요.", HttpStatus.SERVICE_UNAVAILABLE),
     JOB_NOT_FOUND("JOB-404-001", "존재하지 않는 공고입니다.", HttpStatus.NOT_FOUND),
     CATEGORY_NOT_FOUND("JOB-404-002", "존재하지 않는 카테고리입니다.", HttpStatus.NOT_FOUND),
     SEAT_RESERVATION_NOT_FOUND("JOB-404-003", "존재하지 않는 모집 자리 예약입니다.", HttpStatus.NOT_FOUND),

@@ -142,4 +142,4 @@ When verifying the complete MVP flow or changing a service-to-service contract:
 - Does the run preserve existing `.env`, databases and containers, and clean only its own resources on success or failure?
 - Are verification flags, fixture-only schedule changes and external provider doubles disclosed separately from real provider/browser verification?
 - Did completion, mutual cancellation, no-show and funding anomalies preserve the expected work states and money boundaries?
-- Do not interpret the job-service business-ownership stub or disabled payout as completed real ownership/payment verification.
+- Keep the historical ownership-stub boundary separate from the newer registered-profile ownership check; neither disabled payout nor an external provider double proves real financial execution.

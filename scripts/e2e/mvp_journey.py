@@ -226,7 +226,7 @@ class Journey:
         body = dict(name='Journey ' + role, email=email, password='Journey-Test-123!', phoneNumber=phone, deviceId='journey')
         location = dict(address='서울특별시 중구 테스트', latitude=37.5665, longitude=126.9780)
         if role == 'owner':
-            body.update(businessRegistrationNumber='123-45-67890', storeName='Journey store', businessType='CAFE', storeLocation=location)
+            body.update(businessRegistrationNumber=f'123-45-{67890+index:05d}', storeName='Journey store', businessType='CAFE', storeLocation=location)
         else:
             body.update(desiredHourlyWage=10320, activityRadiusKm=10, immediatelyAvailable=True,
                         baseLocation=location, preferredBusinessTypes=['CAFE'],
@@ -240,12 +240,18 @@ class Journey:
         now = dt.datetime.now(dt.timezone(dt.timedelta(hours=9)))
         start = (now + dt.timedelta(minutes=10)).replace(second=0, microsecond=0)
         end = start + dt.timedelta(hours=1)
-        body = dict(businessId=owner[0], categoryId=1, storeName='Journey', address='서울특별시 중구',
+        profile = self.api('member', 'GET', '/api/members/me', token=owner[1])
+        business_id = profile['ownerProfile']['ownerProfileId']
+        body = dict(businessId=business_id, categoryId=1, storeName='Journey', address='서울특별시 중구',
                     title='Journey ' + label, description='isolated integration test', workDate=start.date().isoformat(),
                     startTime=start.strftime('%H:%M:%S'), endTime=end.strftime('%H:%M:%S'),
                     isEndTimeNextDay=end.date() != start.date(), baseHourlyWage=10320, extraWage=100,
                     recruitCount=1, latitude=37.5665, longitude=126.9780, urgencyLevel='LOW',
                     applicationDeadline=(now + dt.timedelta(minutes=5)).replace(tzinfo=None).isoformat())
+        before = self.sql('job', 'SELECT COUNT(*) FROM job_posts')
+        self.api('job', 'POST', '/api/jobs', dict(body, businessId=self.other_business_id), owner[1], expected=403)
+        self.check(label + ' rejects another owner business without saving',
+                   self.sql('job', 'SELECT COUNT(*) FROM job_posts') == before)
         job_id = self.api('job', 'POST', '/api/jobs', body, owner[1])
         self.api('job', 'GET', f'/api/jobs/{job_id}', token=worker[1], expected=404)
         self.check(label + ' payment-pending job hidden from worker')
@@ -274,7 +280,11 @@ class Journey:
                  f"end_time='{end:%H:%M:%S}',end_time_next_day={int(end.date() != start.date())} WHERE id={work_id}")
 
     def scenarios(self):
-        owner, worker, stranger = self.signup('owner', 1), self.signup('worker', 2), self.signup('worker', 3)
+        worker, owner, stranger = self.signup('worker', 2), self.signup('owner', 1), self.signup('worker', 3)
+        other = self.signup('owner', 4)
+        self.other_business_id = self.api('member', 'GET', '/api/members/me', token=other[1])['ownerProfile']['ownerProfileId']
+        registered = self.api('member', 'GET', '/api/members/me', token=owner[1])['ownerProfile']['ownerProfileId']
+        self.check('business profile ID is independent of member ID', registered != owner[0])
         j, m, w, amount, _ = self.matched(owner, worker, 'completion')
         self.api('work', 'GET', f'/api/works/me/{w}', token=stranger[1], expected=404)
         room = int(self.sql('chat', f'SELECT id FROM chat_rooms WHERE matching_id={m}'))

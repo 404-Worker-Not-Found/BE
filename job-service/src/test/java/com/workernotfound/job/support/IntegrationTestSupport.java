@@ -29,6 +29,10 @@ import org.testcontainers.containers.MySQLContainer;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class IntegrationTestSupport {
 
+    // 서비스 내부 통합 검증은 회원 소유권 HTTP 경계를 대체한다. 실제 클라이언트 계약은 별도 HTTP 테스트로 확인한다.
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    protected com.workernotfound.job.domain.job.port.BusinessValidator businessValidator;
+
 	// 설정이 다른 테스트 클래스마다 캐시된 Spring 컨텍스트가 연결 풀(기본 10개)을 유지한다. MySQL 기본 연결 한도(151)를
 	// 넘으면 나중에 뜨는 컨텍스트가 "Too many connections"로 시작하지 못하므로 한도를 넉넉히 둔다.
 	static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
