@@ -413,6 +413,6 @@ Likely next steps:
 ## MVP Cross-service Journey Verification (2026-10-29)
 
 - `scripts/e2e/mvp_journey.py` runs all eight real service processes with disposable MySQL/Redis and local NTS/PG doubles. A run passed 24 named checks for signup/login, payment-gated publication, application/matching saga, chat replay/participant access, GPS work completion, mutual reviews, participant settlement views, notifications, agreement cancellation, automatic no-show, and funding-incident alerts plus held completion.
-- Email/SMS verified flags and work schedule time travel are isolated fixtures. Browser, real delivery/NTS/PG calls and actual payouts are not verified. The initial #137 run used an ownership stub; #140 replaces that stub and extends the journey with registered-profile ownership checks. See `docs/architecture/mvp-journey-verification.md` and `docs/mvp-release-gaps.md`.
+- Email/SMS verified flags and work schedule time travel are isolated fixtures. Browser, real delivery/NTS/PG calls and actual payouts are not verified. The initial #137 run used an ownership stub; #141 replaces that stub and extends the journey with registered-profile ownership checks. See `docs/architecture/mvp-journey-verification.md` and `docs/mvp-release-gaps.md`.
 
-- #140 extends the disposable journey with independent member/profile IDs and another owner’s business rejection. Prior #137 evidence described the then-present ownership stub; current ownership behavior is documented separately.
+- #141 extends the disposable journey with independent member/profile IDs and another owner’s business rejection. Prior #137 evidence described the then-present ownership stub; current ownership behavior is documented separately.
