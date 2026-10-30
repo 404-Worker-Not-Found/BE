@@ -25,8 +25,10 @@ def docker(*args):
     return subprocess.check_output(["docker", *args], text=True, stderr=subprocess.PIPE).strip()
 
 
-def request(base, path, method="GET", origin=None, secret=None, authorization=None):
+def request(base, path, method="GET", origin=None, secret=None, authorization=None, forwarded_prefix=None):
     headers = {}
+    if forwarded_prefix:
+        headers["X-Forwarded-Prefix"] = forwarded_prefix
     if authorization:
         headers["Authorization"] = authorization
     if origin:
@@ -87,14 +89,19 @@ def verify_swagger(base):
                 ("/v3/api-docs/swagger-config", "/v3/api-docs/swagger-config", prefix),
                 ("/v3/api-docs", "/v3/api-docs", "")):
             status, headers, body = request(base, prefix + path, secret="must-not-reach-upstream",
-                                            authorization=SWAGGER_AUTH)
+                                            authorization=SWAGGER_AUTH, forwarded_prefix="/spoofed")
             assert (status, body) == (200, service + "|"), (prefix + path, status, body)
+            assert headers.get_all("X-Frame-Options") == ["DENY"], (prefix + path, headers.get_all("X-Frame-Options"))
+            assert headers["Content-Security-Policy"] == "frame-ancestors 'none'", prefix + path
             assert headers["X-Seen-Path"] == upstream_path, (prefix + path, headers["X-Seen-Path"])
             assert headers["X-Seen-Prefix"] == forwarded_prefix, (prefix + path, headers["X-Seen-Prefix"])
     for path in ("/docs", "/docs/unknown/swagger-ui/index.html", "/docs/auth/actuator/health",
                  "/docs/auth/api/auth/login", "/docs/jobs/api/jobs/internal/1",
                  "/docs/job/api/jobs/internal/1", "/docs/job/v3/api-docs/internal",
-                 "/docs/auth/swagger-ui", "/docs/auth/"):
+                 "/docs/auth/swagger-ui", "/docs/auth/",
+                 # urllib sends these unnormalized, like curl --path-as-is.
+                 "/docs/auth/swagger-ui/../v3/api-docs", "/docs/auth/swagger-ui/%2e%2e/v3/api-docs",
+                 "/docs/auth/swagger-ui/x/../index.html"):
         assert request(base, path, authorization=SWAGGER_AUTH)[0] == 404, path
 
 
@@ -108,6 +115,7 @@ def main():
             upstream.write_text('{\n admin off\n}\n:{$PORT} {\n'
                                 ' header X-Seen-Path {http.request.uri}\n'
                                 ' header X-Seen-Prefix "{http.request.header.X-Forwarded-Prefix}"\n'
+                                ' header X-Frame-Options SAMEORIGIN\n'
                                 ' respond "{$SERVICE}|{http.request.header.X-Internal-Secret}"\n}\n')
             proxy = docker(
                 "run", "-d", "--rm", "--network", network, "-p", "127.0.0.1::80",

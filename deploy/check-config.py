@@ -47,7 +47,7 @@ def main():
         errors.append("Set SWAGGER_USERNAME to 3-64 letters, digits, dots, hyphens or underscores.")
     # Rendered JSON escapes $ as $$; the container receives single $ characters.
     swagger_hash = proxy["SWAGGER_PASSWORD_HASH"].replace("$$", "$")
-    if not re.fullmatch(r"\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}", swagger_hash):
+    if not re.fullmatch(r"\$2[aby]\$(?:0[4-9]|[12][0-9]|3[01])\$[./A-Za-z0-9]{53}", swagger_hash):
         errors.append("Set SWAGGER_PASSWORD_HASH to a single-quoted caddy hash-password bcrypt hash.")
     for name, service in services.items():
         if name != "app-network" and service.get("ports"):

@@ -53,6 +53,13 @@ def main():
         command = [str(ROOT / "scripts/deploy.sh"), "check"]
         write_env()
         subprocess.run(command, env=environment, check=True, capture_output=True)
+        # Caddy rejects bcrypt costs outside 4-31 at login, so check must catch them first.
+        values["SWAGGER_PASSWORD_HASH"] = "'" + SWAGGER_HASH.replace("$14$", "$99$") + "'"
+        write_env()
+        invalid = subprocess.run(command, env=environment, capture_output=True, text=True)
+        if invalid.returncode == 0 or "SWAGGER_PASSWORD_HASH" not in invalid.stderr:
+            raise AssertionError("An out-of-range Swagger bcrypt cost was not rejected.")
+        values["SWAGGER_PASSWORD_HASH"] = "'" + SWAGGER_HASH + "'"
         values["IMAGE_TAG"] = "latest"
         write_env()
         invalid = subprocess.run(command, env=environment, capture_output=True, text=True)

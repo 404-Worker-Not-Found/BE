@@ -21,6 +21,8 @@
     route {
         # The browser must never supply credentials for service-to-service APIs.
         request_header -X-Internal-Secret
+        # Only the Swagger UI routes below may set a prefix; a client value would change the spec's server URL.
+        request_header -X-Forwarded-Prefix
 
         @internal path_regexp internal ^/api/[^/]+/internal(/|$)
         respond @internal 404
@@ -68,6 +70,18 @@
         basic_auth @docs {
             {$SWAGGER_USERNAME} {$SWAGGER_PASSWORD_HASH}
         }
+        # Deferred so the upstream cannot add a second, conflicting value.
+        header @docs {
+            X-Frame-Options "DENY"
+            Content-Security-Policy "frame-ancestors 'none'"
+            defer
+        }
+        # Path matchers see the cleaned path, so reject `..` segments in the original request path.
+        @docsTraversal {
+            path /docs/*
+            vars_regexp {http.request.orig_uri.path} (^|/)\.\.(/|$)
+        }
+        respond @docsTraversal 404
         import swagger auth 8081
         import swagger member 8082
         import swagger job 8083
