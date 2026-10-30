@@ -10,6 +10,8 @@ import subprocess
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+# bcrypt hash of a throwaway test password, not a deployment credential.
+SWAGGER_HASH = "$2a$14$o5CMnPkPguSqR2640kYUreZsiQsXZMMAIzIbFETGrp9dBoPbGe6DG"
 
 
 def main():
@@ -23,7 +25,8 @@ def main():
             if key.endswith("PASSWORD") or key in ("AUTH_JWT_SECRET", "INTERNAL_API_SECRET"):
                 value = secrets.token_hex(32)
             values[key] = value
-    values.update(API_DOMAIN="api.203-0-113-10.sslip.io", IMAGE_TAG="1" * 40)
+    values.update(API_DOMAIN="api.203-0-113-10.sslip.io", IMAGE_TAG="1" * 40,
+                  SWAGGER_USERNAME="swagger-team", SWAGGER_PASSWORD_HASH="'" + SWAGGER_HASH + "'")
 
     with tempfile.TemporaryDirectory(prefix="wnf-config-test-") as directory:
         folder = pathlib.Path(directory)
@@ -50,6 +53,13 @@ def main():
         command = [str(ROOT / "scripts/deploy.sh"), "check"]
         write_env()
         subprocess.run(command, env=environment, check=True, capture_output=True)
+        # Caddy rejects bcrypt costs outside 4-31 at login, so check must catch them first.
+        values["SWAGGER_PASSWORD_HASH"] = "'" + SWAGGER_HASH.replace("$14$", "$99$") + "'"
+        write_env()
+        invalid = subprocess.run(command, env=environment, capture_output=True, text=True)
+        if invalid.returncode == 0 or "SWAGGER_PASSWORD_HASH" not in invalid.stderr:
+            raise AssertionError("An out-of-range Swagger bcrypt cost was not rejected.")
+        values["SWAGGER_PASSWORD_HASH"] = "'" + SWAGGER_HASH + "'"
         values["IMAGE_TAG"] = "latest"
         write_env()
         invalid = subprocess.run(command, env=environment, capture_output=True, text=True)

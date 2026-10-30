@@ -20,7 +20,8 @@
 - auth Redis와 이벤트 Redis를 분리하고 AOF `appendfsync always` 및 `noeviction`을 사용한다. 이벤트 Stream은 임의로 trim하지 않는다. 메모리 한도 도달 시 쓰기가 실패하므로 메모리와 relay/consumer 실패 로그를 관찰한다.
 - `/api/*/internal` 경로는 외부에서 404 처리하고 외부의 `X-Internal-Secret` 헤더를 제거한다. 기존 서비스의 내부 인증과 JWT 검증도 유지한다.
 - `/api/jobs/{id}/applications` 및 하위 매칭 경로는 matching-service에 전달한다. 일반 공고 API는 job-service에 전달한다.
-- Swagger와 Actuator는 공개 라우팅하지 않는다. 컨테이너 healthcheck는 시작 완료 후 공개 인증이 필요 없는 내부 `/v3/api-docs`를 확인한다. 이는 프로세스 시작 검사이며 지속적인 DB/Redis 가용성 검사를 대신하지 않는다.
+- Actuator와 루트 경로의 Swagger(`/swagger-ui/**`, `/v3/api-docs`)는 공개 라우팅하지 않는다. 팀원용 Swagger는 `/docs/{서비스}/` 아래에서만 Basic Auth로 공개한다. 서비스 이름은 `auth`, `member`, `job`, `matching`, `payment`, `work`, `chat`, `notification`이다. 이 경로에서는 Swagger UI와 해당 서비스의 OpenAPI 문서만 전달하고 API·Actuator는 404 처리한다. UI 요청에만 `X-Forwarded-Prefix`를 붙이고 문서 요청에는 붙이지 않아 OpenAPI 서버 주소가 공개 API 루트로 유지된다. 클라이언트가 보낸 `X-Forwarded-Prefix`는 모든 요청에서 제거한다. `/docs` 응답은 iframe 표시를 막고(`X-Frame-Options: DENY`, `frame-ancestors 'none'`), 원본 경로에 `..`가 있으면 404다. 따라서 Swagger의 Try it out은 위의 `/api/...` 공개 경로와 Bearer JWT로 호출된다. 문서에는 내부 API 명세도 보이지만 외부 호출은 계속 404다.
+- 컨테이너 healthcheck는 시작 완료 후 공개 인증이 필요 없는 내부 `/v3/api-docs`를 확인한다. 이는 프로세스 시작 검사이며 지속적인 DB/Redis 가용성 검사를 대신하지 않는다.
 
 ## 1. AWS 서버 준비
 
@@ -72,7 +73,13 @@ chmod 600 .env.deploy
 openssl rand -hex 32
 ```
 
-마지막 명령을 각 비밀번호와 secret마다 따로 실행해 파일을 채운다. `.env.deploy`는 Git에서 제외된다. 로컬 `.env`를 복사하거나 `source`하지 않는다. `IMAGE_TAG`에는 전체 SHA, `API_DOMAIN`에는 스킴/포트 없는 호스트명, `FRONTEND_ORIGIN`에는 팀원이 확정한 `https://프로젝트.vercel.app`처럼 정확한 Origin을 넣는다. 끝에 `/`를 붙이지 않고 `*.vercel.app` 전체를 허용하지 않는다. 프론트 주소가 아직 없으면 예제의 예약된 Origin을 유지해도 서버 API의 비브라우저 확인은 가능하다.
+마지막 명령을 각 비밀번호와 secret마다 따로 실행해 파일을 채운다. Swagger 계정은 `SWAGGER_USERNAME`에 아이디를, `SWAGGER_PASSWORD_HASH`에 아래 명령이 출력한 bcrypt 해시를 넣는다. 비밀번호는 명령 인자가 아니라 입력창에 입력하고 원문은 `.env.deploy`에 저장하지 않는다. 해시의 `$`가 Compose 변수로 해석되지 않도록 값 전체를 작은따옴표로 감싼다(`SWAGGER_PASSWORD_HASH='$2a$14$...'`). 따옴표가 없으면 `check`가 거부한다. 비밀번호는 팀원에게 별도 채널로 전달하고, 바꿀 때는 해시를 교체한 뒤 `up`으로 proxy를 재생성한다.
+
+```bash
+sudo docker run --rm -it caddy:2-alpine caddy hash-password
+```
+
+ `.env.deploy`는 Git에서 제외된다. 로컬 `.env`를 복사하거나 `source`하지 않는다. `IMAGE_TAG`에는 전체 SHA, `API_DOMAIN`에는 스킴/포트 없는 호스트명, `FRONTEND_ORIGIN`에는 팀원이 확정한 `https://프로젝트.vercel.app`처럼 정확한 Origin을 넣는다. 끝에 `/`를 붙이지 않고 `*.vercel.app` 전체를 허용하지 않는다. 프론트 주소가 아직 없으면 예제의 예약된 Origin을 유지해도 서버 API의 비브라우저 확인은 가능하다.
 
 배포 스크립트는 Compose 파일의 보간 변수에 해당하는 셸 환경변수를 제거한 후 `.env.deploy`를 읽는다. 셸에 남아 있는 이전 `IMAGE_TAG`나 인증정보가 배포 파일을 덮어쓰지 않는다. Docker 연결·로그인용 `DOCKER_HOST`와 `DOCKER_CONFIG` 등은 유지한다.
 
@@ -106,12 +113,18 @@ free -h
 df -h
 ```
 
-공고 조회는 200, 내부 API는 404, 등록한 Origin의 preflight는 204와 정확한 `Access-Control-Allow-Origin`이 나와야 한다. 미등록 Origin의 preflight는 403이어야 한다. 지원자 조회는 OWNER 권한, WebSocket은 `wss://API_HOST/api/chat-rooms/ws` 연결과 STOMP 인증까지 확인한다. 실제 가입/로그인, 테스트 결제, 공고 게시, 지원, 매칭 확정, 채팅과 알림까지 팀원과 연결해서 확인한다. CORS는 프록시에서 처리하며 서비스 보안을 해제하지 않는다. 인증은 기존 Bearer JWT 방식이고 CORS credentials/cookie 옵션은 켜지 않는다.
+```bash
+curl -i https://API_HOST/docs/job/swagger-ui/index.html
+curl -i -u SWAGGER_USERNAME https://API_HOST/docs/job/v3/api-docs
+```
+
+공고 조회는 200, 내부 API는 404, 계정 없는 Swagger는 401, 계정을 입력한 OpenAPI 문서는 200과 `servers`의 `https://API_HOST`가 나와야 한다. 등록한 Origin의 preflight는 204와 정확한 `Access-Control-Allow-Origin`이 나와야 한다. 미등록 Origin의 preflight는 403이어야 한다. 지원자 조회는 OWNER 권한, WebSocket은 `wss://API_HOST/api/chat-rooms/ws` 연결과 STOMP 인증까지 확인한다. 실제 가입/로그인, 테스트 결제, 공고 게시, 지원, 매칭 확정, 채팅과 알림까지 팀원과 연결해서 확인한다. CORS는 프록시에서 처리하며 서비스 보안을 해제하지 않는다. 인증은 기존 Bearer JWT 방식이고 CORS credentials/cookie 옵션은 켜지 않는다.
 
 팀원에게 전달할 값:
 
 - REST base URL: `https://API_HOST` (각 API 경로가 이미 `/api/...`를 포함한다)
 - WebSocket URL: `wss://API_HOST/api/chat-rooms/ws`
+- Swagger: `https://API_HOST/docs/{서비스}/swagger-ui/index.html`과 Swagger 계정
 - 허용된 Vercel Origin, 토큰/요청/오류 계약, Toss 테스트용 공개 client key
 - 내부 API secret, JWT 서명키, DB/PG secret은 전달하지 않는다.
 
