@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise public routing/CORS against disposable upstreams, without AWS or real data."""
 
+import base64
 import pathlib
 import subprocess
 import tempfile
@@ -13,14 +14,23 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 PORTS = {"auth": 8081, "member": 8082, "job": 8083, "matching": 8084,
          "payment": 8085, "work": 8086, "chat": 8087, "notification": 8088}
 ORIGIN = "https://frontend.example.com"
+# Throwaway Swagger account for this test only.
+SWAGGER_USERNAME = "swagger-team"
+SWAGGER_PASSWORD = "test-password"
+SWAGGER_HASH = "$2a$14$o5CMnPkPguSqR2640kYUreZsiQsXZMMAIzIbFETGrp9dBoPbGe6DG"
+SWAGGER_AUTH = "Basic " + base64.b64encode(f"{SWAGGER_USERNAME}:{SWAGGER_PASSWORD}".encode()).decode()
 
 
 def docker(*args):
     return subprocess.check_output(["docker", *args], text=True, stderr=subprocess.PIPE).strip()
 
 
-def request(base, path, method="GET", origin=None, secret=None):
+def request(base, path, method="GET", origin=None, secret=None, authorization=None, forwarded_prefix=None):
     headers = {}
+    if forwarded_prefix:
+        headers["X-Forwarded-Prefix"] = forwarded_prefix
+    if authorization:
+        headers["Authorization"] = authorization
     if origin:
         headers["Origin"] = origin
     if secret:
@@ -60,7 +70,39 @@ def verify(base):
     assert headers["Access-Control-Allow-Origin"] == ORIGIN
     _, headers, _ = request(base, "/api/jobs/search", origin="https://other.vercel.app")
     assert headers.get("Access-Control-Allow-Origin") is None
-    print("Proxy routing, internal API isolation, secret stripping and exact-Origin CORS passed.")
+    verify_swagger(base)
+    print("Proxy routing, internal API isolation, secret stripping, exact-Origin CORS"
+          " and password-protected Swagger passed.")
+
+
+def verify_swagger(base):
+    for path in ("/docs/auth/swagger-ui/index.html", "/docs/auth/v3/api-docs", "/docs/unknown"):
+        assert request(base, path)[0] == 401, path
+    wrong = "Basic " + base64.b64encode(f"{SWAGGER_USERNAME}:wrong".encode()).decode()
+    assert request(base, "/docs/auth/v3/api-docs", authorization=wrong)[0] == 401
+    for service in PORTS:
+        prefix = "/docs/" + service
+        # The UI and its config need the prefix; the spec must not get it so its server URL stays at the API root.
+        for path, upstream_path, forwarded_prefix in (
+                ("/swagger-ui/index.html", "/swagger-ui/index.html", prefix),
+                ("/swagger-ui.html", "/swagger-ui.html", prefix),
+                ("/v3/api-docs/swagger-config", "/v3/api-docs/swagger-config", prefix),
+                ("/v3/api-docs", "/v3/api-docs", "")):
+            status, headers, body = request(base, prefix + path, secret="must-not-reach-upstream",
+                                            authorization=SWAGGER_AUTH, forwarded_prefix="/spoofed")
+            assert (status, body) == (200, service + "|"), (prefix + path, status, body)
+            assert headers.get_all("X-Frame-Options") == ["DENY"], (prefix + path, headers.get_all("X-Frame-Options"))
+            assert headers["Content-Security-Policy"] == "frame-ancestors 'none'", prefix + path
+            assert headers["X-Seen-Path"] == upstream_path, (prefix + path, headers["X-Seen-Path"])
+            assert headers["X-Seen-Prefix"] == forwarded_prefix, (prefix + path, headers["X-Seen-Prefix"])
+    for path in ("/docs", "/docs/unknown/swagger-ui/index.html", "/docs/auth/actuator/health",
+                 "/docs/auth/api/auth/login", "/docs/jobs/api/jobs/internal/1",
+                 "/docs/job/api/jobs/internal/1", "/docs/job/v3/api-docs/internal",
+                 "/docs/auth/swagger-ui", "/docs/auth/",
+                 # urllib sends these unnormalized, like curl --path-as-is.
+                 "/docs/auth/swagger-ui/../v3/api-docs", "/docs/auth/swagger-ui/%2e%2e/v3/api-docs",
+                 "/docs/auth/swagger-ui/x/../index.html"):
+        assert request(base, path, authorization=SWAGGER_AUTH)[0] == 404, path
 
 
 def main():
@@ -70,10 +112,15 @@ def main():
     try:
         with tempfile.TemporaryDirectory(prefix="wnf-proxy-test-") as directory:
             upstream = pathlib.Path(directory) / "Caddyfile"
-            upstream.write_text('{\n admin off\n}\n:{$PORT} {\n respond "{$SERVICE}|{http.request.header.X-Internal-Secret}"\n}\n')
+            upstream.write_text('{\n admin off\n}\n:{$PORT} {\n'
+                                ' header X-Seen-Path {http.request.uri}\n'
+                                ' header X-Seen-Prefix "{http.request.header.X-Forwarded-Prefix}"\n'
+                                ' header X-Frame-Options SAMEORIGIN\n'
+                                ' respond "{$SERVICE}|{http.request.header.X-Internal-Secret}"\n}\n')
             proxy = docker(
                 "run", "-d", "--rm", "--network", network, "-p", "127.0.0.1::80",
                 "-e", "API_DOMAIN=:80", "-e", "FRONTEND_ORIGIN=" + ORIGIN,
+                "-e", "SWAGGER_USERNAME=" + SWAGGER_USERNAME, "-e", "SWAGGER_PASSWORD_HASH=" + SWAGGER_HASH,
                 "-v", f"{ROOT / 'deploy/Caddyfile'}:/etc/caddy/Caddyfile:ro", "caddy:2-alpine")
             containers.append(proxy)
             for service, port in PORTS.items():

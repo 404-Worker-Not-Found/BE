@@ -42,6 +42,13 @@ def main():
             or origin.query or origin.fragment or origin.username or origin.password
             or "*" in origin.netloc):
         errors.append("FRONTEND_ORIGIN must be one exact HTTPS origin without a trailing slash.")
+    if (not re.fullmatch(r"[A-Za-z0-9._-]{3,64}", proxy["SWAGGER_USERNAME"])
+            or "replace-with" in proxy["SWAGGER_USERNAME"]):
+        errors.append("Set SWAGGER_USERNAME to 3-64 letters, digits, dots, hyphens or underscores.")
+    # Rendered JSON escapes $ as $$; the container receives single $ characters.
+    swagger_hash = proxy["SWAGGER_PASSWORD_HASH"].replace("$$", "$")
+    if not re.fullmatch(r"\$2[aby]\$(?:0[4-9]|[12][0-9]|3[01])\$[./A-Za-z0-9]{53}", swagger_hash):
+        errors.append("Set SWAGGER_PASSWORD_HASH to a single-quoted caddy hash-password bcrypt hash.")
     for name, service in services.items():
         if name != "app-network" and service.get("ports"):
             errors.append(f"Do not publish ports for {name}.")
