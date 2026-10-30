@@ -2045,3 +2045,22 @@ Reason:
 Related files:
 - `job-service/src/main/java/com/workernotfound/job/domain/job/entity/JobApplicationAdmission.java`
 - `job-service/src/main/java/com/workernotfound/job/domain/job/entity/JobPost.java`
+
+## 2026-10-30 - Password-Protected Swagger on the Deployed Server
+
+Decision:
+- The user chose to expose each service's Swagger UI on the public API domain under `/docs/{service}/`, protected by one Caddy Basic Auth account (`SWAGGER_USERNAME`, bcrypt `SWAGGER_PASSWORD_HASH` in `.env.deploy`). This replaces the earlier rule that Swagger is not publicly routed.
+- Only the Swagger UI, its config and the service's OpenAPI document are proxied under `/docs/{service}/`. Actuator, root-level Swagger paths, and API calls through the docs prefix stay 404.
+- The OpenAPI document request is proxied without `X-Forwarded-Prefix`, so the generated server URL is the public API root and Try it out uses the normal `/api/...` routes with Bearer JWT.
+
+Reason:
+- The team needs the deployed API documentation for frontend integration, while the password keeps it out of anonymous access during the graduation demonstration.
+
+Implication for agents:
+- Do not route Actuator publicly or proxy API calls through `/docs/{service}/`; add new services to the Caddy `swagger` imports and `deploy/test-proxy.py` together.
+- Do not commit the Swagger password or hash; keep the hash single-quoted in `.env.deploy`.
+
+Related files:
+- `deploy/Caddyfile`
+- `deploy/check-config.py`
+- `docs/operations/backend-deployment.md`

@@ -1,3 +1,20 @@
+# Serves only one service's Swagger UI and spec under /docs/{name}.
+(swagger) {
+    # Without a prefix, springdoc keeps the public API root as the server URL.
+    @swaggerSpec{args[0]} path /docs/{args[0]}/v3/api-docs
+    handle @swaggerSpec{args[0]} {
+        uri strip_prefix /docs/{args[0]}
+        reverse_proxy 127.0.0.1:{args[1]}
+    }
+    @swaggerUi{args[0]} path /docs/{args[0]}/v3/api-docs/swagger-config /docs/{args[0]}/swagger-ui.html /docs/{args[0]}/swagger-ui/*
+    handle @swaggerUi{args[0]} {
+        uri strip_prefix /docs/{args[0]}
+        reverse_proxy 127.0.0.1:{args[1]} {
+            header_up X-Forwarded-Prefix /docs/{args[0]}
+        }
+    }
+}
+
 {$API_DOMAIN} {
     encode zstd gzip
 
@@ -46,7 +63,21 @@
         @notification path /api/notifications /api/notifications/*
         reverse_proxy @notification 127.0.0.1:8088
 
-        # Actuator, Swagger and all unlisted routes stay off the public endpoint.
+        # Swagger is for the team only; its requests still call the /api routes above.
+        @docs path /docs /docs/*
+        basic_auth @docs {
+            {$SWAGGER_USERNAME} {$SWAGGER_PASSWORD_HASH}
+        }
+        import swagger auth 8081
+        import swagger member 8082
+        import swagger job 8083
+        import swagger matching 8084
+        import swagger payment 8085
+        import swagger work 8086
+        import swagger chat 8087
+        import swagger notification 8088
+
+        # Actuator, root Swagger paths and all unlisted routes stay off the public endpoint.
         respond 404
     }
 }

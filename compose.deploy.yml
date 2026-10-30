@@ -269,6 +269,8 @@ services:
     environment:
       API_DOMAIN: ${API_DOMAIN:?Set API_DOMAIN}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN}
+      SWAGGER_USERNAME: ${SWAGGER_USERNAME:?Set SWAGGER_USERNAME}
+      SWAGGER_PASSWORD_HASH: ${SWAGGER_PASSWORD_HASH:?Set SWAGGER_PASSWORD_HASH}
     network_mode: service:app-network
     depends_on:
       app-network:
