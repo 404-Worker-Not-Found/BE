@@ -5,6 +5,7 @@ import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
 import com.workernotfound.job.domain.job.dto.request.OwnerJobSearchRequest;
 import com.workernotfound.job.domain.job.dto.request.UpdatePaymentTermsRequest;
+import com.workernotfound.job.domain.job.dto.response.JobCategoryListResponse;
 import com.workernotfound.job.domain.job.dto.response.JobCloseResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentChangeResponse;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
@@ -46,6 +47,12 @@ public class JobController implements JobControllerDocs {
         return ResponseEntity.ok(ApiResponse.success(
                 jobApplicationService.getOwnerJobs(claims.memberId(), request)
         ));
+    }
+
+    @Override
+    @GetMapping("/categories")
+    public ResponseEntity<ApiResponse<JobCategoryListResponse>> getCategories() {
+        return ResponseEntity.ok(ApiResponse.success(jobApplicationService.getCategories()));
     }
 
     @Override

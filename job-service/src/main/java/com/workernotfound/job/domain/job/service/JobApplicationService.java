@@ -2,6 +2,7 @@ package com.workernotfound.job.domain.job.service;
 
 import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.dto.request.UpdatePaymentTermsRequest;
+import com.workernotfound.job.domain.job.dto.response.JobCategoryListResponse;
 import com.workernotfound.job.domain.job.dto.response.JobCloseResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentChangeResponse;
 import com.workernotfound.job.domain.job.dto.request.FundingStatusRequest;
@@ -33,6 +34,7 @@ public class JobApplicationService {
     private final JobFundingStatusCommandService jobFundingStatusCommandService;
     private final JobPaymentChangeCommandService jobPaymentChangeCommandService;
     private final JobCloseCommandService jobCloseCommandService;
+    private final CategoryFindService categoryFindService;
 
     public Long create(Long ownerId, CreateJobRequest request) {
         // 소유권 HTTP 조회 동안 공고 DB 트랜잭션·계정 잠금을 유지하지 않는다.
@@ -72,6 +74,10 @@ public class JobApplicationService {
 
     public JobSearchResponse getJobs(JobSearchRequest request) {
         return jobFindService.findJobs(request);
+    }
+
+    public JobCategoryListResponse getCategories() {
+        return JobCategoryListResponse.from(categoryFindService.findActiveCategories());
     }
 
     public OwnerJobListResponse getOwnerJobs(Long ownerMemberId, OwnerJobSearchRequest request) {
