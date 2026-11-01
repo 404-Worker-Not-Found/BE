@@ -37,7 +37,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// Match deployment: allow the API browser origin while native clients connect without Origin.
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = "chat.websocket.allowed-origins=https://api.example.com")
 @AutoConfigureMockMvc
 class ChatRealtimeIntegrationTests extends IntegrationTestSupport {
   static final AtomicLong IDS = new AtomicLong(200000);

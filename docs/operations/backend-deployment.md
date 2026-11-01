@@ -2,7 +2,7 @@
 
 ## 범위와 준비 상태
 
-졸업 프로젝트 백엔드 8개만 배포한다. 프론트엔드는 별도 팀원이 Vercel에 배포한다. 이 구성은 AWS 리소스를 자동 생성하거나 프론트 코드를 변경하지 않는다.
+졸업 프로젝트 백엔드 8개만 배포한다. 클라이언트는 별도 팀원이 개발하는 안드로이드 네이티브 앱이다. 웹 프론트 배포나 프론트 도메인은 필요 없다. 이 구성은 AWS 리소스를 자동 생성하거나 안드로이드 코드를 변경하지 않는다.
 
 시작안은 Lightsail 서울 리전, Linux/Ubuntu, **IPv4 포함 8GB / 2 vCPU / 160GB** 서버 한 대다. 2026-10-28 확인한 공개 요금은 월 $44다. 환율 1,500원과 부가세 10%를 가정하면 두 달 서버 비용은 약 145,200원이다. 도메인, 백업, 전송량 초과와 외부 인증/SMS 요금은 별도다. 11~12월 총 30만 원 한도 안에서 18~21만 원을 목표로 두고 여유를 남긴다. 무료 크레딧은 예산에 포함하지 않는다.
 
@@ -13,7 +13,7 @@
 ## 배치와 공개 범위
 
 - `app-network`가 호스트 80/443만 공개하고, 같은 네트워크 공간의 Caddy가 그 포트에서 HTTPS 인증서를 자동 관리한다.
-- API 호스트 이름은 `API_DOMAIN`에 넣는다. Vercel 주소는 프론트 주소이며 백엔드 주소가 아니다. 사용자는 무료 서브도메인을 선택했다. 첫 배포는 고정 IP를 이름에 포함하는 sslip.io 주소를 사용한다. 공인 IP에 HTTP로만 배포하면 HTTPS 프론트에서 호출할 수 없다.
+- API 호스트 이름은 `API_DOMAIN`에 넣는다. 안드로이드 앱은 이 호스트의 HTTPS API와 WSS 채팅에 직접 연결한다. 사용자는 무료 서브도메인을 선택했다. 첫 배포는 고정 IP를 이름에 포함하는 sslip.io 주소를 사용한다. 프론트 도메인 없이도 백엔드 HTTPS 인증서는 필요하다.
 - 애플리케이션, MySQL, Redis는 Docker 네트워크에서만 통신한다. AWS 방화벽에 3306/6379/8080~8088을 열지 않는다.
 - 기존 job/matching/payment 클라이언트는 HTTPS 또는 루프백 HTTP만 허용한다. 이를 유지하기 위해 8개 앱과 Caddy는 `app-network`의 네트워크 namespace를 공유하며, 앱들은 각각 `127.0.0.1:8081~8088`에만 바인딩한다. MySQL/Redis는 별도 컨테이너의 Docker 내부 주소로 접근한다. 앱별 프로세스·메모리·파일시스템은 분리된다. namespace 컨테이너 자체를 교체/재시작하면 기존 앱이 옛 namespace에 남을 수 있으므로 `deploy.sh up`은 인프라 확인 후 앱과 proxy를 모두 재생성해 현재 namespace에 연결한다. 이 방식은 단일 서버 시연용이며 여러 서버로 확장할 때는 내부 TLS를 먼저 구성한다.
 - MySQL 인스턴스 하나에 서비스별 DB 8개와 권한이 분리된 계정 8개를 만든다. 서비스 간 테이블 조회나 물리 FK를 허용하지 않는다.
@@ -52,7 +52,7 @@ python3 --version
 
 태그는 선택한 커밋의 40자리 SHA다. **8개 이미지가 모두 발행된 워크플로 실행만 배포한다.** 부분 발행에 실패한 태그는 사용하지 않는다. 서버와 이미지의 커밋을 맞춘다.
 
-로컬에서 프록시 경로·내부 API 차단·CORS를 별도로 검증하려면 `python3 deploy/test-proxy.py`를 실행한다. Docker가 필요하며 임시 네트워크/컨테이너를 만들고 종료 시 정리한다. AWS나 실제 DB는 사용하지 않는다. `python3 deploy/test-config.py`는 임시 설정과 실제 Compose CLI로 셸의 이전 이미지 태그 등이 배포 파일을 덮어쓰지 않는지, 잘못된 태그를 거부하는지 검사한다. 두 검사 모두 이미지 발행 전 워크플로에 포함된다.
+로컬에서 Origin 없는 앱 요청·프록시 경로·내부 API 차단·교차 출처 CORS 미허용을 별도로 검증하려면 `python3 deploy/test-proxy.py`를 실행한다. Docker가 필요하며 임시 네트워크/컨테이너를 만들고 종료 시 정리한다. AWS나 실제 DB는 사용하지 않는다. `python3 deploy/test-config.py`는 임시 설정과 실제 Compose CLI로 셸의 이전 이미지 태그 등이 배포 파일을 덮어쓰지 않는지, 잘못된 태그를 거부하는지 검사한다. 프론트 도메인 없이 배포 설정이 통과하고 채팅 Origin이 API 주소와 일치하는지도 검사한다. 두 검사 모두 이미지 발행 전 워크플로에 포함된다.
 
 기본 이미지 이름은 `ghcr.io/404-worker-not-found/be/auth-service:<SHA>` 형식이다. 저장소를 옮기면 `IMAGE_PREFIX`도 변경한다. 조직의 Actions/package 정책에 따라 GHCR 쓰기 권한 허용이 필요할 수 있다.
 
@@ -79,11 +79,11 @@ openssl rand -hex 32
 sudo docker run --rm -it caddy:2-alpine caddy hash-password
 ```
 
- `.env.deploy`는 Git에서 제외된다. 로컬 `.env`를 복사하거나 `source`하지 않는다. `IMAGE_TAG`에는 전체 SHA, `API_DOMAIN`에는 스킴/포트 없는 호스트명, `FRONTEND_ORIGIN`에는 팀원이 확정한 `https://프로젝트.vercel.app`처럼 정확한 Origin을 넣는다. 끝에 `/`를 붙이지 않고 `*.vercel.app` 전체를 허용하지 않는다. 프론트 주소가 아직 없으면 예제의 예약된 Origin을 유지해도 서버 API의 비브라우저 확인은 가능하다.
+ `.env.deploy`는 Git에서 제외된다. 로컬 `.env`를 복사하거나 `source`하지 않는다. `IMAGE_TAG`에는 전체 SHA, `API_DOMAIN`에는 스킴/포트 없는 백엔드 호스트명을 넣는다. 안드로이드 네이티브 앱은 CORS용 프론트 도메인을 사용하지 않으며 `FRONTEND_ORIGIN`은 필요 없다. 기존 `.env.deploy`에 남은 해당 항목은 제거해도 된다. Compose는 채팅의 `CHAT_WEBSOCKET_ALLOWED_ORIGINS`를 `https://${API_DOMAIN}`으로 설정한다. Origin을 보내지 않는 네이티브 WebSocket 연결은 기존 설정에서 허용되며 STOMP CONNECT의 Bearer JWT 인증과 참여자 권한 검사를 통과해야 한다. 브라우저 WebSocket은 API Origin만 허용하고 `*`로 개방하지 않는다.
 
 배포 스크립트는 Compose 파일의 보간 변수에 해당하는 셸 환경변수를 제거한 후 `.env.deploy`를 읽는다. 셸에 남아 있는 이전 `IMAGE_TAG`나 인증정보가 배포 파일을 덮어쓰지 않는다. Docker 연결·로그인용 `DOCKER_HOST`와 `DOCKER_CONFIG` 등은 유지한다.
 
-회원가입 실제 동작에는 Gmail 앱 비밀번호, SOLAPI 키/등록 발신번호, 점주 가입에는 국세청 API 키가 필요하다. OAuth도 제공자 설정과 프론트 redirect URI 등록이 필요하다. 비어 있으면 해당 기능이 성공했다고 간주하지 않는다. Toss는 테스트 키만 지원하며 `TOSS_ENABLED=false`일 때 결제로 자금을 확보해야 하는 공고 게시/매칭의 전체 흐름은 검증할 수 없다. 실결제 키를 넣지 않는다.
+회원가입 실제 동작에는 Gmail 앱 비밀번호, SOLAPI 키/등록 발신번호, 점주 가입에는 국세청 API 키가 필요하다. OAuth도 안드로이드 플랫폼에 맞는 제공자 설정과 로그인 복귀 경로 등록이 필요하다. 이 설정은 CORS Origin과 별개이며 앱의 SDK·인가 코드 흐름과 현재 백엔드 OAuth 계약의 호환성을 별도로 확인한다. 비어 있으면 해당 기능이 성공했다고 간주하지 않는다. Toss는 테스트 키만 지원하며 `TOSS_ENABLED=false`일 때 결제로 자금을 확보해야 하는 공고 게시/매칭의 전체 흐름은 검증할 수 없다. 실결제 키를 넣지 않는다.
 
 ```bash
 sudo ./scripts/deploy.sh check
@@ -104,9 +104,8 @@ MySQL healthcheck는 계정 초기화가 모두 끝난 후 기록한 `.service-d
 curl -i https://API_HOST/api/jobs/search
 curl -i https://API_HOST/api/jobs/internal/example
 curl -i -X OPTIONS https://API_HOST/api/auth/login \
-  -H 'Origin: https://YOUR_FRONTEND.vercel.app' \
-  -H 'Access-Control-Request-Method: POST' \
-  -H 'Access-Control-Request-Headers: authorization,content-type'
+  -H 'Origin: https://untrusted.example' \
+  -H 'Access-Control-Request-Method: POST'
 sudo ./scripts/deploy.sh logs auth-service
 sudo docker stats --no-stream
 free -h
@@ -118,17 +117,25 @@ curl -i https://API_HOST/docs/job/swagger-ui/index.html
 curl -i -u SWAGGER_USERNAME https://API_HOST/docs/job/v3/api-docs
 ```
 
-공고 조회는 200, 내부 API는 404, 계정 없는 Swagger는 401, 계정을 입력한 OpenAPI 문서는 200과 `servers`의 `https://API_HOST`가 나와야 한다. 등록한 Origin의 preflight는 204와 정확한 `Access-Control-Allow-Origin`이 나와야 한다. 미등록 Origin의 preflight는 403이어야 한다. 지원자 조회는 OWNER 권한, WebSocket은 `wss://API_HOST/api/chat-rooms/ws` 연결과 STOMP 인증까지 확인한다. 실제 가입/로그인, 테스트 결제, 공고 게시, 지원, 매칭 확정, 채팅과 알림까지 팀원과 연결해서 확인한다. CORS는 프록시에서 처리하며 서비스 보안을 해제하지 않는다. 인증은 기존 Bearer JWT 방식이고 CORS credentials/cookie 옵션은 켜지 않는다.
+공고 조회는 200, 내부 API는 404, 계정 없는 Swagger는 401, 계정을 입력한 OpenAPI 문서는 200과 `servers`의 `https://API_HOST`가 나와야 한다. 안드로이드 앱은 Origin 없이 REST API를 직접 호출하므로 CORS preflight가 필요 없다. OPTIONS 요청은 403이며 교차 출처 허용 헤더를 제공하지 않는다. 지원자 조회는 OWNER 권한, WebSocket은 `wss://API_HOST/api/chat-rooms/ws` 연결과 STOMP 인증까지 확인한다. 실제 가입/로그인, 테스트 결제, 공고 게시, 지원, 매칭 확정, 채팅과 알림까지 팀원과 연결해서 확인한다. 웹 프론트용 CORS는 제공하지 않는다. Swagger는 같은 API Origin에서 요청하므로 별도 CORS 허용이 필요 없다. 서비스 보안을 해제하지 않는다. 인증은 기존 Bearer JWT 방식이고 CORS credentials/cookie 옵션은 켜지 않는다.
 
 팀원에게 전달할 값:
 
 - REST base URL: `https://API_HOST` (각 API 경로가 이미 `/api/...`를 포함한다)
 - WebSocket URL: `wss://API_HOST/api/chat-rooms/ws`
 - Swagger: `https://API_HOST/docs/{서비스}/swagger-ui/index.html`과 Swagger 계정
-- 허용된 Vercel Origin, 토큰/요청/오류 계약, Toss 테스트용 공개 client key
+- 토큰/요청/오류 계약, STOMP CONNECT의 Bearer JWT 헤더, Toss 테스트용 공개 client key
 - 내부 API secret, JWT 서명키, DB/PG secret은 전달하지 않는다.
 
-Vercel의 preview 주소는 배포마다 달라질 수 있다. 먼저 고정된 production 주소 하나를 허용하고, 주소 변경 시 `.env.deploy`를 수정한 뒤 `sudo ./scripts/deploy.sh up`으로 앱과 proxy를 재생성한다. 이 명령은 짧은 서비스 중단을 동반한다.
+기존 웹 프론트 기준 배포에서 전환할 때는 수정한 `compose.deploy.yml`, `deploy/Caddyfile`, 배포 검증 파일을 서버에 반영하고 `sudo ./scripts/deploy.sh check` 후 `sudo ./scripts/deploy.sh up`으로 앱과 proxy를 재생성한다. 이번 변경에는 애플리케이션 Java 코드 변경이 없어 이 설정만 적용할 때 새 앱 이미지가 필요하지 않다. 기존 `IMAGE_TAG`를 유지하고 이미지 업데이트와는 구분한다. `up`은 짧은 서비스 중단을 동반한다. 실제 안드로이드 단말의 HTTPS 요청과 Origin 없는 WSS/STOMP 연결은 배포 후 별도로 확인한다.
+
+### 안드로이드 설정 서버 반영 기록 (2026-11-02 KST)
+
+`Ubuntu-1`의 `/home/ubuntu/wnf-backend`에서 기존 소스 `ea8033b`의 배포 설정 3개(`compose.deploy.yml`, `deploy/Caddyfile`, `deploy/check-config.py`)에 검증된 변경을 적용했다. `.env.deploy`는 수정하지 않았고 앱 8개와 proxy의 이미지 참조·digest가 재생성 전후 동일함을 확인했다. 남아 있는 `FRONTEND_ORIGIN` 항목은 새 설정에서 사용하지 않는다. 서버 작업 트리의 이 3개 파일은 아직 커밋되지 않은 상태이므로, 다음 소스 동기화에서는 #147 변경을 포함한 버전으로 맞춘다.
+
+원본 설정과 권한을 제한한 환경변수 백업, 이미지 기준 정보, 재기동 로그와 검사 요약은 `/home/ubuntu/wnf-deploy-backups/android-147-20261101T163410Z`에 있다. 원복 시 이 디렉터리의 원본 설정 3개를 같은 상대 경로로 복원하고 `check`와 `up`을 실행한다. 환경변수와 이미지가 바뀌지 않았으므로 이번 설정 원복에 해당 값을 교체할 필요는 없다.
+
+`check`, Caddy 설정 검증과 `up`이 성공했고, 8개 앱의 healthy 상태를 확인했다. 공개 HTTPS에서 공고 조회 200, JWT 없는 회원 조회 401, 내부 API·Actuator 404, 인증 없는 Swagger 401, Origin 없는 로그인 POST의 입력 검증 400, OPTIONS 403과 CORS 허용 헤더 부재를 확인했다. WSS는 Origin 없음·API Origin에서 101, 외부 Origin에서 403이었고, 인증 없는 STOMP CONNECT는 거절됐다. 실제 단말의 로그인 후 업무·채팅 흐름과 제공자 OAuth는 별도 확인 대상이다.
 
 ## 5. 업데이트, 백업과 복구
 

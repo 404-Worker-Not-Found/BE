@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise public routing/CORS against disposable upstreams, without AWS or real data."""
+"""Exercise native-client routing and Swagger against disposable upstreams, without AWS or real data."""
 
 import base64
 import pathlib
@@ -13,7 +13,6 @@ import uuid
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PORTS = {"auth": 8081, "member": 8082, "job": 8083, "matching": 8084,
          "payment": 8085, "work": 8086, "chat": 8087, "notification": 8088}
-ORIGIN = "https://frontend.example.com"
 # Throwaway Swagger account for this test only.
 SWAGGER_USERNAME = "swagger-team"
 SWAGGER_PASSWORD = "test-password"
@@ -61,17 +60,19 @@ def verify(base):
                  "/api/payments/internal/refunds/reviews", "/api/members/internal/workers",
                  "/v3/api-docs", "/actuator/health", "/swagger-ui/index.html"):
         assert request(base, path)[0] == 404, path
-    status, headers, _ = request(base, "/api/auth/login", "OPTIONS", ORIGIN)
-    assert status == 204
-    assert headers["Access-Control-Allow-Origin"] == ORIGIN
-    assert "Authorization" in headers["Access-Control-Allow-Headers"]
-    assert request(base, "/api/auth/login", "OPTIONS", "https://other.vercel.app")[0] == 403
-    _, headers, _ = request(base, "/api/jobs/search", origin=ORIGIN)
-    assert headers["Access-Control-Allow-Origin"] == ORIGIN
-    _, headers, _ = request(base, "/api/jobs/search", origin="https://other.vercel.app")
+    # Native HTTP clients omit Origin and send commands without browser preflight.
+    status, headers, body = request(base, "/api/auth/login", "POST")
+    assert (status, body) == (200, "auth|")
     assert headers.get("Access-Control-Allow-Origin") is None
+    for origin in (None, base, "https://frontend.example.com", "https://untrusted.example"):
+        status, headers, _ = request(base, "/api/auth/login", "OPTIONS", origin)
+        assert status == 403
+        assert headers.get("Access-Control-Allow-Origin") is None
+        status, headers, _ = request(base, "/api/jobs/search", origin=origin)
+        assert status == 200
+        assert headers.get("Access-Control-Allow-Origin") is None
     verify_swagger(base)
-    print("Proxy routing, internal API isolation, secret stripping, exact-Origin CORS"
+    print("Native-client routing, internal API isolation, secret stripping, no cross-origin CORS"
           " and password-protected Swagger passed.")
 
 
@@ -119,7 +120,7 @@ def main():
                                 ' respond "{$SERVICE}|{http.request.header.X-Internal-Secret}"\n}\n')
             proxy = docker(
                 "run", "-d", "--rm", "--network", network, "-p", "127.0.0.1::80",
-                "-e", "API_DOMAIN=:80", "-e", "FRONTEND_ORIGIN=" + ORIGIN,
+                "-e", "API_DOMAIN=:80",
                 "-e", "SWAGGER_USERNAME=" + SWAGGER_USERNAME, "-e", "SWAGGER_PASSWORD_HASH=" + SWAGGER_HASH,
                 "-v", f"{ROOT / 'deploy/Caddyfile'}:/etc/caddy/Caddyfile:ro", "caddy:2-alpine")
             containers.append(proxy)
