@@ -131,7 +131,7 @@ curl -i -u SWAGGER_USERNAME https://API_HOST/docs/job/v3/api-docs
 
 ### 안드로이드 설정 서버 반영 기록 (2026-11-02 KST)
 
-`Ubuntu-1`의 `/home/ubuntu/wnf-backend`에서 기존 소스 `ea8033b`의 배포 설정 3개(`compose.deploy.yml`, `deploy/Caddyfile`, `deploy/check-config.py`)에 검증된 변경을 적용했다. `.env.deploy`는 수정하지 않았고 앱 8개와 proxy의 이미지 참조·digest가 재생성 전후 동일함을 확인했다. 남아 있는 `FRONTEND_ORIGIN` 항목은 새 설정에서 사용하지 않는다. 서버 작업 트리의 이 3개 파일은 아직 커밋되지 않은 상태이므로, 다음 소스 동기화에서는 #147 변경을 포함한 버전으로 맞춘다.
+`Ubuntu-1`의 `/home/ubuntu/wnf-backend`에서 기존 소스 `ea8033b`의 배포 설정 3개(`compose.deploy.yml`, `deploy/Caddyfile`, `deploy/check-config.py`)에 검증된 변경을 적용했다. `.env.deploy`는 수정하지 않았고 앱 8개와 proxy의 이미지 참조·digest가 재생성 전후 동일함을 확인했다. 남아 있는 `FRONTEND_ORIGIN` 항목은 새 설정에서 사용하지 않는다. 서버 작업 트리의 이 3개 파일은 아직 커밋되지 않은 상태이므로, 다음 소스 동기화에서는 배포 설정 3개의 변경이 포함된 커밋 `2eadccf2e9c753fe93899b19b9882d1beae28e2e`를 기준으로 맞춘다. PR #148을 squash 병합한 뒤에는 해당 변경을 포함한 병합 커밋을 사용한다.
 
 원본 설정과 권한을 제한한 환경변수 백업, 이미지 기준 정보, 재기동 로그와 검사 요약은 `/home/ubuntu/wnf-deploy-backups/android-147-20261101T163410Z`에 있다. 원복 시 이 디렉터리의 원본 설정 3개를 같은 상대 경로로 복원하고 `check`와 `up`을 실행한다. 환경변수와 이미지가 바뀌지 않았으므로 이번 설정 원복에 해당 값을 교체할 필요는 없다.
 
