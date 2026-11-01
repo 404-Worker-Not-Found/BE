@@ -228,7 +228,8 @@ services:
       CHAT_DATASOURCE_URL: "jdbc:mysql://mysql:3306/chat_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
       CHAT_DATASOURCE_USERNAME: chat_user
       CHAT_DATASOURCE_PASSWORD: ${CHAT_DB_PASSWORD:?Set CHAT_DB_PASSWORD}
-      CHAT_WEBSOCKET_ALLOWED_ORIGINS: ${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN}
+      # Native Android clients omit Origin; browser sockets are limited to the API origin.
+      CHAT_WEBSOCKET_ALLOWED_ORIGINS: https://${API_DOMAIN:?Set API_DOMAIN}
 
   payment-service:
     <<: *app
@@ -268,7 +269,6 @@ services:
     mem_limit: 128m
     environment:
       API_DOMAIN: ${API_DOMAIN:?Set API_DOMAIN}
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN}
       SWAGGER_USERNAME: ${SWAGGER_USERNAME:?Set SWAGGER_USERNAME}
       SWAGGER_PASSWORD_HASH: ${SWAGGER_PASSWORD_HASH:?Set SWAGGER_PASSWORD_HASH}
     network_mode: service:app-network

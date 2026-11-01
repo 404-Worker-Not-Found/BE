@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Check deployment-file precedence and rejection of an invalid release tag."""
+"""Check Android deployment without a frontend domain, file precedence and invalid settings."""
 
+import json
 import os
 import pathlib
 import secrets
@@ -53,6 +54,25 @@ def main():
         command = [str(ROOT / "scripts/deploy.sh"), "check"]
         write_env()
         subprocess.run(command, env=environment, check=True, capture_output=True)
+        rendered = subprocess.run(
+            [docker, "compose", "--env-file", str(env_file), "-f", str(ROOT / "compose.deploy.yml"),
+             "config", "--format", "json"],
+            env={key: value for key, value in os.environ.items() if key not in values},
+            check=True, capture_output=True, text=True)
+        services = json.loads(rendered.stdout)["services"]
+        assert "FRONTEND_ORIGIN" not in values
+        assert "FRONTEND_ORIGIN" not in services["proxy"]["environment"]
+        assert services["chat-service"]["environment"]["CHAT_WEBSOCKET_ALLOWED_ORIGINS"] == (
+            "https://" + values["API_DOMAIN"])
+        # Browser origins must not be widened to * for native Android support.
+        services["chat-service"]["environment"]["CHAT_WEBSOCKET_ALLOWED_ORIGINS"] = "*"
+        invalid_config = folder / "invalid.json"
+        invalid_config.touch(mode=0o600)
+        invalid_config.write_text(json.dumps({"services": services}))
+        invalid = subprocess.run(
+            ["python3", str(ROOT / "deploy/check-config.py"), str(invalid_config)],
+            capture_output=True, text=True)
+        assert invalid.returncode != 0 and "CHAT_WEBSOCKET_ALLOWED_ORIGINS" in invalid.stderr
         # Caddy rejects bcrypt costs outside 4-31 at login, so check must catch them first.
         values["SWAGGER_PASSWORD_HASH"] = "'" + SWAGGER_HASH.replace("$14$", "$99$") + "'"
         write_env()
@@ -65,7 +85,8 @@ def main():
         invalid = subprocess.run(command, env=environment, capture_output=True, text=True)
         if invalid.returncode == 0 or "Set a full commit SHA" not in invalid.stderr:
             raise AssertionError("An invalid deployment-file image tag was not rejected.")
-    print("Deployment-file precedence and invalid release tag rejection passed.")
+    print("Android deployment without a frontend domain, API WebSocket origin,"
+          " deployment-file precedence and invalid release tag rejection passed.")
 
 
 if __name__ == "__main__":

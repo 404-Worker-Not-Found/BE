@@ -2070,3 +2070,23 @@ Related files:
 - `deploy/Caddyfile`
 - `deploy/check-config.py`
 - `docs/operations/backend-deployment.md`
+
+## 2026-11-02 - Native Android Deployment Client
+
+Decision:
+- The user clarified that the client is a native Android app. This supersedes the Vercel frontend assumption in the 2026-10-29 deployment decision.
+- Remove the deployment requirement for `FRONTEND_ORIGIN` and the proxy's web frontend CORS grants. Keep the HTTPS API hostname and password-protected, same-origin Swagger.
+- Derive chat browser allowed origins from `https://${API_DOMAIN}`. Native clients omit Origin and must still authenticate STOMP CONNECT with Bearer JWT and pass participant authorization. Do not widen browser origins to `*`.
+
+Reason:
+- Native Android HTTP clients do not need browser CORS permission or a separately deployed frontend domain.
+
+Implication for agents:
+- Treat Android provider/SDK OAuth return configuration as separate from CORS. Verify compatibility with the existing backend OAuth contract before claiming native social login works.
+- Repository configuration changes require explicit server application; do not claim the running deployment changed after editing local files.
+
+Related files:
+- `compose.deploy.yml`
+- `deploy/Caddyfile`
+- `deploy/check-config.py`
+- `docs/operations/backend-deployment.md`

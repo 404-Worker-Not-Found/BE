@@ -5,7 +5,6 @@ import json
 import ipaddress
 import re
 import sys
-from urllib.parse import urlparse
 
 
 def main():
@@ -34,14 +33,8 @@ def main():
         pass
     if domain.endswith(("example.com", "example.net", "example.org", ".invalid", ".localhost", ".test")):
         errors.append("Set a real public API_DOMAIN and point its DNS at the server.")
-    origin_text = proxy["FRONTEND_ORIGIN"]
-    if not re.fullmatch(r"https://[A-Za-z0-9.-]+(?::[0-9]{1,5})?", origin_text):
-        errors.append("FRONTEND_ORIGIN must be one exact HTTPS origin.")
-    origin = urlparse(origin_text)
-    if (origin.scheme != "https" or not origin.hostname or origin.path
-            or origin.query or origin.fragment or origin.username or origin.password
-            or "*" in origin.netloc):
-        errors.append("FRONTEND_ORIGIN must be one exact HTTPS origin without a trailing slash.")
+    if services["chat-service"]["environment"].get("CHAT_WEBSOCKET_ALLOWED_ORIGINS") != "https://" + domain:
+        errors.append("CHAT_WEBSOCKET_ALLOWED_ORIGINS must match the HTTPS API_DOMAIN origin.")
     if (not re.fullmatch(r"[A-Za-z0-9._-]{3,64}", proxy["SWAGGER_USERNAME"])
             or "replace-with" in proxy["SWAGGER_USERNAME"]):
         errors.append("Set SWAGGER_USERNAME to 3-64 letters, digits, dots, hyphens or underscores.")
