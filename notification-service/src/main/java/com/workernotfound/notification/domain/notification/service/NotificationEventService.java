@@ -1,5 +1,7 @@
 package com.workernotfound.notification.domain.notification.service;
 
+import com.workernotfound.notification.domain.push.service.NotificationWriter;
+
 import com.workernotfound.notification.domain.notification.entity.Notification;
 import com.workernotfound.notification.domain.notification.event.NotificationEvent;
 import com.workernotfound.notification.domain.notification.repository.*;
@@ -17,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationEventService {
   private final NotificationEventRepository receipts;
   private final NotificationRepository notifications;
+  private final NotificationWriter writer;
   private final Validator validator;
 
   @Transactional
@@ -27,8 +30,8 @@ public class NotificationEventService {
       throw new IllegalArgumentException("동일 이벤트 ID의 내용이 다릅니다.");
     if (notifications.existsByEventId(event.eventId())) return;
     if ("MatchConfirmed".equals(event.eventType()))
-      notifications.save(notification(event, event.ownerMemberId(), "OWNER"));
-    notifications.save(notification(event, event.workerMemberId(), "WORKER"));
+      writer.save(notification(event, event.ownerMemberId(), "OWNER"));
+    writer.save(notification(event, event.workerMemberId(), "WORKER"));
   }
 
   private Notification notification(NotificationEvent event, Long memberId, String role) {

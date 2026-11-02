@@ -40,6 +40,7 @@ public class AccountGateService {
         if (state.equals("PREPARED")) jdbc.update("update account_gates set state='PREPARED', command_id=? where member_id=?", commandId, id);
         if (state.equals("RELEASED") && commandId.equals(gate.command())) jdbc.update("update account_gates set state='ACTIVE', command_id=null where member_id=?", id);
         if (state.equals("COMMITTED")) jdbc.update("update account_gates set state='WITHDRAWN' where member_id=?", id);
+        if (state.equals("COMMITTED")) jdbc.update("update notification_device_tokens set active=false, token='', generation=generation+1 where member_id=?", id);
         jdbc.update("insert into account_withdrawal_receipts(member_id,command_id,state) values(?,?,?) on duplicate key update state=?", id, commandId, state, state);
         return new Result(id, commandId, state);
     }

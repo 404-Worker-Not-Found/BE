@@ -258,6 +258,7 @@ services:
         SERVICE: notification-service
     environment:
       <<: *runtime-env
+      NOTIFICATION_PUSH_ENABLED: ${NOTIFICATION_PUSH_ENABLED:-false}
       SERVER_PORT: "8088"
       NOTIFICATION_DATASOURCE_URL: "jdbc:mysql://mysql:3306/notification_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
       NOTIFICATION_DATASOURCE_USERNAME: notification_user

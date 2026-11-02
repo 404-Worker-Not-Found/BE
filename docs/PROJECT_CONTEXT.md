@@ -75,6 +75,8 @@ Current state:
 
 ## Current Technical State
 
+- FCM push (#156): notification-service registers Android tokens through authenticated `PUT /api/notifications/me/device-tokens` and removes a current member/role binding through `DELETE /api/notifications/me/device-tokens/{id}`. Existing notification producers save per-device, generation-bound delivery commands in the inbox transaction. An opt-in Firebase Admin SDK worker sends outside transactions with leases, bounded retries, expiry, invalid-token cleanup and account/role checks. SDK startup and dispatch default to off (`NOTIFICATION_PUSH_ENABLED=false`). Deployment credential wiring is tracked separately in #153 / PR #155; neither repository implementation nor fake-gateway tests demonstrate real phone delivery. See `docs/architecture/fcm-push-design.md`.
+
 Current `auth-service` scaffold:
 
 - Java 17
