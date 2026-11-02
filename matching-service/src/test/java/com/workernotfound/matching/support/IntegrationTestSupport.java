@@ -49,5 +49,6 @@ public abstract class IntegrationTestSupport {
 		registry.add("matching.outbox-relay.interval", () -> "1h");
 		registry.add("matching.outbox-relay.initial-delay", () -> "1h");
 		registry.add("matching.work-events.initial-delay-ms", () -> "3600000");
+		registry.add("matching.member-events.initial-delay-ms", () -> "3600000");
 	}
 }

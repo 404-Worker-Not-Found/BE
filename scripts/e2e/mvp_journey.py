@@ -309,6 +309,9 @@ class Journey:
             eventually('review entitlement', lambda: self.sql('member', f'SELECT COUNT(*) FROM reviewable_works WHERE work_id={w}') != '0')
             self.api('member', 'POST', '/api/members/me/reviews', dict(workId=w, rating=5, comment='Journey'), actor[1])
         self.check('mutual review via real event entitlement')
+        # One 5-point review: (3.0 x 3 + 5) / 4 = 3.5 -> 62.50 under the tentative review-rating-v1 policy.
+        eventually('trust score copy', lambda: self.sql('matching', f'SELECT CAST(trust_score AS CHAR) FROM member_trust_scores WHERE member_id={worker[0]}') == '62.50')
+        self.check('trust score reaches matching via member outbox stream')
         settlement = int(self.sql('payment', f'SELECT id FROM payment_settlements WHERE work_id={w}'))
         for actor in [owner, worker]:
             view = self.api('payment', 'GET', f'/api/payments/me/settlements/{settlement}', token=actor[1])

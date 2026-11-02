@@ -299,7 +299,7 @@ Redis 기록 성공과 MySQL의 `PUBLISHED` 변경 사이에 장애가 나면 �
 
 | 입력값 | 현재 처리 | 연결 조건 | 후속 작업 위치 |
 | --- | --- | --- | --- |
-| 평점·신뢰 점수 | 미제공으로 기록 | `member-service` 집계와 내부 조회 또는 이벤트 계약 구현 | 회원·리뷰 기능 이후 |
+| 평점·신뢰 점수 | `TrustScoreUpdated` 사본으로 연결(2026-11-02). 받은 리뷰가 없는 지원자만 미제공 | 구현됨 | [신뢰 점수](./member-review-design.md#신뢰-점수126-두-번째-단위-임시-정책) |
 | 업종별 경력·근무 이력 | 미제공으로 기록 | 경력의 원본 소유권과 업종별 집계 계약 확정 | 회원·근무 기능 이후 |
 | 노쇼 이력·위험도 | 미제공으로 기록 | `work-service` 노쇼 결과와 규칙 기반 위험도 입력 계약 구현 | 근무·노쇼 기능 이후 |
 | 온라인·최근 활동 상태 | 미제공으로 기록 | 상태 소유 주체, heartbeat 주기와 TTL 확정 | 실시간 인프라 이후 |
@@ -310,6 +310,16 @@ Redis 기록 성공과 MySQL의 `PUBLISHED` 변경 사이에 장애가 나면 �
 첫 점수 정책은 `application-time-v1`을 사용한다. 현재 `APPLIED` 지원을 `applied_at ASC, application_id ASC`로 정렬하고, 0부터 시작하는 순번을 사용해 `((지원자 수 - 순번) / 지원자 수) * 100`을 소수점 넷째 자리까지 반올림한 값을 `applied_time_score`와 `total_score`에 저장한다. 아직 연동되지 않은 평점, 업종 경력, 온라인 상태, 예상 도착 시간, 노쇼 위험도는 점수와 입력값을 `NULL`로 유지하고 `missing_inputs`에 기록한다.
 
 외부 입력이 준비되면 기존 배치나 스냅샷을 수정하지 않고 새 정책 버전으로 새 배치를 계산한다. 긴급도별 가중치와 다요소 총점 공식은 필요한 공고·회원·근무 계약과 함께 후속 정책으로 추가한다.
+
+### 신뢰 점수 반영(`application-time-trust-v1`, 임시 정책)
+
+2026-11-02부터 현재 정책은 `application-time-trust-v1`이다. 기존 `application-time-v1` 배치는 정책이 달라 현재 배치로 보지 않으며 다음 갱신이나 주기 복구 때 새 정책으로 다시 계산한다.
+
+- 총점 = 지원 시각 점수 × 0.5 + 신뢰 점수 × 0.5, 소수 넷째 자리 반올림. 신뢰 점수는 `rating_score`와 입력 JSON의 `rating`에 그대로(0~100) 저장한다.
+- 신뢰 점수가 없는 지원자(받은 리뷰 없음)는 `RATING`을 `missing_inputs`에 남기고 그 비중을 지원 시각 점수에 재분배해 총점 = 지원 시각 점수다. 스냅샷은 `READY`다.
+- 신뢰 점수 원본은 member-service다. matching-service는 `member:domain-events`의 `TrustScoreUpdated` v1을 전용 그룹 `matching-trust-score-v1`로 소비해 `member_trust_scores`(V14) 사본에 회원별 더 큰 `revision`만 반영한다. 같은 revision 재전달과 더 작은 revision은 반영하지 않고 ACK한다. 다른 이벤트는 바로 ACK하고, 해석할 수 없거나 envelope와 payload가 다른 레코드는 pending으로 남겨 회전 커서로 다시 읽는다.
+- 사본이 바뀌면 커밋 뒤 그 회원이 `APPLIED`로 지원 중인 공고마다 공고별 잠금 아래에서 점수 대기열을 다시 맞춘다. 현재 배치 판단은 정책·활성 지원 구성에 더해 각 스냅샷의 `rating_score`가 현재 사본과 같은지도 비교한다. 커밋 뒤 갱신이 실패해도 주기 복구가 바뀐 신뢰 점수를 보고 새 배치를 계산한다.
+- 이미 시작한 매칭 제안과 점주에게 고정해 보여 준 점수 묶음은 바꾸지 않는다. 새 묶음은 다음 조회부터 쓰인다.
 
 ### `matchings`와 `matching_status_histories`
 
@@ -336,7 +346,7 @@ Redis 기록 성공과 MySQL의 `PUBLISHED` 변경 사이에 장애가 나면 �
 - 취소, 거절, 선정, 공고 마감 시 대기열에서 제거한다.
 - Redis 점수는 후보 추출을 위한 복제 값이다. 동점자의 최종 순서는 MySQL에서 `applied_at`, `application_id`로 결정하고, 매칭 직전에 지원 상태와 점수 묶음·스냅샷 상태를 다시 확인한다.
 
-현재 구현 단계에서는 지원 트랜잭션 커밋 후 애플리케이션 이벤트 리스너가 지원 Set을 갱신하고, 활성 지원 구성이 최신 `READY` 점수 배치와 다를 때 `application-time-v1` 점수를 재계산한다. 점수 배치 트랜잭션을 먼저 커밋한 뒤 최신 배치의 `READY` 스냅샷을 배치별 Sorted Set으로 교체하고 `scoreBatchId`와 `policyVersion` metadata를 함께 저장한다. 주기적인 복구 작업은 MySQL 상태로 지원 Set을 다시 구성한 뒤, 현재 정책과 활성 지원 구성이 일치하는 최신 배치를 복구하거나 불일치할 때 새 배치를 계산한다. 복구·이벤트 갱신은 공고별 Redis 잠금으로 직렬화하고 Set과 Sorted Set 교체는 각각 원자적으로 실행한다. 잠금마다 증가하는 공고별 fencing token을 metadata에 보존해 잠금 TTL이 지난 작업의 늦은 교체·삭제를 거부한다. Redis 반영 실패는 기록하되 이미 커밋된 지원과 점수 배치를 실패로 바꾸지 않는다. 로컬 projection과 별개로 Outbox relay가 서비스 간 이벤트를 Redis Stream에 발행하며, Stream 성공 후에만 Outbox 이벤트를 `PUBLISHED`로 변경한다.
+현재 구현 단계에서는 지원 트랜잭션 커밋 후 애플리케이션 이벤트 리스너가 지원 Set을 갱신하고, 활성 지원 구성이나 지원자 신뢰 점수가 최신 `READY` 점수 배치와 다를 때 현재 정책(`application-time-trust-v1`) 점수를 재계산한다. 점수 배치 트랜잭션을 먼저 커밋한 뒤 최신 배치의 `READY` 스냅샷을 배치별 Sorted Set으로 교체하고 `scoreBatchId`와 `policyVersion` metadata를 함께 저장한다. 주기적인 복구 작업은 MySQL 상태로 지원 Set을 다시 구성한 뒤, 현재 정책과 활성 지원 구성이 일치하는 최신 배치를 복구하거나 불일치할 때 새 배치를 계산한다. 복구·이벤트 갱신은 공고별 Redis 잠금으로 직렬화하고 Set과 Sorted Set 교체는 각각 원자적으로 실행한다. 잠금마다 증가하는 공고별 fencing token을 metadata에 보존해 잠금 TTL이 지난 작업의 늦은 교체·삭제를 거부한다. Redis 반영 실패는 기록하되 이미 커밋된 지원과 점수 배치를 실패로 바꾸지 않는다. 로컬 projection과 별개로 Outbox relay가 서비스 간 이벤트를 Redis Stream에 발행하며, Stream 성공 후에만 Outbox 이벤트를 `PUBLISHED`로 변경한다.
 
 ## 조회와 권한
 

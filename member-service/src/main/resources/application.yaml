@@ -35,6 +35,18 @@ member:
   review:
     # 근무 완료 후 리뷰를 쓸 수 있는 기간(임시 정책).
     write-period: ${MEMBER_REVIEW_WRITE_PERIOD:14d}
+  trust-score:
+    # 받은 평점 평균을 기본 평점 쪽으로 보정하는 임시 정책(review-rating-v1).
+    prior-rating: ${MEMBER_TRUST_SCORE_PRIOR_RATING:3.0}
+    prior-review-count: ${MEMBER_TRUST_SCORE_PRIOR_REVIEW_COUNT:3}
+  outbox:
+    # 신뢰 점수 변경 같은 회원 이벤트를 matching Redis Stream으로 발행한다.
+    enabled: ${MEMBER_OUTBOX_ENABLED:true}
+    stream: ${MEMBER_OUTBOX_STREAM_KEY:member:domain-events}
+    batch-size: 100
+    lease-duration: 30s
+    retry-base-delay: 1s
+    retry-max-delay: 5m
   review-events:
     # WorkCompleted로 리뷰할 수 있는 근무를 기록한다.
     enabled: ${MEMBER_REVIEW_EVENTS_ENABLED:true}

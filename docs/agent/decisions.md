@@ -2090,3 +2090,21 @@ Related files:
 - `deploy/Caddyfile`
 - `deploy/check-config.py`
 - `docs/operations/backend-deployment.md`
+
+## 2026-11-02 - Tentative Trust Score and Matching Weight
+
+Decision:
+- The user chose the proposed tentative policy: member trust score uses received review ratings only, shrunk toward a 3.0 prior with the weight of 3 reviews and scaled to 0–100 (`review-rating-v1`). No-show and cancellation deductions stay deferred, consistent with the 2026-10-28 penalty hold.
+- Members without received reviews have no trust score; matching records `RATING` as missing and redistributes its weight to the application-time score.
+- Matching total score is 50% application time and 50% trust score (`application-time-trust-v1`).
+- member-service owns the score and publishes `TrustScoreUpdated` through its Outbox to `member:domain-events`; matching-service keeps a revision-guarded copy instead of calling member-service during score calculation.
+
+Reason:
+- Automatic and fallback matching need a member-quality input, and the repository already aggregates review ratings. An event copy keeps score calculation independent of member-service availability.
+
+Implication for agents:
+- Add no-show/cancellation effects, decay, or new weights as new policy versions only after the user confirms the policy. Do not modify existing score batches.
+
+Related files:
+- `docs/architecture/member-review-design.md`
+- `docs/architecture/matching-application-design.md`
