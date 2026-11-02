@@ -256,8 +256,16 @@ services:
       dockerfile: deploy/Dockerfile
       args:
         SERVICE: notification-service
+    volumes:
+      - type: bind
+        source: /opt/wnf/secrets/firebase-admin.json
+        target: /run/secrets/firebase-admin.json
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *runtime-env
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase-admin.json
       SERVER_PORT: "8088"
       NOTIFICATION_DATASOURCE_URL: "jdbc:mysql://mysql:3306/notification_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
       NOTIFICATION_DATASOURCE_USERNAME: notification_user
