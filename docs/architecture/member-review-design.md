@@ -94,6 +94,14 @@
 - relay가 짧은 DB 임대로 이벤트를 점유해 `member:domain-events`(matching Redis)에 다른 서비스와 같은 envelope(`eventId`, `aggregateType=MEMBER`, `aggregateId`=회원 ID, `eventType`, `revision`, `version`, `occurredAt`, `payload`)로 발행한다. 실패는 상한이 있는 지수 backoff로 재시도하고 전달은 at-least-once다.
 - payload: `eventId`, `eventType`, `memberId`, `revision`, `version`(1), `trustScore`(소수 둘째 자리), `reviewCount`, `policyVersion`. 발생 시각은 envelope `occurredAt`만 쓴다.
 
+### 기존 데이터
+
+V5(상호 리뷰)가 이미 배포돼 있으므로 V6는 테이블을 만든 뒤 기존 `member_review_stats`(받은 리뷰 1개 이상)로 신뢰 점수를 한 번 채운다. 이렇게 하지 않으면 V6 이전에 리뷰를 받은 회원은 다음 리뷰 전까지 matching-service에서 리뷰 없는 지원자로 처리된다.
+
+- 값은 `review-rating-v1`의 기본 설정(기본 평점 3.0, 보정 리뷰 수 3)으로 계산하고 `revision=1`로 저장한다. 배포 환경에서 설정을 바꿨더라도 이 값은 기본 설정 기준이며, 그 회원이 다음 리뷰를 받을 때 현재 설정으로 다시 계산된다.
+- 같은 마이그레이션에서 회원별 고정 이벤트 ID(`trust-score-backfill-{memberId}`)로 `TrustScoreUpdated` v1을 Outbox에 넣고, 기존 relay가 발행해 matching-service 사본까지 전달한다.
+- SQL 계산은 반올림 경계에서도 Java 정책과 같은 값이 되도록 충분한 소수 자릿수로 나눈다. 가능한 집계 조합 전체를 Java 정책과 비교하는 마이그레이션 테스트로 확인한다.
+
 ## 운영 설정
 
 | 환경 변수 | 기본값 | 의미 |
@@ -119,4 +127,4 @@ Redis·MySQL Testcontainers로 확인했다.
 - 근무 이벤트 소비: 완료 근무 기록과 다른 근무 이벤트 ACK, 같은 완료의 재전달, 참여자가 같은 이벤트·같은 근무 ID의 다른 내용·envelope 불일치의 pending 유지와 뒤 레코드 처리
 - 리뷰: 점주·알바생 상호 작성과 평균, 같은 요청 재반환과 다른 내용 409, 참여자가 아닌 회원·없는 근무, 탈퇴 진행 중 회원, 작성 기간 경계(직전 허용, 같은 시각 거절), 기간 뒤 같은 요청, 작성할 리뷰 목록, 같은 리뷰 동시 요청(한 건·집계 1회), 같은 회원에게 쓰는 동시 리뷰(집계 누락 없음)
 - HTTP: 인증, 평점·코멘트·페이지 검증, 오류 코드, Swagger 경로. JVM 시간대를 UTC로 둬도 통과한다.
-- 신뢰 점수: 보정 공식 경계값과 잘못된 집계·설정 거절, 리뷰마다 점수·revision·Outbox 갱신, 같은 리뷰 재요청 무변경, 같은 회원에게 쓰는 동시 리뷰의 revision 연속성과 최종 점수, relay의 공통 envelope 발행
+- 신뢰 점수: V5 이전 스키마에 집계를 넣고 V6를 적용한 백필(점수·이벤트·리뷰 없는 집계 제외, SQL과 Java 계산 일치), 보정 공식 경계값과 잘못된 집계·설정 거절, 리뷰마다 점수·revision·Outbox 갱신, 같은 리뷰 재요청 무변경, 같은 회원에게 쓰는 동시 리뷰의 revision 연속성과 최종 점수, relay의 공통 envelope 발행

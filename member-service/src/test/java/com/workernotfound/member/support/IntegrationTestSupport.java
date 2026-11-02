@@ -1,6 +1,12 @@
 package com.workernotfound.member.support;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.TestInstance;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -23,6 +29,23 @@ public abstract class IntegrationTestSupport {
 	static {
 		MYSQL.start();
 		REDIS.start();
+	}
+
+	// 마이그레이션 검증처럼 빈 스키마가 필요한 테스트는 컨테이너 관리자 계정으로 별도 데이터베이스를 만든다.
+	protected static DataSource createDatabase(String name) throws SQLException {
+		try (Connection connection = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+			Statement statement = connection.createStatement()) {
+			statement.execute("CREATE DATABASE `" + name + "`");
+		}
+		return new DriverManagerDataSource(MYSQL.getJdbcUrl().replace("/" + MYSQL.getDatabaseName(), "/" + name),
+			"root", MYSQL.getPassword());
+	}
+
+	protected static void dropDatabase(String name) throws SQLException {
+		try (Connection connection = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+			Statement statement = connection.createStatement()) {
+			statement.execute("DROP DATABASE IF EXISTS `" + name + "`");
+		}
 	}
 
 	@DynamicPropertySource
