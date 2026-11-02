@@ -2,7 +2,7 @@
 
 ## 범위
 
-`job-service`는 공고와 업종 카테고리의 원본을 소유한다. 현재는 점주의 공고 비공개(`PAYMENT_PENDING`) 등록과 payment-service 결제 주문 생성 연동, 점주의 결제 주문 조회, 공고 상세·목록 조회, 점주 본인 공고 목록, `matching-service`가 지원 저장 전에 호출하는 지원 접수 승인 내부 API와 matching Redis Stream의 `ApplicationSubmitted` 소비에 따른 승인 사용 완료 처리와 사용이 확인되지 않은 승인의 만료 처리, 매칭 확정 Saga가 호출하는 모집 자리 예약·확정·반환 내부 API와 만료 예약 회수, 1인 예정 급여 계산, 확정 인원 기준의 모집 완료 전이와 matching-service 모집 완료 알림, payment-service 예치 상태(`funding-status`) 수신에 따른 `PAYMENT_PENDING → OPEN` 공개와 예치 차단, 결제 대기 공고의 결제 조건 변경과 실패 주문 재결제(주문 교체), 환불 검토 대상 기록, 점주 수동 마감과 지원 마감·근무 시작 경과에 따른 자동 상태 전이를 제공한다. 공개 이후의 공고 수정·재모집, 재오픈, 공고 삭제, 마감 공고의 미결제 주문 정리와 남은 예치 환불, 실제 환불·정산, 확정된 매칭·근무의 자동 취소는 후속 작업이다.
+`job-service`는 공고와 업종 카테고리의 원본을 소유한다. 현재는 점주의 공고 비공개(`PAYMENT_PENDING`) 등록과 payment-service 결제 주문 생성 연동, 점주의 결제 주문 조회, 공고 상세·목록 조회, 업종 카테고리 목록 조회, 점주 본인 공고 목록, `matching-service`가 지원 저장 전에 호출하는 지원 접수 승인 내부 API와 matching Redis Stream의 `ApplicationSubmitted` 소비에 따른 승인 사용 완료 처리와 사용이 확인되지 않은 승인의 만료 처리, 매칭 확정 Saga가 호출하는 모집 자리 예약·확정·반환 내부 API와 만료 예약 회수, 1인 예정 급여 계산, 확정 인원 기준의 모집 완료 전이와 matching-service 모집 완료 알림, payment-service 예치 상태(`funding-status`) 수신에 따른 `PAYMENT_PENDING → OPEN` 공개와 예치 차단, 결제 대기 공고의 결제 조건 변경과 실패 주문 재결제(주문 교체), 환불 검토 대상 기록, 점주 수동 마감과 지원 마감·근무 시작 경과에 따른 자동 상태 전이를 제공한다. 공개 이후의 공고 수정·재모집, 재오픈, 공고 삭제, 마감 공고의 미결제 주문 정리와 남은 예치 환불, 실제 환불·정산, 확정된 매칭·근무의 자동 취소는 후속 작업이다.
 
 ## 공개 API
 
@@ -18,6 +18,7 @@
 | 수동 마감 | `POST /api/jobs/{id}/close` | `OWNER` 역할, 점주 본인, `Idempotency-Key` | 본문 없음 / `jobPostId`, `result`(`CLOSED`/`ALREADY_CLOSED`), `previousStatus`, `status`, `processedAt` ([수동 마감](#수동-마감)) |
 | 목록 조회 | `GET /api/jobs/search` | 없음 | 위치·거리·급여·시작 시각·카테고리·유형·페이지 조건 / 공고 카드 목록과 페이지 정보 |
 | 점주 본인 공고 목록 | `GET /api/jobs/me` | `OWNER` 역할, 점주 본인(JWT `memberId`) | 상태·페이지 조건 / 점주 공고 카드 목록(확정 인원 포함)과 페이지 정보 ([점주 본인 공고 목록](#점주-본인-공고-목록)) |
+| 업종 카테고리 목록 | `GET /api/jobs/categories` | 없음 | 요청 조건 없음 / 활성 대분류(`id`, `name`)와 각 대분류의 활성 하위 분류(`subCategories`) ([업종 카테고리 목록](#업종-카테고리-목록)) |
 
 공고 등록 규칙:
 
@@ -37,6 +38,15 @@
 - `maxDistanceKm`을 사용하려면 `workerLat`, `workerLng`가 필요하다. `minWage`는 `maxWage`보다 클 수 없다.
 - 기본 페이지는 0, 크기는 20, 최대 크기는 100이다.
 - 후보 공고를 모두 조회한 뒤 애플리케이션 메모리에서 필터·정렬·페이지 처리한다. 공고 수가 늘어나면 DB 조건 조회와 공간 인덱스로 바꿔야 한다.
+
+### 업종 카테고리 목록
+
+`GET /api/jobs/categories`는 공고 등록의 `categoryId`와 목록 조회의 `categoryIds`에 쓸 값을 클라이언트에 제공한다. 공고 탐색과 같이 인증 없이 호출하며, 잘못된 토큰도 다른 공개 조회처럼 무시한다.
+
+- `is_active=true`인 카테고리만 반환한다. 대분류(`parent_id IS NULL`) 아래에 하위 분류를 `subCategories`로 묶는다. 비활성 대분류의 하위 분류는 활성이어도 반환하지 않는다. 현재 데이터는 2단계이며 더 깊은 단계는 반환하지 않는다.
+- 대분류와 하위 분류는 각각 ID 오름차순이다. 하위 분류가 없는 대분류는 빈 배열을 가진다.
+- 이 API는 조회만 추가한다. 공고 등록은 기존처럼 저장된 카테고리 ID면 대분류·비활성 여부와 관계없이 허용하고, 목록 조회의 `categoryIds`는 지정한 ID와 정확히 일치하는 공고만 찾는다(대분류를 지정해도 하위 분류 공고는 포함하지 않는다).
+- `GET /api/jobs/categories`도 고정 경로라 `/{id}` 상세 조회로 연결되지 않는다.
 
 상세 조회의 `applicantCount`는 원본이 `matching-service`에 있고 지원자 수 projection이 아직 없으므로 현재 `null`이다. 구현 기준은 [지원자 수 projection 기준](#지원자-수-projection-기준미구현)에 정리했다.
 

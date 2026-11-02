@@ -4,6 +4,7 @@ import com.workernotfound.job.domain.job.entity.IndustryCategory;
 import com.workernotfound.job.domain.job.exception.JobErrorCode;
 import com.workernotfound.job.domain.job.repository.IndustryCategoryRepository;
 import com.workernotfound.job.global.exception.BusinessException;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,5 +19,9 @@ public class CategoryFindService {
     public IndustryCategory findCategory(Long categoryId) {
         return industryCategoryRepository.findById(categoryId)
                 .orElseThrow(() -> new BusinessException(JobErrorCode.CATEGORY_NOT_FOUND));
+    }
+
+    public List<IndustryCategory> findActiveCategories() {
+        return industryCategoryRepository.findAllByIsActiveTrueOrderByIdAsc();
     }
 }

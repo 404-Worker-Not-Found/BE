@@ -31,6 +31,14 @@ class SwaggerDocumentationTests extends IntegrationTestSupport {
     }
 
     @Test
+    void openApiDocsDescribePublicCategoryList() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/jobs/categories'].get.summary").value("업종 카테고리 목록"))
+                .andExpect(jsonPath("$.paths['/api/jobs/categories'].get.security").doesNotExist());
+    }
+
+    @Test
     void swaggerUiIsAccessible() throws Exception {
         mockMvc.perform(get("/swagger-ui/index.html"))
                 .andExpect(status().isOk());
