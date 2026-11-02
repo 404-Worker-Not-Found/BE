@@ -18,6 +18,8 @@ import com.workernotfound.matching.domain.matching.service.AutoMatchingService.A
 import com.workernotfound.matching.domain.matching.service.MatchingCommandService;
 import com.workernotfound.matching.domain.matching.service.MatchingConfirmationCommandService;
 import com.workernotfound.matching.domain.matching.service.MatchingDeclineService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.workernotfound.matching.domain.outbox.entity.OutboxEvent;
 import com.workernotfound.matching.domain.outbox.repository.OutboxEventRepository;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreBatchRepository;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreSnapshotRepository;
@@ -90,6 +92,9 @@ class AutoMatchingTests extends IntegrationTestSupport {
 
 	@Autowired
 	private JdbcTemplate jdbc;
+
+	@Autowired
+	private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
 	private long nextAdmissionId = 77_000L;
 
@@ -286,6 +291,60 @@ class AutoMatchingTests extends IntegrationTestSupport {
 
 		assertThat(pending()).hasSize(1);
 		assertThat(matchingRepository.count()).isEqualTo(1);
+	}
+
+	@Test
+	void proposalsAndExhaustionAppendNotificationEvents() throws Exception {
+		LocalDateTime now = TestSchedule.now();
+		Application manual = apply(7_801L, now.minusHours(3), now.plusMinutes(10), 2);
+		Application automatic = apply(7_802L, now.minusHours(2), now.plusMinutes(10), 2);
+		matchingCommandService.createManual(JOB_POST_ID, manual.getId(), OWNER_ID, null);
+		jdbc.update("update applications set application_deadline = ? where job_post_id = ?", now.minusMinutes(1), JOB_POST_ID);
+		autoMatchingService.proposeFor(JOB_POST_ID);
+
+		List<OutboxEvent> proposals = events("MatchingProposed");
+		assertThat(proposals).hasSize(2).allSatisfy(event -> {
+			assertThat(event.getAggregateType()).isEqualTo("MATCHING");
+			assertThat(event.getRevision()).isEqualTo(1L);
+		});
+		JsonNode automaticPayload = payloadFor(proposals, automatic.getId());
+		assertThat(automaticPayload.path("selectionType").asText()).isEqualTo("AUTOMATIC");
+		assertThat(automaticPayload.path("workerMemberId").asLong()).isEqualTo(7_802L);
+		assertThat(automaticPayload.path("ownerMemberId").asLong()).isEqualTo(OWNER_ID);
+		assertThat(automaticPayload.path("expiresAt").isNull()).isFalse();
+		JsonNode manualPayload = payloadFor(proposals, manual.getId());
+		assertThat(manualPayload.path("selectionType").asText()).isEqualTo("MANUAL");
+		assertThat(manualPayload.path("expiresAt").isNull()).isTrue();
+
+		for (Matching proposal : pending()) declineService.decline(proposal.getId(), proposal.getWorkerMemberId());
+		autoMatchingService.proposeFor(JOB_POST_ID);
+		autoMatchingService.proposeFor(JOB_POST_ID);
+
+		assertThat(events("MatchingCandidatesExhausted")).singleElement().satisfies(event -> {
+			assertThat(event.getAggregateType()).isEqualTo("JOB_POST");
+			assertThat(event.getAggregateId()).isEqualTo(JOB_POST_ID);
+			JsonNode payload = readPayload(event);
+			assertThat(payload.path("ownerMemberId").asLong()).isEqualTo(OWNER_ID);
+			assertThat(payload.path("remainingSeats").asInt()).isEqualTo(2);
+		});
+	}
+
+	private List<OutboxEvent> events(String eventType) {
+		return outboxEventRepository.findAll().stream().filter(event -> eventType.equals(event.getEventType())).toList();
+	}
+
+	private JsonNode payloadFor(List<OutboxEvent> events, Long applicationId) {
+		return events.stream().map(this::readPayload)
+			.filter(payload -> payload.path("applicationId").asLong() == applicationId)
+			.findFirst().orElseThrow();
+	}
+
+	private JsonNode readPayload(OutboxEvent event) {
+		try {
+			return objectMapper.readTree(event.getPayload());
+		} catch (Exception exception) {
+			throw new IllegalStateException(exception);
+		}
 	}
 
 	private Application apply(Long workerId, LocalDateTime appliedAt, LocalDateTime deadline, int recruitCount) {

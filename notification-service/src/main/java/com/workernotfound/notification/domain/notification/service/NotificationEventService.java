@@ -19,6 +19,11 @@ public class NotificationEventService {
   private final NotificationRepository notifications;
   private final Validator validator;
 
+  static final String MATCH_CONFIRMED = "MatchConfirmed";
+  static final String APPLICATION_REJECTED = "ApplicationRejected";
+  static final String MATCHING_PROPOSED = "MatchingProposed";
+  static final String CANDIDATES_EXHAUSTED = "MatchingCandidatesExhausted";
+
   @Transactional
   public void receive(NotificationEvent event) {
     validate(event);
@@ -26,37 +31,54 @@ public class NotificationEventService {
     if (!fingerprint.equals(receipts.record(event.eventId(), fingerprint)))
       throw new IllegalArgumentException("동일 이벤트 ID의 내용이 다릅니다.");
     if (notifications.existsByEventId(event.eventId())) return;
-    if ("MatchConfirmed".equals(event.eventType()))
-      notifications.save(notification(event, event.ownerMemberId(), "OWNER"));
-    notifications.save(notification(event, event.workerMemberId(), "WORKER"));
+    switch (event.eventType()) {
+      case MATCH_CONFIRMED -> {
+        notifications.save(notification(event, event.ownerMemberId(), "OWNER", event.matchingId(), event.applicationId()));
+        notifications.save(notification(event, event.workerMemberId(), "WORKER", event.matchingId(), event.applicationId()));
+      }
+      case MATCHING_PROPOSED ->
+          notifications.save(notification(event, event.workerMemberId(), "WORKER", event.matchingId(), event.applicationId()));
+      case CANDIDATES_EXHAUSTED -> notifications.save(notification(event, event.ownerMemberId(), "OWNER", null, null));
+      default -> notifications.save(notification(event, event.workerMemberId(), "WORKER", null, event.applicationId()));
+    }
   }
 
-  private Notification notification(NotificationEvent event, Long memberId, String role) {
+  private Notification notification(NotificationEvent event, Long memberId, String role, Long matchingId,
+      Long applicationId) {
     return Notification.builder().eventId(event.eventId()).memberId(memberId).memberRole(role)
         .notificationType(event.eventType()).jobPostId(event.jobPostId())
-        .matchingId("MatchConfirmed".equals(event.eventType()) ? event.matchingId() : null)
-        .applicationId(event.applicationId()).occurredAt(event.occurredAt()).build();
+        .matchingId(matchingId).applicationId(applicationId).occurredAt(event.occurredAt()).build();
   }
 
   private void validate(NotificationEvent event) {
     if (event == null || !validator.validate(event).isEmpty() || event.version() != 1)
       throw new IllegalArgumentException("지원하지 않거나 잘못된 알림 이벤트입니다.");
-    if ("MatchConfirmed".equals(event.eventType())) {
-      if (event.matchingId() == null || !event.aggregateId().equals(event.matchingId())
-          || event.ownerMemberId() == null || event.ownerMemberId() <= 0)
-        throw new IllegalArgumentException("매칭 알림의 필수 정보가 올바르지 않습니다.");
-    } else if (!"ApplicationRejected".equals(event.eventType())
-        || !event.aggregateId().equals(event.applicationId()) || !"REJECTED".equals(event.status()))
-      throw new IllegalArgumentException("지원 결과 알림의 필수 정보가 올바르지 않습니다.");
+    boolean valid = switch (event.eventType()) {
+      case MATCH_CONFIRMED, MATCHING_PROPOSED -> event.aggregateId().equals(event.matchingId())
+          && event.applicationId() != null && event.workerMemberId() != null && event.ownerMemberId() != null;
+      case APPLICATION_REJECTED -> event.aggregateId().equals(event.applicationId())
+          && event.workerMemberId() != null && "REJECTED".equals(event.status());
+      case CANDIDATES_EXHAUSTED -> event.aggregateId().equals(event.jobPostId()) && event.ownerMemberId() != null
+          && event.remainingSeats() != null && event.applicationId() == null && event.workerMemberId() == null
+          && event.matchingId() == null;
+      default -> false;
+    };
+    if (!valid) throw new IllegalArgumentException("알림 이벤트의 필수 정보가 올바르지 않습니다.");
   }
 
+  // 기존 MatchConfirmed·ApplicationRejected의 필드 순서는 이미 저장된 수신 기록과 같아야 하므로 바꾸지 않는다.
   private String fingerprint(NotificationEvent event) {
     var fields = new ArrayList<Object>(List.of(event.eventId(), event.eventType(),
         DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(event.occurredAt()), event.aggregateId(),
-        event.revision(), event.version(), event.applicationId(), event.jobPostId(), event.workerMemberId()));
-    if ("MatchConfirmed".equals(event.eventType())) {
-      fields.add(event.matchingId()); fields.add(event.ownerMemberId());
-    } else fields.add(event.status());
+        event.revision(), event.version()));
+    switch (event.eventType()) {
+      case MATCH_CONFIRMED, MATCHING_PROPOSED -> fields.addAll(List.of(event.applicationId(), event.jobPostId(),
+          event.workerMemberId(), event.matchingId(), event.ownerMemberId()));
+      case CANDIDATES_EXHAUSTED -> fields.addAll(List.of(event.jobPostId(), event.ownerMemberId(),
+          event.remainingSeats()));
+      default -> fields.addAll(List.of(event.applicationId(), event.jobPostId(), event.workerMemberId(),
+          event.status()));
+    }
     var canonical = new StringBuilder();
     for (Object field : fields) {
       String value = field.toString();

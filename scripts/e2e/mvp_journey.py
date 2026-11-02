@@ -265,6 +265,8 @@ class Journey:
         application_id = application['applicationId']
         matching = self.api('matching', 'POST', f'/api/jobs/{job_id}/applications/{application_id}/matchings', {}, owner[1])
         matching_id = matching['matchingId']
+        eventually('proposal notification', lambda: self.sql('notification', f"SELECT COUNT(*) FROM notifications WHERE matching_id={matching_id} AND notification_type='MatchingProposed' AND member_role='WORKER'") == '1')
+        self.check(label + ' proposal notifies worker via matching outbox stream')
         self.api('matching', 'PATCH', f'/api/matchings/{matching_id}/accept', token=worker[1])
         eventually('matching confirmation saga', lambda: self.sql('matching', f'SELECT status FROM matchings WHERE id={matching_id}') == 'CONFIRMED')
         work_id = int(self.sql('work', f'SELECT id FROM works WHERE matching_id={matching_id}'))

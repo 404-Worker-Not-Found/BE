@@ -35,3 +35,7 @@ Docker, Java 17, Python 3가 필요하다. 저장소 루트에서 `python3 scrip
 ## #126 신뢰 점수 연결 확장 (2026-11-02)
 
 정상 근무의 상호 리뷰 뒤 알바생이 받은 5점 리뷰 1개가 member-service Outbox → `member:domain-events` → matching-service 사본으로 전달돼 신뢰 점수 62.50(임시 정책 `review-rating-v1`)이 되는지 확인한다. 확장한 실제 여정 31개 검사가 통과했다. 이후 공고 지원 점수의 정확한 순위는 여정에서 단정하지 않고 서비스 통합 테스트로 검증한다.
+
+## #154 매칭 제안 알림 확장 (2026-11-02)
+
+네 시나리오의 점주 수동 제안마다 matching Outbox의 `MatchingProposed`가 실제 Stream을 거쳐 notification-service에서 알바생 알림으로 저장되는지 확인한다. 여정의 근무 시작이 10분 뒤라 자동 매칭은 응답 시간이 남지 않아 제안하지 않는다. 자동·폴백 제안과 후보 소진은 서비스 통합 테스트로 검증한다. 확장한 실제 여정 35개 검사가 통과했다.
