@@ -4,6 +4,7 @@ import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.dto.request.JobSearchRequest;
 import com.workernotfound.job.domain.job.dto.request.OwnerJobSearchRequest;
 import com.workernotfound.job.domain.job.dto.request.UpdatePaymentTermsRequest;
+import com.workernotfound.job.domain.job.dto.response.JobCategoryListResponse;
 import com.workernotfound.job.domain.job.dto.response.JobCloseResponse;
 import com.workernotfound.job.domain.job.dto.response.JobDetailResponse;
 import com.workernotfound.job.domain.job.dto.response.JobPaymentChangeResponse;
@@ -199,4 +200,18 @@ public interface JobControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청", content = @Content)
     })
     ResponseEntity<ApiResponse<JobSearchResponse>> search(@Valid JobSearchRequest request);
+
+    @Operation(
+            summary = "업종 카테고리 목록",
+            description = "공고 등록의 categoryId와 목록 조회의 categoryIds에 쓰는 활성 업종 카테고리를 대분류·하위 분류 구조로 반환합니다. "
+                    + "대분류와 하위 분류는 각각 ID 오름차순입니다. 목록 조회의 categoryIds는 지정한 ID와 정확히 일치하는 공고만 찾으며 대분류를 지정해도 하위 분류 공고를 포함하지 않습니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "카테고리 목록 조회 성공",
+                    content = @Content(schema = @Schema(implementation = JobCategoryListResponse.class))
+            )
+    })
+    ResponseEntity<ApiResponse<JobCategoryListResponse>> getCategories();
 }
