@@ -78,11 +78,13 @@
 
 | 명령 | 경로 | 요청/응답 |
 | --- | --- | --- |
-| 지원 접수 승인 | `POST /api/jobs/internal/{jobPostId}/application-admissions` | `workerMemberId` / `admissionId`, `jobPostId`, `jobVersion`, `ownerMemberId`, `categoryId`, `workDate`, `startTime`, `endTime`, `latitude`, `longitude`, `admittedAt`, `expiresAt` |
+| 지원 접수 승인 | `POST /api/jobs/internal/{jobPostId}/application-admissions` | `workerMemberId` / `admissionId`, `jobPostId`, `jobVersion`, `ownerMemberId`, `categoryId`, `workDate`, `startTime`, `endTime`, `latitude`, `longitude`, `admittedAt`, `expiresAt`, `applicationDeadline`, `recruitCount` |
 | 모집 자리 예약 | `POST /api/jobs/internal/{jobPostId}/matching-seat-reservations` | `matchingId`, `applicationId`, `workerMemberId` / `reservationId`(문자열), `jobPostId`, `jobVersion`, `ownerMemberId`, `workDate`, `startTime`, `endTime`, `endTimeNextDay`, `lockedAmount`, `currency`, `reservedAt`, `expiresAt` |
 | 모집 자리 확정 | `POST /api/jobs/internal/{jobPostId}/matching-seat-reservations/{reservationId}/confirm` | 본문 없음 / `reservationId`, `status` |
 | 모집 자리 반환 | `POST /api/jobs/internal/{jobPostId}/matching-seat-reservations/{reservationId}/release` | 본문 없음 / `reservationId`, `status` |
 | 예치 상태 수신 | `POST /api/jobs/internal/{jobPostId}/funding-status` | `orderId`, `jobVersion`, `ownerMemberId`, `amount`, `currency`, `fundingRevision`, `funded` / `jobPostId`, `orderId`, `fundingRevision`, `result`, `skipReason`, `jobStatus`, `fundingBlocked` ([예치 상태 수신](#예치-상태-수신)) |
+
+지원 접수 승인 응답의 `applicationDeadline`(지원 마감 시각)과 `recruitCount`(모집 인원)는 matching-service 자동 매칭(#154)이 쓰는 발급 당시 스냅샷이다. V22에서 승인에 저장하며, 기존 승인은 공개 이후 수정 기능이 없어 현재 공고 값으로 채웠다.
 
 `Idempotency-Key`는 1~100자의 공백 없는 ASCII다. 공고 행을 비관적 잠금으로 잡은 뒤 같은 키의 승인을 조회한다. 따라서 같은 공고에 같은 키로 온 동시 요청은 앞선 요청의 결과를 본다. 공고가 서로 다르면 잠그는 행도 달라 조회가 직렬화되지 않으므로, `uk_job_application_admissions_idempotency_key` 유일 제약이 마지막 방어선이다.
 

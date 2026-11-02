@@ -50,5 +50,8 @@ public abstract class IntegrationTestSupport {
 		registry.add("matching.outbox-relay.initial-delay", () -> "1h");
 		registry.add("matching.work-events.initial-delay-ms", () -> "3600000");
 		registry.add("matching.member-events.initial-delay-ms", () -> "3600000");
+		// 자동 매칭은 테스트가 서비스나 스케줄러를 직접 호출한다.
+		registry.add("matching.auto-matching.initial-delay", () -> "1h");
+		registry.add("matching.auto-matching.interval", () -> "1h");
 	}
 }

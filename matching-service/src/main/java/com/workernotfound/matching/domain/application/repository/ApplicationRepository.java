@@ -4,6 +4,7 @@ import com.workernotfound.matching.domain.application.entity.Application;
 import com.workernotfound.matching.domain.application.entity.enums.ApplicationStatus;
 import com.workernotfound.matching.domain.application.model.OwnerApplicantRow;
 import jakarta.persistence.LockModeType;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -99,6 +100,18 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 			and application.status = com.workernotfound.matching.domain.application.entity.enums.ApplicationStatus.APPLIED
 		""")
 	List<Long> findAppliedJobPostIdsByWorkerMemberId(Long workerMemberId);
+
+	// 지원 마감이 지났고 근무가 아직 시작하지 않은 공고 중 대기 지원이 남은 공고. 자동 매칭 스냅샷이 없는 지원은 제외한다.
+	@Query("""
+		select distinct application.jobPostId
+		from Application application
+		where application.status = com.workernotfound.matching.domain.application.entity.enums.ApplicationStatus.APPLIED
+			and application.applicationDeadline <= :now
+			and application.recruitCount is not null
+			and (application.workStartsAt is null or application.workStartsAt > :now)
+		order by application.jobPostId asc
+		""")
+	List<Long> findAutoMatchingJobPostIds(LocalDateTime now, Pageable pageable);
 
 	List<Application> findByJobPostIdAndStatusOrderByAppliedAtAscIdAsc(
 		Long jobPostId,

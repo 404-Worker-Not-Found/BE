@@ -27,6 +27,7 @@ import com.workernotfound.matching.domain.outbox.service.OutboxEventCommandServi
 import com.workernotfound.matching.external.client.confirmation.dto.SeatReservationResponse;
 import com.workernotfound.matching.global.account.AccountGateService;
 import com.workernotfound.matching.global.exception.BusinessException;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +50,7 @@ public class MatchingConfirmationCommandService {
 	private final OutboxEventCommandService outboxEventCommandService;
 	private final ApplicationEventPublisher eventPublisher;
 	private final MatchingConfirmationProperties properties;
+	private final Clock clock;
 
 	@Transactional
 	public MatchingConfirmationExecution prepare(Long matchingId, Long workerMemberId) {
@@ -64,6 +66,7 @@ public class MatchingConfirmationCommandService {
 		LocalDateTime now = LocalDateTime.now();
 		String leaseToken = UUID.randomUUID().toString();
 		MatchingConfirmationSaga saga = sagaRepository.findByMatchingIdForUpdate(matchingId).orElse(null);
+		validateResponseWindow(matching, saga);
 		if (saga == null) {
 			return execution(
 				createSaga(matching, leaseToken, now),
@@ -320,6 +323,14 @@ public class MatchingConfirmationCommandService {
 			|| saga.getLeaseExpiresAt() == null
 			|| !saga.getLeaseExpiresAt().isAfter(LocalDateTime.now())) {
 			throw new BusinessException(MatchingErrorCode.MATCHING_CONFIRMATION_IN_PROGRESS);
+		}
+	}
+
+	// 자동·폴백 제안은 응답 제한시간이 지나면 새로 수락할 수 없다. 이미 시작한 확정·보상은 마저 진행한다.
+	private void validateResponseWindow(Matching matching, MatchingConfirmationSaga saga) {
+		boolean isAcceptanceInProgress = saga != null && saga.blocksProposalResponse();
+		if (!isAcceptanceInProgress && matching.isResponseExpired(LocalDateTime.now(clock))) {
+			throw new BusinessException(MatchingErrorCode.MATCHING_RESPONSE_EXPIRED);
 		}
 	}
 

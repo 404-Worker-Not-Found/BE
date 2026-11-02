@@ -332,6 +332,8 @@ class JobApplicationAdmissionConsumptionServiceTests extends IntegrationTestSupp
                 .endTime(jobPost.getEndTime())
                 .latitude(jobPost.getLatitude())
                 .longitude(jobPost.getLongitude())
+                .applicationDeadline(jobPost.getApplicationDeadline())
+                .recruitCount(jobPost.getRecruitCount())
                 .admittedAt(EXPIRES_AT.minusMinutes(5))
                 .expiresAt(EXPIRES_AT)
                 .build();

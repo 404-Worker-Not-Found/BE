@@ -35,6 +35,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.times;
@@ -139,7 +140,7 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 		)).thenReturn(new ApplicationAdmissionResponse(
 			37L, JOB_POST_ID, 1L, 100L, 1L, TestSchedule.today().plusDays(1), LocalTime.of(9, 0), LocalTime.of(18, 0),
 			BigDecimal.valueOf(37.5), BigDecimal.valueOf(127.0),
-			TestSchedule.now().minusMinutes(5), TestSchedule.now().minusSeconds(1)
+			TestSchedule.now().minusMinutes(5), TestSchedule.now().minusSeconds(1), null, null
 		));
 
 		assertThatThrownBy(() -> applicationService.create(WORKER_MEMBER_ID, new CreateApplicationRequest(JOB_POST_ID)))
@@ -157,12 +158,26 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 			anyString()
 		)).thenReturn(new ApplicationAdmissionResponse(
 			36L, JOB_POST_ID, 1L, 100L, 1L, null, LocalTime.of(9, 0), LocalTime.of(18, 0),
-			BigDecimal.valueOf(37.5), BigDecimal.valueOf(127.0), TestSchedule.now(), TestSchedule.now().plusMinutes(1)
+			BigDecimal.valueOf(37.5), BigDecimal.valueOf(127.0), TestSchedule.now(), TestSchedule.now().plusMinutes(1),
+			null, null
 		));
 		assertThatThrownBy(() -> applicationService.create(WORKER_MEMBER_ID, new CreateApplicationRequest(JOB_POST_ID)))
 			.isInstanceOfSatisfying(BusinessException.class, exception ->
 				assertThat(exception.getErrorCode()).isEqualTo(ApplicationErrorCode.DEPENDENCY_SERVICE_UNAVAILABLE));
 		assertThat(applicationRepository.count()).isZero();
+	}
+
+	@Test
+	void storesAdmissionRecruitmentSnapshotForAutoMatching() {
+		stubEligibleWorker();
+		stubAdmission(38L);
+
+		ApplicationResponse response = applicationService.create(WORKER_MEMBER_ID, new CreateApplicationRequest(JOB_POST_ID));
+
+		var stored = applicationRepository.findById(response.applicationId()).orElseThrow();
+		assertThat(stored.getApplicationDeadline())
+			.isCloseTo(TestSchedule.now().plusHours(1), within(1, java.time.temporal.ChronoUnit.MINUTES));
+		assertThat(stored.getRecruitCount()).isEqualTo(2);
 	}
 
 	@Test
@@ -328,7 +343,9 @@ class ApplicationApplicationServiceTests extends IntegrationTestSupport {
 			BigDecimal.valueOf(37.5),
 			BigDecimal.valueOf(127.0),
 			TestSchedule.now(),
-			TestSchedule.now().plusMinutes(1)
+			TestSchedule.now().plusMinutes(1),
+			TestSchedule.now().plusHours(1),
+			2
 		));
 	}
 }

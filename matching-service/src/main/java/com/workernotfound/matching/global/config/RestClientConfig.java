@@ -1,5 +1,6 @@
 package com.workernotfound.matching.global.config;
 
+import com.workernotfound.matching.domain.matching.config.AutoMatchingProperties;
 import com.workernotfound.matching.domain.matching.config.MatchingConfirmationProperties;
 import com.workernotfound.matching.external.client.confirmation.ChatServiceProperties;
 import com.workernotfound.matching.external.client.confirmation.PaymentServiceProperties;
@@ -21,7 +22,8 @@ import org.springframework.web.client.RestClient;
 	PaymentServiceProperties.class,
 	WorkServiceProperties.class,
 	ChatServiceProperties.class,
-	MatchingConfirmationProperties.class
+	MatchingConfirmationProperties.class,
+	AutoMatchingProperties.class
 })
 public class RestClientConfig {
 

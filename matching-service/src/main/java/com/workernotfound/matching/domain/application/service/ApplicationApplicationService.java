@@ -61,11 +61,18 @@ public class ApplicationApplicationService {
 				admission.jobVersion(),
 				admission.admittedAt(),
 				LocalDateTime.of(admission.workDate(), admission.startTime()),
+				admission.applicationDeadline(),
+				validRecruitCount(admission.recruitCount()),
 				correlationId
 			));
 		} catch (DataIntegrityViolationException exception) {
 			return resolveConcurrentApplication(request.jobPostId(), workerMemberId, exception);
 		}
+	}
+
+	// 이전 job-service 응답처럼 값이 없거나 범위를 벗어나면 자동 매칭 스냅샷 없이 지원만 저장한다.
+	private Integer validRecruitCount(Integer recruitCount) {
+		return recruitCount != null && recruitCount >= 1 ? recruitCount : null;
 	}
 
 	public ApplicationResponse getApplication(Long applicationId, Long workerMemberId) {

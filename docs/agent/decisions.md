@@ -2108,3 +2108,22 @@ Implication for agents:
 Related files:
 - `docs/architecture/member-review-design.md`
 - `docs/architecture/matching-application-design.md`
+
+## 2026-11-02 - Tentative Automatic and Fallback Matching
+
+Decision:
+- The user chose the proposed tentative policy: once an application deadline passes, matching-service automatically proposes the remaining seats to the top candidates of the latest `READY` score batch; there is no per-job opt-out in the first unit.
+- Proposals expire after 30 minutes, shortened to one hour before work start; no proposal is made when no response time remains. Declined or expired proposals fall back to the next untried candidate without a retry limit.
+- When candidates are exhausted, the owner is to be notified; the job is not reopened. The first implementation unit records the exhaustion, and notifications follow in the next unit.
+- job-service adds the application deadline and recruit count to the application-admission snapshot so matching-service does not query job-service during scheduling.
+
+Reason:
+- Automatic matching is an MVP feature and uses the trust-weighted score; an admission snapshot keeps the scheduler independent of job-service availability.
+
+Implication for agents:
+- Keep manual matching unchanged. Do not reuse an application that already had a matching attempt, and do not reopen jobs or release confirmed seats without a confirmed policy.
+
+Related files:
+- `docs/architecture/matching-application-design.md`
+- `docs/architecture/job-post-design.md`
+

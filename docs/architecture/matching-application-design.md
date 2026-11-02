@@ -333,6 +333,27 @@ Redis 기록 성공과 MySQL의 `PUBLISHED` 변경 사이에 장애가 나면 �
 
 `lease_token`과 `lease_expires_at`은 확정 실행의 동시 조정자를 하나로 제한한다. lease가 만료된 `PROCESSING` Saga는 저장된 명령 ID와 단계 결과를 사용해 재개한다. `version`은 Saga 행의 낙관적 동시성 제어에 사용한다.
 
+## 자동 매칭과 폴백 매칭(#154, 임시 정책)
+
+2026-11-02 사용자 선택. 점주 수동 매칭은 그대로 두고, 지원 마감이 지나면 시스템이 남은 자리만큼 자동 제안한다.
+
+| 항목 | 임시 정책 | 설정 |
+| --- | --- | --- |
+| 시작 | 지원 마감 시각(`applicationDeadline`)이 지난 공고 | - |
+| 남은 자리 | 모집 인원 − (응답 대기 `PENDING` + 한 번이라도 확정된 매칭). 점주 수동 선택도 자리를 차지한다. 확정 뒤 취소된 근무의 자리는 job-service가 반환하지 않으므로 계속 차지한 것으로 본다 | - |
+| 후보 | 최신 `READY` 점수 묶음의 `READY` 스냅샷 순서(`total_score DESC, applied_at ASC, application_id ASC`). 이미 매칭 시도가 있었던 지원(거절·만료 포함)과 탈퇴 진행 중인 회원은 제외한다. 점수가 없는 지원은 제안하지 않고 다음 묶음을 기다린다 | - |
+| 응답 제한시간 | 제안 시각 + 30분. 근무 시작 1시간 전보다 늦으면 그 시각까지로 줄이고, 남는 시간이 없으면 제안하지 않는다 | `MATCHING_AUTO_MATCHING_RESPONSE_TIMEOUT`(`30m`), `MATCHING_AUTO_MATCHING_WORK_START_MARGIN`(`1h`) |
+| 폴백 | 거절·만료가 있었던 공고의 다음 제안은 `FALLBACK`. 시도 횟수 제한 없음 | - |
+| 후보 소진 | 남은 자리가 있는데 시도하지 않은 대기 지원이 없고 응답 대기 제안도 없으면 `matching_candidate_exhaustions`에 공고마다 한 번 기록한다. 공고 재오픈은 하지 않는다 | - |
+| 실행 주기 | 1분마다 만료 처리 뒤 제안. 한 번에 최대 100건 | `MATCHING_AUTO_MATCHING_ENABLED`, `..._INTERVAL`, `..._INITIAL_DELAY`, `..._BATCH_SIZE` |
+
+- 지원 마감 시각과 모집 인원은 job-service 지원 접수 승인 응답의 발급 당시 스냅샷을 지원(V15)에 저장한다. V15 이전 지원이나 값이 없는 응답의 지원은 자동 매칭 대상이 아니다.
+- 공고별 제안은 그 공고의 `APPLIED` 지원 행을 모두 잠가(`id` 순) 수동 선택·거절·수락 준비·다른 실행과 직렬화한다. 잠금 순서는 다른 명령과 같은 지원 → 매칭이다.
+- 자동·폴백 제안은 `selection_type`, 점수 묶음·스냅샷, `expires_at`을 저장하고 이력은 `SYSTEM` 행위자(`AUTO_CANDIDATE_PROPOSED` / `FALLBACK_CANDIDATE_PROPOSED`)로 남긴다.
+- 만료는 지원 → 매칭 → 확정 Saga를 잠근 뒤 다시 확인한다. 수락이 이미 시작돼 확정 진행·보상이 필요한 제안은 만료하지 않는다. 만료 이력 사유는 `MATCHING_RESPONSE_EXPIRED`다.
+- 응답 제한시간이 지난 제안은 만료 처리 전이라도 새로 수락할 수 없다(409 `MATCHING-409-006`). 수동 제안은 제한시간이 없다.
+- 제안 도착과 후보 소진 알림은 다음 단위에서 notification-service에 연결한다. 그 전까지 알바생은 본인 매칭 목록으로 제안을 확인한다.
+
 ## Redis와 복구
 
 - MySQL의 `applications`가 최종 기준이다.

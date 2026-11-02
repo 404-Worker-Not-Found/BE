@@ -46,6 +46,24 @@ public class ApplicationCommandService {
 		LocalDateTime workStartsAt,
 		String correlationId
 	) {
+		return create(jobPostId, workerMemberId, ownerMemberId, admissionId, jobVersion, appliedAt, workStartsAt,
+			null, null, correlationId);
+	}
+
+	// 지원 마감 시각과 모집 인원은 자동 매칭에 쓰는 지원 승인 스냅샷이다. 값이 없는 지원은 자동 매칭하지 않는다.
+	@Transactional
+	public Application create(
+		Long jobPostId,
+		Long workerMemberId,
+		Long ownerMemberId,
+		Long admissionId,
+		Long jobVersion,
+		LocalDateTime appliedAt,
+		LocalDateTime workStartsAt,
+		LocalDateTime applicationDeadline,
+		Integer recruitCount,
+		String correlationId
+	) {
 		accountGates.requireActive(workerMemberId, ownerMemberId);
 		recruitmentStateRepository.ensureExists(jobPostId);
 		if (recruitmentStateRepository.findForUpdate(jobPostId).orElseThrow().blocks(jobVersion)) {
@@ -58,6 +76,8 @@ public class ApplicationCommandService {
 			.jobApplicationAdmissionId(admissionId)
 			.appliedAt(appliedAt)
 			.workStartsAt(workStartsAt)
+			.applicationDeadline(applicationDeadline)
+			.recruitCount(recruitCount)
 			.build();
 		applicationRepository.saveAndFlush(application);
 		historyRepository.saveAndFlush(initialHistory(application));
