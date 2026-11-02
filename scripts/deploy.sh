@@ -89,8 +89,22 @@ case "${1:-}" in
     # Keep MySQL, Redis and certificate storage running during maintenance.
     "${COMPOSE[@]}" stop proxy "${APPS[@]}"
     ;;
+  recreate)
+    # Recreate one application container with the same sanitized environment and validation as up.
+    service="${2:-}"
+    known=false
+    for app in "${APPS[@]}"; do
+      [[ "$service" == "$app" ]] && known=true
+    done
+    if [[ "$known" != true || $# -ne 2 ]]; then
+      echo "Specify one application service: ${APPS[*]}" >&2
+      exit 1
+    fi
+    check_config
+    "${COMPOSE[@]}" up -d --no-deps --no-build --force-recreate --wait --wait-timeout 360 "$service"
+    ;;
   *)
-    echo "Usage: $0 {check|pull|up|status|logs SERVICE|backup|pause}" >&2
+    echo "Usage: $0 {check|pull|up|status|logs SERVICE|backup|pause|recreate SERVICE}" >&2
     exit 1
     ;;
 esac

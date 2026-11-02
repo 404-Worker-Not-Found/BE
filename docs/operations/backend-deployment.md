@@ -85,6 +85,8 @@ sudo docker run --rm -it caddy:2-alpine caddy hash-password
 
 회원가입 실제 동작에는 Gmail 앱 비밀번호, SOLAPI 키/등록 발신번호, 점주 가입에는 국세청 API 키가 필요하다. OAuth도 안드로이드 플랫폼에 맞는 제공자 설정과 로그인 복귀 경로 등록이 필요하다. 이 설정은 CORS Origin과 별개이며 앱의 SDK·인가 코드 흐름과 현재 백엔드 OAuth 계약의 호환성을 별도로 확인한다. 비어 있으면 해당 기능이 성공했다고 간주하지 않는다. Toss는 테스트 키만 지원하며 `TOSS_ENABLED=false`일 때 결제로 자금을 확보해야 하는 공고 게시/매칭의 전체 흐름은 검증할 수 없다. 실결제 키를 넣지 않는다.
 
+처음 `up`하기 전에 [Firebase 서버 인증 파일](#firebase-서버-인증-파일)의 키 설치와 일반 파일 확인을 먼저 수행한다. 파일이 없으면 notification-service가 기동되지 않는다.
+
 ```bash
 sudo ./scripts/deploy.sh check
 sudo ./scripts/deploy.sh pull
@@ -145,16 +147,20 @@ curl -i -u SWAGGER_USERNAME https://API_HOST/docs/job/v3/api-docs
 
 ```bash
 sudo install -d -o root -g root -m 0700 /opt/wnf/secrets
-sudo install -o 10001 -g 10001 -m 0400 UPLOADED_KEY_PATH /opt/wnf/secrets/firebase-admin.json
+sudo install -T -o 10001 -g 10001 -m 0400 UPLOADED_KEY_PATH /opt/wnf/secrets/firebase-admin.json
+sudo test -f /opt/wnf/secrets/firebase-admin.json && echo "Firebase credential is a regular file."
 ```
+
+`-T`는 대상 경로를 항상 파일로 다룬다. 같은 경로에 디렉터리가 이미 있으면 그 안에 복사하지 않고 실패하므로, 원인을 확인한 뒤 디렉터리를 정리하고 다시 설치한다. Compose는 기존 디렉터리도 연결할 수 있으므로 기동 전에 일반 파일인지 확인한다.
 
 호스트 디렉터리는 root만 접근하며, Docker가 연결한 파일은 앱의 UID 10001만 읽는다. 원본 파일이 없으면 Compose는 디렉터리를 대신 만들지 않고 기동을 거부한다. 키를 준비하지 않은 서버에도 새 기동 전 이 파일이 필요하다. `.env.deploy`에 맥의 로컬 경로나 JSON 원문을 넣지 않는다.
 
-서버 Compose 파일에 변경을 반영하고 `sudo ./scripts/deploy.sh check` 후 알림 서비스만 재생성한다. 키 내용은 출력하지 않고 기본 실행 사용자로 읽기 가능 여부를 확인한다.
+서버 Compose 파일에 변경을 반영한 뒤 알림 서비스만 재생성한다. `recreate`는 `up`과 같이 셸의 Compose 보간 변수를 제거하고 `check`를 통과해야 재생성하며, 앱 서비스 이름만 받는다. 키 내용은 출력하지 않고 기본 실행 사용자로 일반 파일 읽기 가능 여부를 확인한다.
 
 ```bash
-sudo docker compose --project-name wnf --env-file .env.deploy -f compose.deploy.yml up -d --no-deps --no-build --force-recreate --wait --wait-timeout 360 notification-service
-sudo docker compose --project-name wnf --env-file .env.deploy -f compose.deploy.yml exec -T notification-service sh -c 'test "$GOOGLE_APPLICATION_CREDENTIALS" = /run/secrets/firebase-admin.json && test -s "$GOOGLE_APPLICATION_CREDENTIALS" && test -r "$GOOGLE_APPLICATION_CREDENTIALS" && test ! -w "$GOOGLE_APPLICATION_CREDENTIALS" && echo "Firebase credential file is readable and read-only."'
+sudo test -f /opt/wnf/secrets/firebase-admin.json
+sudo ./scripts/deploy.sh recreate notification-service
+sudo docker compose --project-name wnf --env-file .env.deploy -f compose.deploy.yml exec -T notification-service sh -c 'test "$GOOGLE_APPLICATION_CREDENTIALS" = /run/secrets/firebase-admin.json && test -f "$GOOGLE_APPLICATION_CREDENTIALS" && test -s "$GOOGLE_APPLICATION_CREDENTIALS" && test -r "$GOOGLE_APPLICATION_CREDENTIALS" && test ! -w "$GOOGLE_APPLICATION_CREDENTIALS" && echo "Firebase credential file is readable and read-only."'
 ```
 
 재생성 동안 알림 API에 짧은 중단이 있다. 기존 이미지 태그를 유지하며, 다른 앱이나 DB는 재생성하지 않는다. 키 교체도 새 파일을 같은 위치에 원자적으로 배치한 뒤 알림 컨테이너를 재생성해야 한다. 단일 파일 bind mount는 파일 교체 후 기존 inode를 계속 가리킬 수 있다. 새 키의 실제 FCM 인증·발송을 검증한 뒤 기존 키를 폐기한다.
