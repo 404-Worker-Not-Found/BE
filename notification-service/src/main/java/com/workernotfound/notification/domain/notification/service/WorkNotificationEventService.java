@@ -1,5 +1,7 @@
 package com.workernotfound.notification.domain.notification.service;
 
+import com.workernotfound.notification.domain.push.service.NotificationWriter;
+
 import com.workernotfound.notification.domain.notification.entity.Notification;
 import com.workernotfound.notification.domain.notification.event.WorkNotificationEvent;
 import com.workernotfound.notification.domain.notification.repository.*;
@@ -17,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class WorkNotificationEventService {
   private final NotificationEventRepository receipts;
   private final NotificationRepository notifications;
+  private final NotificationWriter writer;
   private final Validator validator;
 
   @Transactional
@@ -36,7 +39,7 @@ public class WorkNotificationEventService {
   }
 
   private void notifyParticipant(WorkNotificationEvent event, Long memberId, String role) {
-    notifications.save(Notification.builder().eventId(event.eventId())
+    writer.save(Notification.builder().eventId(event.eventId())
         .memberId(memberId).memberRole(role).notificationType(event.eventType())
         .jobPostId(event.jobPostId()).matchingId(event.matchingId()).workId(event.workId())
         .occurredAt(event.occurredAt()).build());

@@ -141,7 +141,7 @@ curl -i -u SWAGGER_USERNAME https://API_HOST/docs/job/v3/api-docs
 
 ## Firebase 서버 인증 파일
 
-`notification-service`는 서버의 `/opt/wnf/secrets/firebase-admin.json` 파일 하나만 `/run/secrets/firebase-admin.json`에 읽기 전용으로 연결한다. `GOOGLE_APPLICATION_CREDENTIALS`는 이 컨테이너 내부 경로를 가리킨다. 다른 서비스에는 키를 연결하지 않는다. Firebase Admin SDK가 사용하는 서버 인증 경로이며, 기기 토큰 API나 FCM 발송 코드는 아직 구현하지 않았다. 키 연결만으로 푸시가 발송되지는 않는다.
+`notification-service`는 서버의 `/opt/wnf/secrets/firebase-admin.json` 파일 하나만 `/run/secrets/firebase-admin.json`에 읽기 전용으로 연결한다. `GOOGLE_APPLICATION_CREDENTIALS`는 이 컨테이너 내부 경로를 가리킨다. 다른 서비스에는 키를 연결하지 않는다. Firebase Admin SDK가 사용하는 서버 인증 경로다. #156의 기기 토큰 API와 발송 기능을 사용하려면 해당 기능이 포함된 새 이미지를 배포하고 `NOTIFICATION_PUSH_ENABLED=true`를 명시해야 한다. 키 연결만으로 푸시가 발송되지는 않는다([FCM 연동](../architecture/fcm-push-design.md)).
 
 이 배포 설정으로 컨테이너를 시작하기 전에 서비스 계정 JSON을 안전한 경로로 서버에 전송하고 아래 권한을 설정한다. `UPLOADED_KEY_PATH`는 실제 업로드 경로로 바꾼다. JSON 내용은 터미널에 출력하거나 Git, 앱 이미지, 안드로이드 앱에 포함하지 않는다.
 
@@ -155,10 +155,11 @@ sudo test -f /opt/wnf/secrets/firebase-admin.json && echo "Firebase credential i
 
 호스트 디렉터리는 root만 접근하며, Docker가 연결한 파일은 앱의 UID 10001만 읽는다. 원본 파일이 없으면 Compose는 디렉터리를 대신 만들지 않고 기동을 거부한다. 키를 준비하지 않은 서버에도 새 기동 전 이 파일이 필요하다. `.env.deploy`에 맥의 로컬 경로나 JSON 원문을 넣지 않는다.
 
-서버 Compose 파일에 변경을 반영한 뒤 알림 서비스만 재생성한다. `recreate`는 `up`과 같이 셸의 Compose 보간 변수를 제거하고 `check`를 통과해야 재생성하며, 앱 서비스 이름만 받는다. 키 경로가 일반 파일이 아니면 재생성하지 않도록 두 명령을 `&&`로 연결한다. 키 내용은 출력하지 않고 기본 실행 사용자로 일반 파일 읽기 가능 여부를 확인한다.
+서버 Compose 파일에 변경을 반영한 뒤 알림 서비스만 재생성한다. `recreate`는 `up`과 같이 셸의 Compose 보간 변수를 제거하고 `check`를 통과해야 재생성하며, 앱 서비스 이름만 받는다. 실행 중인 컨테이너가 정확히 하나이고 설정의 이미지 참조·로컬 이미지 ID가 실행 이미지와 모두 일치해야 진행한다. 이미지 태그가 달라졌거나 같은 태그의 로컬 이미지가 바뀌었으면 중단하며, 실행 중 이미지를 확인할 수 없는 경우에도 진행하지 않는다. 재생성 중 이미지 pull은 하지 않는다. 이미지 변경은 이 명령 대신 아래의 정상 릴리스 배포 절차로 진행한다. 키 내용은 출력하지 않고 기본 실행 사용자로 일반 파일 읽기 가능 여부를 확인한다.
 
 ```bash
-sudo test -f /opt/wnf/secrets/firebase-admin.json && sudo ./scripts/deploy.sh recreate notification-service
+sudo test -f /opt/wnf/secrets/firebase-admin.json && \
+  sudo ./scripts/deploy.sh recreate notification-service
 sudo docker compose --project-name wnf --env-file .env.deploy -f compose.deploy.yml exec -T notification-service sh -c 'test "$GOOGLE_APPLICATION_CREDENTIALS" = /run/secrets/firebase-admin.json && test -f "$GOOGLE_APPLICATION_CREDENTIALS" && test -s "$GOOGLE_APPLICATION_CREDENTIALS" && test -r "$GOOGLE_APPLICATION_CREDENTIALS" && test ! -w "$GOOGLE_APPLICATION_CREDENTIALS" && echo "Firebase credential file is readable and read-only."'
 ```
 
@@ -170,7 +171,7 @@ sudo docker compose --project-name wnf --env-file .env.deploy -f compose.deploy.
 
 사용자가 교체한 새 키를 검증하고 적용 승인을 받은 뒤, `Ubuntu-1`의 `/home/ubuntu/wnf-backend/compose.deploy.yml`에 파일 연결과 환경변수만 추가했다. 알림 컨테이너만 기존 이미지로 재생성했고 healthy 상태, 기본 앱 사용자의 파일 읽기 가능·쓰기 불가, 읽기 전용 mount, JWT 없는 알림 API의 401 응답을 확인했다. 다른 컨테이너 ID와 모든 이미지 참조·digest, `.env.deploy`는 변경하지 않았다. 실제 Firebase 인증과 푸시 발송은 아직 확인하지 않았다.
 
-원본 Compose, 적용 후보, 컨테이너 기준 정보와 검증 결과는 root 전용 `/home/ubuntu/wnf-deploy-backups/firebase-153-20261102T131641Z`에 있다. 키 원문은 백업에 포함하지 않았다. 서버 Compose는 아직 작업 트리 변경이므로 다음 소스 동기화에서 이를 덮어쓰지 말고 #153의 저장소 변경을 먼저 통합한다. 원복 시 이 디렉터리의 `compose.deploy.yml.original`을 복원하고 알림 컨테이너만 재생성한다. 키가 연결돼도 SDK 초기화·기기 토큰 관리·발송 기능은 별도 구현해야 한다.
+원본 Compose, 적용 후보, 컨테이너 기준 정보와 검증 결과는 root 전용 `/home/ubuntu/wnf-deploy-backups/firebase-153-20261102T131641Z`에 있다. 키 원문은 백업에 포함하지 않았다. 서버 Compose는 아직 작업 트리 변경이므로 다음 소스 동기화에서 이를 덮어쓰지 말고 #153의 저장소 변경을 먼저 통합한다. 원복 시 이 디렉터리의 `compose.deploy.yml.original`을 복원하고 알림 컨테이너만 재생성한다. 이 기록의 서버 이미지는 발송 기능을 포함하지 않는다. #156의 구현 이미지 배포·활성화와 실제 기기 수신 검증은 별도로 진행한다.
 
 ## 5. 업데이트, 백업과 복구
 

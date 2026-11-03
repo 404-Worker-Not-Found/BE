@@ -1,5 +1,7 @@
 package com.workernotfound.notification.domain.notification.service;
 
+import com.workernotfound.notification.domain.push.service.NotificationWriter;
+
 import com.workernotfound.notification.domain.notification.entity.Notification;
 import com.workernotfound.notification.domain.notification.repository.*;
 import com.workernotfound.notification.global.exception.*;
@@ -17,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class FundingIncidentService {
   private final NotificationEventRepository receipts;
   private final NotificationRepository notifications;
+  private final NotificationWriter writer;
   public record Command(@NotNull @Positive Long jobPostId,@NotNull @Positive Long memberId,
       @NotNull @Pattern(regexp="OWNER|WORKER") String memberRole,@Positive Long matchingId,@Positive Long workId,
       @NotNull LocalDateTime occurredAt) {}
@@ -30,7 +33,7 @@ public class FundingIncidentService {
     String fingerprint=fingerprint(command);
     if(!fingerprint.equals(receipts.record(eventId,fingerprint))) throw new BusinessException(GlobalErrorCode.INVALID_REQUEST);
     if(notifications.existsByEventId(eventId)) return;
-    notifications.saveAndFlush(Notification.builder().eventId(eventId).memberId(command.memberId()).memberRole(command.memberRole())
+    writer.save(Notification.builder().eventId(eventId).memberId(command.memberId()).memberRole(command.memberRole())
         .notificationType("FUNDING_REVIEW_REQUIRED").jobPostId(command.jobPostId()).matchingId(command.matchingId()).workId(command.workId())
         .occurredAt(command.occurredAt()).build());
   }
