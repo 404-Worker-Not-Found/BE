@@ -15,6 +15,7 @@ import com.workernotfound.notification.global.security.AuthenticatedMember;
 import com.workernotfound.notification.support.IntegrationTestSupport;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -34,6 +35,11 @@ class PushEnabledConfigurationTests extends IntegrationTestSupport {
   @Autowired NotificationEventService events;
   @Autowired PushDispatcher dispatcher;
   @Autowired JdbcTemplate jdbc;
+
+  @BeforeEach void clearPushFixtures() {
+    jdbc.update("DELETE FROM notification_push_deliveries");
+    jdbc.update("DELETE FROM notification_device_tokens");
+  }
 
   @Test void enabledWorkerUsesSeparateSchedulerAndRunsWithoutRedisConsumers() throws Exception {
     assertThat(context.getBean("pushTaskScheduler")).isNotSameAs(context.getBean("taskScheduler"));

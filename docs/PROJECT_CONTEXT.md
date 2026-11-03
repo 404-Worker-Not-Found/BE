@@ -364,7 +364,7 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - `MatchConfirmed` v1 creates OWNER and WORKER in-app notifications; `ApplicationRejected` v1 creates a WORKER notification only. Unsupported event types are skipped, while malformed supported events remain pending.
 - Event receipts and recipient notifications commit together before ACK. Stable fingerprints and recipient unique constraints handle concurrent redelivery without resetting read state.
 - JWT-authenticated members can list only their own role's notifications, query unread counts and idempotently mark individual notifications read. Responses omit other participants and payment identifiers.
-- Local HTTP/MySQL ports are 8088/3314. Runtime configuration, local-run and repository verification include the new service. Notification delivery currently uses REST queries; push and other event types remain future work.
+- Local HTTP/MySQL ports are 8088/3314. Runtime configuration, local-run and repository verification include the service. In-app notifications are read through REST queries; opt-in Android FCM push is implemented (#156, default off), while chat push events and additional notification types remain future work.
 - See `docs/architecture/notification-design.md`.
 
 - Work notification consumers also handle mutual cancellation request outcomes, WorkCanceled and WorkNoShow. System expiry/no-show events require a null actor ID and SYSTEM role and notify both participants; participant actions notify the other participant. Existing event fingerprints and lifecycle revisions remain compatible.

@@ -34,6 +34,28 @@ check_config() {
   return "$result"
 }
 
+require_recreate_image() {
+  local service="$1" expected container current running reference image_id local_image_id
+  expected="$("${COMPOSE[@]}" config --format json | python3 -c \
+    'import json,sys; print(json.load(sys.stdin)["services"][sys.argv[1]]["image"])' "$service")"
+  container="$("${COMPOSE[@]}" ps --all --quiet "$service")"
+  if [[ -z "$container" || "$container" == *$'\n'* ]]; then
+    echo "Recreate requires exactly one running container for $service." >&2
+    return 1
+  fi
+  current="$(docker inspect --format '{{.State.Running}} {{.Config.Image}} {{.Image}}' "$container")"
+  read -r running reference image_id <<< "$current"
+  if [[ "$running" != true || "$reference" != "$expected" ]]; then
+    echo "Refusing recreate: running image differs from deployment configuration for $service." >&2
+    return 1
+  fi
+  local_image_id="$(docker image inspect --format '{{.Id}}' "$expected")"
+  if [[ -z "$image_id" || "$local_image_id" != "$image_id" ]]; then
+    echo "Refusing recreate: local image differs from the running image for $service." >&2
+    return 1
+  fi
+}
+
 backup_mysql() {
   local output temporary
   mkdir -p "${ROOT_DIR}/backups"
@@ -101,7 +123,8 @@ case "${1:-}" in
       exit 1
     fi
     check_config
-    "${COMPOSE[@]}" up -d --no-deps --no-build --force-recreate --wait --wait-timeout 360 "$service"
+    require_recreate_image "$service"
+    "${COMPOSE[@]}" up -d --no-deps --no-build --pull never --force-recreate --wait --wait-timeout 360 "$service"
     ;;
   *)
     echo "Usage: $0 {check|pull|up|status|logs SERVICE|backup|pause|recreate SERVICE}" >&2

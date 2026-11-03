@@ -5,7 +5,6 @@ import json
 import os
 import pathlib
 import secrets
-import shlex
 import shutil
 import subprocess
 import tempfile
@@ -39,11 +38,25 @@ def main():
 
         # Observe whether the real Compose process receives a stale, valid SHA.
         shim = folder / "docker"
-        shim.write_text("#!/bin/sh\n"
-                        'if [ "${IMAGE_TAG+x}" = x ]; then\n'
-                        '  echo "Exported IMAGE_TAG reached Compose." >&2; exit 1\n'
-                        "fi\n"
-                        f"exec {shlex.quote(docker)} \"$@\"\n")
+        shim.write_text("#!/usr/bin/env python3\n" + """
+import json, os, pathlib, sys
+if 'IMAGE_TAG' in os.environ:
+    sys.exit('Exported IMAGE_TAG reached Compose.')
+args = sys.argv[1:]
+if args[:1] == ['inspect']:
+    if os.environ.get('FAKE_DEPLOY_INSPECT_FAIL') == 'true': sys.exit(1)
+    print(os.environ['FAKE_DEPLOY_RUNNING_IMAGE'])
+elif args[:2] == ['image', 'inspect']:
+    if os.environ.get('FAKE_DEPLOY_IMAGE_MISSING') == 'true': sys.exit(1)
+    print(os.environ['FAKE_DEPLOY_LOCAL_IMAGE_ID'])
+elif args[:1] == ['compose'] and 'ps' in args:
+    if os.environ.get('FAKE_DEPLOY_PS_FAIL') == 'true': sys.exit(1)
+    print(os.environ['FAKE_DEPLOY_CONTAINERS'])
+elif args[:1] == ['compose'] and 'up' in args:
+    pathlib.Path(os.environ['FAKE_DEPLOY_UP_MARKER']).write_text(json.dumps(args))
+else:
+    os.execv(__DOCKER__, [__DOCKER__, *args])
+""".replace('__DOCKER__', repr(docker)))
         shim.chmod(0o700)
         environment = os.environ.copy()
         environment.update(DEPLOY_ENV_FILE=str(env_file), IMAGE_TAG="2" * 40,
@@ -101,12 +114,42 @@ def main():
             if rejected.returncode == 0 or "Specify one application service" not in rejected.stderr:
                 raise AssertionError(f"recreate accepted {arguments!r}.")
         values["SWAGGER_PASSWORD_HASH"] = "'" + SWAGGER_HASH + "'"
+        write_env()
+        marker = folder / "up-command.json"
+        reference = services["notification-service"]["image"]
+        image_id = "sha256:" + "a" * 64
+        recreate_env = environment | {
+            "FAKE_DEPLOY_CONTAINERS": "a" * 64,
+            "FAKE_DEPLOY_RUNNING_IMAGE": "true " + reference + " " + image_id,
+            "FAKE_DEPLOY_LOCAL_IMAGE_ID": image_id,
+            "FAKE_DEPLOY_UP_MARKER": str(marker),
+        }
+        recreate = [str(ROOT / "scripts/deploy.sh"), "recreate", "notification-service"]
+        rejected_cases = [
+            {"FAKE_DEPLOY_CONTAINERS": ""},
+            {"FAKE_DEPLOY_CONTAINERS": "aaa\nbbb"},
+            {"FAKE_DEPLOY_RUNNING_IMAGE": "false " + reference + " " + image_id},
+            {"FAKE_DEPLOY_RUNNING_IMAGE": "true ghcr.io/other/app:" + "2" * 40 + " " + image_id},
+            {"FAKE_DEPLOY_LOCAL_IMAGE_ID": "sha256:" + "b" * 64},
+            {"FAKE_DEPLOY_INSPECT_FAIL": "true"},
+            {"FAKE_DEPLOY_IMAGE_MISSING": "true"},
+            {"FAKE_DEPLOY_PS_FAIL": "true"},
+        ]
+        for overrides in rejected_cases:
+            result = subprocess.run(recreate, env=recreate_env | overrides, capture_output=True, text=True)
+            if result.returncode == 0 or marker.exists():
+                raise AssertionError(f"Unsafe recreation was not stopped for {list(overrides)}.")
+        subprocess.run(recreate, env=recreate_env, check=True, capture_output=True)
+        arguments = json.loads(marker.read_text())
+        assert arguments[-1] == "notification-service" and arguments.count("notification-service") == 1
+        assert all(flag in arguments for flag in ("--no-deps", "--no-build", "--force-recreate", "--wait"))
+        assert arguments[arguments.index("--pull") + 1] == "never"
         values["IMAGE_TAG"] = "latest"
         write_env()
         invalid = subprocess.run(command, env=environment, capture_output=True, text=True)
         if invalid.returncode == 0 or "Set a full commit SHA" not in invalid.stderr:
             raise AssertionError("An invalid deployment-file image tag was not rejected.")
-    print("Read-only Firebase credential isolation, single-app recreate validation, Android deployment without a frontend domain, API WebSocket origin,"
+    print("Read-only Firebase credential isolation, same-image recreation and fail-closed Docker checks, Android deployment without a frontend domain, API WebSocket origin,"
           " deployment-file precedence and invalid release tag rejection passed.")
 
 
