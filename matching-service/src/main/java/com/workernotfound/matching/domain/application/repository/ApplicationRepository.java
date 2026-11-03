@@ -109,9 +109,10 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 			and application.applicationDeadline <= :now
 			and application.recruitCount is not null
 			and (application.workStartsAt is null or application.workStartsAt > :now)
+			and application.jobPostId > :afterJobPostId
 		order by application.jobPostId asc
 		""")
-	List<Long> findAutoMatchingJobPostIds(LocalDateTime now, Pageable pageable);
+	List<Long> findAutoMatchingJobPostIds(LocalDateTime now, long afterJobPostId, Pageable pageable);
 
 	List<Application> findByJobPostIdAndStatusOrderByAppliedAtAscIdAsc(
 		Long jobPostId,

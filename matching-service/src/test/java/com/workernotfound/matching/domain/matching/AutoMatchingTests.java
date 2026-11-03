@@ -4,6 +4,7 @@ import com.workernotfound.matching.domain.application.entity.Application;
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.domain.application.repository.ApplicationStatusHistoryRepository;
 import com.workernotfound.matching.domain.application.service.ApplicationCommandService;
+import com.workernotfound.matching.domain.matching.config.AutoMatchingProperties;
 import com.workernotfound.matching.domain.matching.entity.Matching;
 import com.workernotfound.matching.domain.matching.entity.MatchingStatusHistory;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingActorType;
@@ -18,12 +19,14 @@ import com.workernotfound.matching.domain.matching.service.AutoMatchingService.A
 import com.workernotfound.matching.domain.matching.service.MatchingCommandService;
 import com.workernotfound.matching.domain.matching.service.MatchingConfirmationCommandService;
 import com.workernotfound.matching.domain.matching.service.MatchingDeclineService;
+import com.workernotfound.matching.domain.matching.service.MatchingExpiryService;
 import com.workernotfound.matching.domain.outbox.repository.OutboxEventRepository;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreBatchRepository;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreSnapshotRepository;
 import com.workernotfound.matching.global.exception.BusinessException;
 import com.workernotfound.matching.support.IntegrationTestSupport;
 import com.workernotfound.matching.support.TestSchedule;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -87,6 +90,12 @@ class AutoMatchingTests extends IntegrationTestSupport {
 
 	@Autowired
 	private StringRedisTemplate redisTemplate;
+
+	@Autowired
+	private MatchingExpiryService expiryService;
+
+	@Autowired
+	private Clock clock;
 
 	@Autowired
 	private JdbcTemplate jdbc;
@@ -288,6 +297,39 @@ class AutoMatchingTests extends IntegrationTestSupport {
 		assertThat(matchingRepository.count()).isEqualTo(1);
 	}
 
+	@Test
+	void stuckJobsAndProposalsDoNotStarveLaterOnesAcrossBatches() {
+		LocalDateTime now = TestSchedule.now();
+		Long laterJobPostId = JOB_POST_ID + 10;
+		// 앞 공고: 응답 대기 제안이 있어 매 실행 조회되지만 새 제안은 없다. 그 제안은 수락 준비가 시작된 뒤 만료 시각이 지났다.
+		apply(JOB_POST_ID, 7_801L, now.minusHours(3), now.minusMinutes(1), 1);
+		apply(JOB_POST_ID, 7_802L, now.minusHours(2), now.minusMinutes(1), 1);
+		autoMatchingService.proposeFor(JOB_POST_ID);
+		Matching stuck = pending().get(0);
+		confirmationCommandService.prepare(stuck.getId(), stuck.getWorkerMemberId());
+		jdbc.update("update matchings set expires_at = ? where id = ?", now.minusSeconds(1), stuck.getId());
+		// 뒤 공고: 만료할 제안과 새로 제안할 후보가 있다.
+		apply(laterJobPostId, 7_811L, now.minusHours(3), now.minusMinutes(1), 1);
+		apply(laterJobPostId, 7_812L, now.minusHours(2), now.minusMinutes(1), 1);
+		autoMatchingService.proposeFor(laterJobPostId);
+		Matching expiring = matchingRepository.findAll().stream()
+			.filter(matching -> laterJobPostId.equals(matching.getJobPostId())).findFirst().orElseThrow();
+		jdbc.update("update matchings set expires_at = ? where id = ?", now.minusSeconds(1), expiring.getId());
+		AutoMatchingScheduler oneByOne = new AutoMatchingScheduler(matchingRepository, applicationRepository,
+			expiryService, autoMatchingService,
+			new AutoMatchingProperties(Duration.ofMinutes(30), Duration.ofHours(1), 1), clock);
+
+		oneByOne.run();
+		oneByOne.run();
+
+		assertThat(matchingRepository.findById(stuck.getId()).orElseThrow().getStatus()).isEqualTo(MatchingStatus.PENDING);
+		assertThat(matchingRepository.findById(expiring.getId()).orElseThrow().getStatus())
+			.isEqualTo(MatchingStatus.EXPIRED);
+		assertThat(pending()).filteredOn(matching -> laterJobPostId.equals(matching.getJobPostId()))
+			.singleElement()
+			.satisfies(matching -> assertThat(matching.getSelectionType()).isEqualTo(MatchingSelectionType.FALLBACK));
+	}
+
 	private Application apply(Long workerId, LocalDateTime appliedAt, LocalDateTime deadline, int recruitCount) {
 		return apply(workerId, appliedAt, deadline, recruitCount, TestSchedule.now().plusDays(1));
 	}
@@ -299,8 +341,24 @@ class AutoMatchingTests extends IntegrationTestSupport {
 		int recruitCount,
 		LocalDateTime workStartsAt
 	) {
+		return apply(JOB_POST_ID, workerId, appliedAt, deadline, recruitCount, workStartsAt);
+	}
+
+	private Application apply(Long jobPostId, Long workerId, LocalDateTime appliedAt, LocalDateTime deadline,
+		int recruitCount) {
+		return apply(jobPostId, workerId, appliedAt, deadline, recruitCount, TestSchedule.now().plusDays(1));
+	}
+
+	private Application apply(
+		Long jobPostId,
+		Long workerId,
+		LocalDateTime appliedAt,
+		LocalDateTime deadline,
+		int recruitCount,
+		LocalDateTime workStartsAt
+	) {
 		long admissionId = nextAdmissionId++;
-		return applicationCommandService.create(JOB_POST_ID, workerId, OWNER_ID, admissionId, 1L, appliedAt,
+		return applicationCommandService.create(jobPostId, workerId, OWNER_ID, admissionId, 1L, appliedAt,
 			workStartsAt, deadline, recruitCount, "auto-matching-" + admissionId);
 	}
 
