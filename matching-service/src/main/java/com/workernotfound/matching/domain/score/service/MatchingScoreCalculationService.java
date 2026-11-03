@@ -9,11 +9,15 @@ import com.workernotfound.matching.domain.score.entity.MatchingScoreBatch;
 import com.workernotfound.matching.domain.score.entity.MatchingScoreSnapshot;
 import com.workernotfound.matching.domain.score.model.MatchingScoreInput;
 import com.workernotfound.matching.domain.score.model.ScoreInputType;
-import com.workernotfound.matching.domain.score.policy.ApplicationTimeScorePolicy;
+import com.workernotfound.matching.domain.score.policy.TrustWeightedScorePolicy;
+import com.workernotfound.matching.domain.score.repository.MemberTrustScoreRepository;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreBatchRepository;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreSnapshotRepository;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,8 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class MatchingScoreCalculationService {
 
-	private static final List<ScoreInputType> MISSING_INPUTS = List.of(
-		ScoreInputType.RATING,
+	private static final List<ScoreInputType> UNAVAILABLE_INPUTS = List.of(
 		ScoreInputType.INDUSTRY_EXPERIENCE,
 		ScoreInputType.ONLINE_STATUS,
 		ScoreInputType.EXPECTED_ARRIVAL_TIME,
@@ -34,7 +37,8 @@ public class MatchingScoreCalculationService {
 	private final ApplicationRepository applicationRepository;
 	private final MatchingScoreBatchRepository batchRepository;
 	private final MatchingScoreSnapshotRepository snapshotRepository;
-	private final ApplicationTimeScorePolicy scorePolicy;
+	private final TrustWeightedScorePolicy scorePolicy;
+	private final MemberTrustScoreRepository trustScoreRepository;
 	private final ObjectMapper objectMapper;
 
 	@Transactional
@@ -56,7 +60,7 @@ public class MatchingScoreCalculationService {
 	private MatchingScoreBatch saveBatch(Long jobPostId, LocalDateTime startedAt) {
 		return batchRepository.saveAndFlush(MatchingScoreBatch.builder()
 			.jobPostId(jobPostId)
-			.policyVersion(ApplicationTimeScorePolicy.VERSION)
+			.policyVersion(TrustWeightedScorePolicy.VERSION)
 			.startedAt(startedAt)
 			.build());
 	}
@@ -66,13 +70,14 @@ public class MatchingScoreCalculationService {
 		List<Application> applications,
 		LocalDateTime calculatedAt
 	) {
+		Map<Long, BigDecimal> trustScores = trustScoreRepository.findTrustScores(
+			applications.stream().map(Application::getWorkerMemberId).toList()
+		);
 		for (int position = 0; position < applications.size(); position++) {
-			MatchingScoreSnapshot snapshot = pendingSnapshot(
-				batch,
-				applications.get(position),
-				calculatedAt
-			);
-			snapshot.complete(scorePolicy.calculate(position, applications.size()), calculatedAt);
+			Application application = applications.get(position);
+			BigDecimal trustScore = trustScores.get(application.getWorkerMemberId());
+			MatchingScoreSnapshot snapshot = pendingSnapshot(batch, application, trustScore, calculatedAt);
+			snapshot.complete(scorePolicy.calculate(position, applications.size(), trustScore), calculatedAt);
 			snapshotRepository.save(snapshot);
 		}
 		snapshotRepository.flush();
@@ -81,22 +86,33 @@ public class MatchingScoreCalculationService {
 	private MatchingScoreSnapshot pendingSnapshot(
 		MatchingScoreBatch batch,
 		Application application,
+		BigDecimal trustScore,
 		LocalDateTime calculatedAt
 	) {
 		return MatchingScoreSnapshot.builder()
 			.scoreBatch(batch)
 			.application(application)
-			.inputSnapshot(toJson(scoreInput(application)))
-			.missingInputs(toJson(MISSING_INPUTS))
+			.inputSnapshot(toJson(scoreInput(application, trustScore)))
+			.missingInputs(toJson(missingInputs(trustScore)))
 			.calculatedAt(calculatedAt)
 			.build();
 	}
 
-	private MatchingScoreInput scoreInput(Application application) {
+	private List<ScoreInputType> missingInputs(BigDecimal trustScore) {
+		List<ScoreInputType> missingInputs = new ArrayList<>();
+		if (trustScore == null) {
+			missingInputs.add(ScoreInputType.RATING);
+		}
+		missingInputs.addAll(UNAVAILABLE_INPUTS);
+		return missingInputs;
+	}
+
+	// 평점 입력(rating)에는 member-service가 받은 리뷰 평점으로 계산한 신뢰 점수(0~100)를 넣는다.
+	private MatchingScoreInput scoreInput(Application application, BigDecimal trustScore) {
 		return new MatchingScoreInput(
 			application.getId(),
 			application.getAppliedAt(),
-			null,
+			trustScore,
 			null,
 			null,
 			null,

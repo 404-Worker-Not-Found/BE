@@ -26,6 +26,10 @@ matching:
   work-events:
     enabled: ${MATCHING_WORK_EVENTS_ENABLED:true}
     stream: ${WORK_OUTBOX_STREAM_KEY:work:domain-events}
+  member-events:
+    # member-service TrustScoreUpdated로 지원자 신뢰 점수 사본을 갱신한다.
+    enabled: ${MATCHING_MEMBER_EVENTS_ENABLED:true}
+    stream: ${MEMBER_OUTBOX_STREAM_KEY:member:domain-events}
   jwt:
     secret: ${AUTH_JWT_SECRET}
   member-service:

@@ -19,6 +19,15 @@ public class MemberReviewStatsRepository {
 			memberId, rating, now, rating, now);
 	}
 
+	// 같은 트랜잭션의 집계 갱신 뒤 현재 값을 잠금 읽기로 읽는다. 같은 회원의 다른 리뷰는 집계 행 잠금으로 직렬화된다.
+	public Totals findTotalsForUpdate(Long memberId) {
+		return jdbc.query("select review_count, rating_sum from member_review_stats where member_id = ? for update",
+				rs -> rs.next() ? new Totals(rs.getLong(1), rs.getLong(2)) : new Totals(0, 0), memberId);
+	}
+
+	public record Totals(long reviewCount, long ratingSum) {
+	}
+
 	public Summary find(Long memberId) {
 		return jdbc.query("select review_count, rating_sum from member_review_stats where member_id = ?",
 				rs -> rs.next() ? Summary.of(rs.getLong(1), rs.getLong(2)) : Summary.EMPTY, memberId);

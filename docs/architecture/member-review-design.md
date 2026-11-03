@@ -4,8 +4,7 @@
 
 아래는 구현하지 않는다.
 
-- 신뢰 점수 계산, `TrustScoreUpdated` 발행, matching-service 점수 입력(평점) 연결(다음 단위)
-- 노쇼·취소에 따른 패널티(#104)
+- 노쇼·취소에 따른 패널티와 신뢰 점수 감점(#104, 사용자 결정으로 보류)
 - 리뷰 수정·삭제, 신고·숨김(신고·분쟁은 MVP 제외 범위)
 - 리뷰 작성 알림
 
@@ -75,6 +74,34 @@
 
 근무 완료 시각은 work-service가 근무 일정 시간대로 만든 로컬 시각이다. member-service도 현재 시각을 같은 시간대(`member.schedule.time-zone`, work-service·job-service·matching-service와 같은 `WORK_ATTENDANCE_TIME_ZONE`, 기본 `Asia/Seoul`)로 고정한 `Clock`에서 읽어 작성 기간을 판단하고 리뷰 작성 시각을 남긴다.
 
+## 신뢰 점수(#126 두 번째 단위, 임시 정책)
+
+2026-11-02 사용자 선택: 받은 리뷰 평점만으로 계산하고 노쇼·취소 감점은 넣지 않는다. 매칭 점수에는 지원 시각과 50:50으로 반영한다([지원 도메인 설계](matching-application-design.md#아직-없는-점수-데이터의-후속-연동)).
+
+| 항목 | 임시 정책(`review-rating-v1`) | 설정 |
+| --- | --- | --- |
+| 보정 평점 | (기본 평점 × 보정 리뷰 수 + 받은 평점 합) / (보정 리뷰 수 + 받은 리뷰 수). 리뷰가 적을 때 한두 개로 극단값이 되지 않게 한다 | `MEMBER_TRUST_SCORE_PRIOR_RATING`(기본 `3.0`), `MEMBER_TRUST_SCORE_PRIOR_REVIEW_COUNT`(기본 `3`) |
+| 신뢰 점수 | (보정 평점 - 1) / 4 × 100, 소수 둘째 자리 반올림. 0~100 | - |
+| 리뷰 없음 | 점수를 만들지 않는다. matching-service는 평점 입력 누락으로 처리한다 | - |
+| 대상 | 리뷰를 받은 모든 회원(점주 포함). 현재 매칭 점수는 알바생 점수만 쓴다 | - |
+
+예: 5점 1개 62.50, 5점 3개 75.00, 4점·5점 65.00. 설정값을 바꾸면 같은 정책 버전이라도 이후 계산 값이 달라지며 기존 점수는 다음 리뷰 때 다시 계산된다.
+
+### 저장과 발행
+
+- 리뷰 저장 트랜잭션에서 평점 집계를 더한 뒤 집계 행을 잠금 읽기로 다시 읽어 점수를 계산하고 `member_trust_scores`(V6)에 저장한다. 같은 회원이 받는 리뷰는 집계 행 잠금으로 직렬화되므로 `revision`(회원별 1부터 증가)과 이벤트 순서가 집계 순서와 같다. 잠금 순서는 계정 장벽 → 근무 행 → 상대방 집계 행 → 신뢰 점수 행이다.
+- 같은 트랜잭션에서 `member_outbox`에 `TrustScoreUpdated` v1을 저장한다. 같은 내용의 리뷰 재요청은 새 점수나 이벤트를 만들지 않는다.
+- relay가 짧은 DB 임대로 이벤트를 점유해 `member:domain-events`(matching Redis)에 다른 서비스와 같은 envelope(`eventId`, `aggregateType=MEMBER`, `aggregateId`=회원 ID, `eventType`, `revision`, `version`, `occurredAt`, `payload`)로 발행한다. 실패는 상한이 있는 지수 backoff로 재시도하고 전달은 at-least-once다.
+- payload: `eventId`, `eventType`, `memberId`, `revision`, `version`(1), `trustScore`(소수 둘째 자리), `reviewCount`, `policyVersion`. 발생 시각은 envelope `occurredAt`만 쓴다.
+
+### 기존 데이터
+
+V5(상호 리뷰)가 이미 배포돼 있으므로 V6는 테이블을 만든 뒤 기존 `member_review_stats`(받은 리뷰 1개 이상)로 신뢰 점수를 한 번 채운다. 이렇게 하지 않으면 V6 이전에 리뷰를 받은 회원은 다음 리뷰 전까지 matching-service에서 리뷰 없는 지원자로 처리된다.
+
+- 값은 `review-rating-v1`의 기본 설정(기본 평점 3.0, 보정 리뷰 수 3)으로 계산하고 `revision=1`로 저장한다. 배포 환경에서 설정을 바꿨더라도 이 값은 기본 설정 기준이며, 그 회원이 다음 리뷰를 받을 때 현재 설정으로 다시 계산된다.
+- 같은 마이그레이션에서 회원별 고정 이벤트 ID(`trust-score-backfill-{memberId}`)로 `TrustScoreUpdated` v1을 Outbox에 넣고, 기존 relay가 발행해 matching-service 사본까지 전달한다.
+- SQL 계산은 반올림 경계에서도 Java 정책과 같은 값이 되도록 충분한 소수 자릿수로 나눈다. 가능한 집계 조합 전체를 Java 정책과 비교하는 마이그레이션 테스트로 확인한다.
+
 ## 운영 설정
 
 | 환경 변수 | 기본값 | 의미 |
@@ -84,10 +111,12 @@
 | `MEMBER_REVIEW_EVENTS_POLL_INTERVAL` / `..._INITIAL_DELAY` / `..._BATCH_SIZE` | `1s` / `0s` / `100` | 주기·첫 실행·배치 크기 |
 | `MATCHING_REDIS_HOST` / `MATCHING_REDIS_PORT` | `localhost` / `6381` | 근무 이벤트 Stream이 있는 Redis |
 | `WORK_OUTBOX_STREAM_KEY` | `work:domain-events` | 근무 이벤트 Stream |
+| `MEMBER_TRUST_SCORE_PRIOR_RATING` / `MEMBER_TRUST_SCORE_PRIOR_REVIEW_COUNT` | `3.0` / `3` | 신뢰 점수 보정 기준(임시 정책) |
+| `MEMBER_OUTBOX_ENABLED` / `MEMBER_OUTBOX_STREAM_KEY` | `true` / `member:domain-events` | 회원 이벤트 relay와 발행 Stream |
 
 ## 후속 작업
 
-1. 신뢰 점수: 평점 집계와 노쇼·취소 이력으로 신뢰 점수를 계산하고, 같은 트랜잭션에서 저장한 뒤 `TrustScoreUpdated`를 발행해 matching-service 점수 입력(평점)에 연결한다.
+1. 노쇼·취소 이력의 신뢰 점수 감점·회복·시간 감쇠: 패널티 정책 확정 후 새 정책 버전으로 추가한다.
 2. 리뷰 작성 요청 알림(notification-service)과 화면 연결.
 3. 리뷰 수정·삭제와 작성 기간 등 정책 확정.
 
@@ -98,3 +127,4 @@ Redis·MySQL Testcontainers로 확인했다.
 - 근무 이벤트 소비: 완료 근무 기록과 다른 근무 이벤트 ACK, 같은 완료의 재전달, 참여자가 같은 이벤트·같은 근무 ID의 다른 내용·envelope 불일치의 pending 유지와 뒤 레코드 처리
 - 리뷰: 점주·알바생 상호 작성과 평균, 같은 요청 재반환과 다른 내용 409, 참여자가 아닌 회원·없는 근무, 탈퇴 진행 중 회원, 작성 기간 경계(직전 허용, 같은 시각 거절), 기간 뒤 같은 요청, 작성할 리뷰 목록, 같은 리뷰 동시 요청(한 건·집계 1회), 같은 회원에게 쓰는 동시 리뷰(집계 누락 없음)
 - HTTP: 인증, 평점·코멘트·페이지 검증, 오류 코드, Swagger 경로. JVM 시간대를 UTC로 둬도 통과한다.
+- 신뢰 점수: V5 이전 스키마에 집계를 넣고 V6를 적용한 백필(점수·이벤트·리뷰 없는 집계 제외, SQL과 Java 계산 일치), 보정 공식 경계값과 잘못된 집계·설정 거절, 리뷰마다 점수·revision·Outbox 갱신, 같은 리뷰 재요청 무변경, 같은 회원에게 쓰는 동시 리뷰의 revision 연속성과 최종 점수, relay의 공통 envelope 발행

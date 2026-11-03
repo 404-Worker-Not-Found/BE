@@ -9,7 +9,7 @@ import com.workernotfound.matching.domain.application.service.ApplicationCommand
 import com.workernotfound.matching.domain.outbox.repository.OutboxEventRepository;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreBatchRepository;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreSnapshotRepository;
-import com.workernotfound.matching.domain.score.policy.ApplicationTimeScorePolicy;
+import com.workernotfound.matching.domain.score.policy.TrustWeightedScorePolicy;
 import com.workernotfound.matching.external.redis.score.MatchingScoreQueueRepository;
 import com.workernotfound.matching.support.IntegrationTestSupport;
 import java.time.LocalDateTime;
@@ -123,7 +123,7 @@ class ApplicationQueueFailureTests extends IntegrationTestSupport {
 			.when(matchingScoreQueueRepository).replace(
 				eq(10L),
 				anyLong(),
-				eq(ApplicationTimeScorePolicy.VERSION),
+				eq(TrustWeightedScorePolicy.VERSION),
 				anyList(),
 				anyLong()
 			);
