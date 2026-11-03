@@ -92,6 +92,14 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 		""")
 	List<Long> findAppliedIdsByJobPostId(Long jobPostId);
 
+	@Query("""
+		select distinct application.jobPostId
+		from Application application
+		where application.workerMemberId = :workerMemberId
+			and application.status = com.workernotfound.matching.domain.application.entity.enums.ApplicationStatus.APPLIED
+		""")
+	List<Long> findAppliedJobPostIdsByWorkerMemberId(Long workerMemberId);
+
 	List<Application> findByJobPostIdAndStatusOrderByAppliedAtAscIdAsc(
 		Long jobPostId,
 		ApplicationStatus status

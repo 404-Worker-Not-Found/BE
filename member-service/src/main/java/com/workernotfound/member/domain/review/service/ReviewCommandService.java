@@ -22,13 +22,15 @@ public class ReviewCommandService {
 	private final ReviewableWorkRepository works;
 	private final MemberReviewRepository reviews;
 	private final MemberReviewStatsRepository stats;
+	private final TrustScoreRecorder trustScores;
 	private final AccountGateService accountGates;
 	private final ReviewProperties properties;
 	private final Clock clock;
 
 	/**
 	 * 근무 참여자가 상대방에게 리뷰를 남긴다. 같은 근무에는 한 번만 쓸 수 있고, 같은 내용의 재요청은 처음 리뷰를 돌려준다.
-	 * 잠금 순서는 두 회원의 계정 장벽(ID 오름차순) → 근무 행이다. 같은 근무의 리뷰는 근무 행 잠금으로 직렬화된다.
+	 * 잠금 순서는 두 회원의 계정 장벽(ID 오름차순) → 근무 행 → 상대방 평점 집계 행이다. 같은 근무의 리뷰는 근무 행 잠금으로,
+	 * 같은 회원이 받는 리뷰의 신뢰 점수 갱신은 평점 집계 행 잠금으로 직렬화된다.
 	 */
 	@Transactional
 	public MemberReview write(Long reviewerMemberId, WriteReviewRequest request) {
@@ -61,6 +63,7 @@ public class ReviewCommandService {
 			.createdAt(now)
 			.build());
 		stats.add(revieweeMemberId, rating, now);
+		trustScores.record(revieweeMemberId, now);
 		return review;
 	}
 }

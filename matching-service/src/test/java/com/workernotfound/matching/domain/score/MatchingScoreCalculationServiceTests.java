@@ -9,6 +9,7 @@ import com.workernotfound.matching.domain.score.entity.MatchingScoreSnapshot;
 import com.workernotfound.matching.domain.score.entity.enums.ScoreBatchStatus;
 import com.workernotfound.matching.domain.score.model.MatchingScoreResult;
 import com.workernotfound.matching.domain.score.policy.ApplicationTimeScorePolicy;
+import com.workernotfound.matching.domain.score.policy.TrustWeightedScorePolicy;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreBatchRepository;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreSnapshotRepository;
 import com.workernotfound.matching.domain.score.service.MatchingScoreCalculationService;
@@ -62,7 +63,7 @@ class MatchingScoreCalculationServiceTests extends IntegrationTestSupport {
 		List<MatchingScoreSnapshot> ranked = findService.findRankedSnapshots(batch.getId());
 
 		assertThat(batch.getStatus()).isEqualTo(ScoreBatchStatus.READY);
-		assertThat(batch.getPolicyVersion()).isEqualTo(ApplicationTimeScorePolicy.VERSION);
+		assertThat(batch.getPolicyVersion()).isEqualTo(TrustWeightedScorePolicy.VERSION);
 		assertThat(ranked)
 			.extracting(snapshot -> snapshot.getApplication().getId())
 			.containsExactly(earliest.getId(), middle.getId(), latest.getId());
@@ -178,7 +179,7 @@ class MatchingScoreCalculationServiceTests extends IntegrationTestSupport {
 	private MatchingScoreBatch saveCalculatingBatch() {
 		return batchRepository.saveAndFlush(MatchingScoreBatch.builder()
 			.jobPostId(JOB_POST_ID)
-			.policyVersion(ApplicationTimeScorePolicy.VERSION)
+			.policyVersion(TrustWeightedScorePolicy.VERSION)
 			.startedAt(BASE_TIME)
 			.build());
 	}

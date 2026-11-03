@@ -8,6 +8,7 @@ import com.workernotfound.matching.domain.application.service.ApplicationQueueRe
 import com.workernotfound.matching.domain.outbox.repository.OutboxEventRepository;
 import com.workernotfound.matching.domain.score.model.RankedApplicationScore;
 import com.workernotfound.matching.domain.score.policy.ApplicationTimeScorePolicy;
+import com.workernotfound.matching.domain.score.policy.TrustWeightedScorePolicy;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreBatchRepository;
 import com.workernotfound.matching.domain.score.repository.MatchingScoreSnapshotRepository;
 import com.workernotfound.matching.support.IntegrationTestSupport;
@@ -82,7 +83,7 @@ class MatchingScoreQueueProjectionTests extends IntegrationTestSupport {
 		MatchingScoreQueueMetadata metadata = scoreQueueRepository.findMetadata(JOB_POST_ID)
 			.orElseThrow();
 
-		assertThat(metadata.policyVersion()).isEqualTo(ApplicationTimeScorePolicy.VERSION);
+		assertThat(metadata.policyVersion()).isEqualTo(TrustWeightedScorePolicy.VERSION);
 		assertThat(scoreQueueRepository.findScores(JOB_POST_ID, metadata.scoreBatchId()))
 			.containsExactlyInAnyOrder(
 				new RankedApplicationScore(first.getId(), new BigDecimal("100.0")),
