@@ -60,6 +60,20 @@ def main():
             env={key: value for key, value in os.environ.items() if key not in values},
             check=True, capture_output=True, text=True)
         services = json.loads(rendered.stdout)["services"]
+        # Credentials belong only to notification-service and cannot be written by the app.
+        credential_path = "/run/secrets/firebase-admin.json"
+        for name, service in services.items():
+            mounts = [mount for mount in service.get("volumes", [])
+                      if mount.get("target") == credential_path]
+            credential = service.get("environment", {}).get("GOOGLE_APPLICATION_CREDENTIALS")
+            if name == "notification-service":
+                assert credential == credential_path and len(mounts) == 1
+                mount = mounts[0]
+                assert mount["type"] == "bind" and mount["read_only"]
+                assert mount["source"] == "/opt/wnf/secrets/firebase-admin.json"
+                assert mount.get("bind", {}).get("create_host_path", False) is False
+            else:
+                assert credential is None and not mounts
         assert "FRONTEND_ORIGIN" not in values
         assert "FRONTEND_ORIGIN" not in services["proxy"]["environment"]
         assert services["chat-service"]["environment"]["CHAT_WEBSOCKET_ALLOWED_ORIGINS"] == (
@@ -79,13 +93,20 @@ def main():
         invalid = subprocess.run(command, env=environment, capture_output=True, text=True)
         if invalid.returncode == 0 or "SWAGGER_PASSWORD_HASH" not in invalid.stderr:
             raise AssertionError("An out-of-range Swagger bcrypt cost was not rejected.")
+        # Single-service recreation accepts only one application container, before touching Compose.
+        for arguments in ([], ["mysql"], ["proxy"], ["auth-service member-service"],
+                          ["notification-service", "auth-service"]):
+            rejected = subprocess.run([str(ROOT / "scripts/deploy.sh"), "recreate", *arguments],
+                                      env=environment, capture_output=True, text=True)
+            if rejected.returncode == 0 or "Specify one application service" not in rejected.stderr:
+                raise AssertionError(f"recreate accepted {arguments!r}.")
         values["SWAGGER_PASSWORD_HASH"] = "'" + SWAGGER_HASH + "'"
         values["IMAGE_TAG"] = "latest"
         write_env()
         invalid = subprocess.run(command, env=environment, capture_output=True, text=True)
         if invalid.returncode == 0 or "Set a full commit SHA" not in invalid.stderr:
             raise AssertionError("An invalid deployment-file image tag was not rejected.")
-    print("Android deployment without a frontend domain, API WebSocket origin,"
+    print("Read-only Firebase credential isolation, single-app recreate validation, Android deployment without a frontend domain, API WebSocket origin,"
           " deployment-file precedence and invalid release tag rejection passed.")
 
 
