@@ -158,8 +158,8 @@ sudo test -f /opt/wnf/secrets/firebase-admin.json && echo "Firebase credential i
 서버 Compose 파일에 변경을 반영한 뒤 알림 서비스만 재생성한다. `recreate`는 `up`과 같이 셸의 Compose 보간 변수를 제거하고 `check`를 통과해야 재생성하며, 앱 서비스 이름만 받는다. 실행 중인 컨테이너가 정확히 하나이고 설정의 이미지 참조·로컬 이미지 ID가 실행 이미지와 모두 일치해야 진행한다. 이미지 태그가 달라졌거나 같은 태그의 로컬 이미지가 바뀌었으면 중단하며, 실행 중 이미지를 확인할 수 없는 경우에도 진행하지 않는다. 재생성 중 이미지 pull은 하지 않는다. 이미지 변경은 이 명령 대신 아래의 정상 릴리스 배포 절차로 진행한다. 키 내용은 출력하지 않고 기본 실행 사용자로 일반 파일 읽기 가능 여부를 확인한다.
 
 ```bash
-sudo test -f /opt/wnf/secrets/firebase-admin.json
-sudo ./scripts/deploy.sh recreate notification-service
+sudo test -f /opt/wnf/secrets/firebase-admin.json && \
+  sudo ./scripts/deploy.sh recreate notification-service
 sudo docker compose --project-name wnf --env-file .env.deploy -f compose.deploy.yml exec -T notification-service sh -c 'test "$GOOGLE_APPLICATION_CREDENTIALS" = /run/secrets/firebase-admin.json && test -f "$GOOGLE_APPLICATION_CREDENTIALS" && test -s "$GOOGLE_APPLICATION_CREDENTIALS" && test -r "$GOOGLE_APPLICATION_CREDENTIALS" && test ! -w "$GOOGLE_APPLICATION_CREDENTIALS" && echo "Firebase credential file is readable and read-only."'
 ```
 
