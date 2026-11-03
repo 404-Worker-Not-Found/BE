@@ -345,7 +345,7 @@ Redis 기록 성공과 MySQL의 `PUBLISHED` 변경 사이에 장애가 나면 �
 | 응답 제한시간 | 제안 시각 + 30분. 근무 시작 1시간 전보다 늦으면 그 시각까지로 줄이고, 남는 시간이 없으면 제안하지 않는다 | `MATCHING_AUTO_MATCHING_RESPONSE_TIMEOUT`(`30m`), `MATCHING_AUTO_MATCHING_WORK_START_MARGIN`(`1h`) |
 | 폴백 | 거절·만료가 있었던 공고의 다음 제안은 `FALLBACK`. 시도 횟수 제한 없음 | - |
 | 후보 소진 | 남은 자리가 있는데 시도하지 않은 대기 지원이 없고 응답 대기 제안도 없으면 `matching_candidate_exhaustions`에 공고마다 한 번 기록한다. 공고 재오픈은 하지 않는다 | - |
-| 실행 주기 | 1분마다 만료 처리 뒤 제안. 한 번에 최대 100건 | `MATCHING_AUTO_MATCHING_ENABLED`, `..._INTERVAL`, `..._INITIAL_DELAY`, `..._BATCH_SIZE` |
+| 실행 주기 | 1분마다 만료 처리 뒤 제안. 한 번에 최대 100건. 응답 대기·후보 소진 공고나 확정 진행 중인 제안이 앞쪽 배치를 계속 차지하지 않도록 ID 커서로 이어서 조회하고, 배치가 덜 차면 처음부터 다시 찾는다(커서는 인스턴스 메모리) | `MATCHING_AUTO_MATCHING_ENABLED`, `..._INTERVAL`, `..._INITIAL_DELAY`, `..._BATCH_SIZE` |
 
 - 지원 마감 시각과 모집 인원은 job-service 지원 접수 승인 응답의 발급 당시 스냅샷을 지원(V15)에 저장한다. V15 이전 지원이나 값이 없는 응답의 지원은 자동 매칭 대상이 아니다.
 - 공고별 제안은 그 공고의 `APPLIED` 지원 행을 모두 잠가(`id` 순) 수동 선택·거절·수락 준비·다른 실행과 직렬화한다. 잠금 순서는 다른 명령과 같은 지원 → 매칭이다.

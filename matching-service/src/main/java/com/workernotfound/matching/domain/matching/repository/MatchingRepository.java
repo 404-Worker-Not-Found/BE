@@ -40,9 +40,10 @@ public interface MatchingRepository extends JpaRepository<Matching, Long> {
 		from Matching matching
 		where matching.status = com.workernotfound.matching.domain.matching.entity.enums.MatchingStatus.PENDING
 			and matching.expiresAt <= :now
-		order by matching.expiresAt asc, matching.id asc
+			and matching.id > :afterMatchingId
+		order by matching.id asc
 		""")
-	List<Long> findExpiredPendingIds(LocalDateTime now, Pageable pageable);
+	List<Long> findExpiredPendingIds(LocalDateTime now, long afterMatchingId, Pageable pageable);
 
 	boolean existsByApplicationId(Long applicationId);
 
