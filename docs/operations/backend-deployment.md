@@ -155,11 +155,10 @@ sudo test -f /opt/wnf/secrets/firebase-admin.json && echo "Firebase credential i
 
 호스트 디렉터리는 root만 접근하며, Docker가 연결한 파일은 앱의 UID 10001만 읽는다. 원본 파일이 없으면 Compose는 디렉터리를 대신 만들지 않고 기동을 거부한다. 키를 준비하지 않은 서버에도 새 기동 전 이 파일이 필요하다. `.env.deploy`에 맥의 로컬 경로나 JSON 원문을 넣지 않는다.
 
-서버 Compose 파일에 변경을 반영한 뒤 알림 서비스만 재생성한다. `recreate`는 `up`과 같이 셸의 Compose 보간 변수를 제거하고 `check`를 통과해야 재생성하며, 앱 서비스 이름만 받는다. 키 내용은 출력하지 않고 기본 실행 사용자로 일반 파일 읽기 가능 여부를 확인한다.
+서버 Compose 파일에 변경을 반영한 뒤 알림 서비스만 재생성한다. `recreate`는 `up`과 같이 셸의 Compose 보간 변수를 제거하고 `check`를 통과해야 재생성하며, 앱 서비스 이름만 받는다. 키 경로가 일반 파일이 아니면 재생성하지 않도록 두 명령을 `&&`로 연결한다. 키 내용은 출력하지 않고 기본 실행 사용자로 일반 파일 읽기 가능 여부를 확인한다.
 
 ```bash
-sudo test -f /opt/wnf/secrets/firebase-admin.json
-sudo ./scripts/deploy.sh recreate notification-service
+sudo test -f /opt/wnf/secrets/firebase-admin.json && sudo ./scripts/deploy.sh recreate notification-service
 sudo docker compose --project-name wnf --env-file .env.deploy -f compose.deploy.yml exec -T notification-service sh -c 'test "$GOOGLE_APPLICATION_CREDENTIALS" = /run/secrets/firebase-admin.json && test -f "$GOOGLE_APPLICATION_CREDENTIALS" && test -s "$GOOGLE_APPLICATION_CREDENTIALS" && test -r "$GOOGLE_APPLICATION_CREDENTIALS" && test ! -w "$GOOGLE_APPLICATION_CREDENTIALS" && echo "Firebase credential file is readable and read-only."'
 ```
 
