@@ -1,5 +1,7 @@
 package com.workernotfound.notification.domain.notification.service;
 
+import com.workernotfound.notification.domain.push.service.NotificationWriter;
+
 import com.workernotfound.notification.domain.notification.entity.Notification;
 import com.workernotfound.notification.domain.notification.event.NotificationEvent;
 import com.workernotfound.notification.domain.notification.repository.*;
@@ -17,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationEventService {
   private final NotificationEventRepository receipts;
   private final NotificationRepository notifications;
+  private final NotificationWriter writer;
   private final Validator validator;
 
   static final String MATCH_CONFIRMED = "MatchConfirmed";
@@ -33,13 +36,13 @@ public class NotificationEventService {
     if (notifications.existsByEventId(event.eventId())) return;
     switch (event.eventType()) {
       case MATCH_CONFIRMED -> {
-        notifications.save(notification(event, event.ownerMemberId(), "OWNER", event.matchingId(), event.applicationId()));
-        notifications.save(notification(event, event.workerMemberId(), "WORKER", event.matchingId(), event.applicationId()));
+        writer.save(notification(event, event.ownerMemberId(), "OWNER", event.matchingId(), event.applicationId()));
+        writer.save(notification(event, event.workerMemberId(), "WORKER", event.matchingId(), event.applicationId()));
       }
       case MATCHING_PROPOSED ->
-          notifications.save(notification(event, event.workerMemberId(), "WORKER", event.matchingId(), event.applicationId()));
-      case CANDIDATES_EXHAUSTED -> notifications.save(notification(event, event.ownerMemberId(), "OWNER", null, null));
-      default -> notifications.save(notification(event, event.workerMemberId(), "WORKER", null, event.applicationId()));
+          writer.save(notification(event, event.workerMemberId(), "WORKER", event.matchingId(), event.applicationId()));
+      case CANDIDATES_EXHAUSTED -> writer.save(notification(event, event.ownerMemberId(), "OWNER", null, null));
+      default -> writer.save(notification(event, event.workerMemberId(), "WORKER", null, event.applicationId()));
     }
   }
 

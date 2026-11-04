@@ -2127,3 +2127,22 @@ Related files:
 - `docs/architecture/matching-application-design.md`
 - `docs/architecture/job-post-design.md`
 
+## 2026-11-03 - Durable FCM Push for Stored Notifications (#156)
+
+Decision:
+
+- Keep existing JWT and per-member/role inbox ownership. Android FCM tokens belong to one current member/role; account transfer and invalidation increment a generation, and unregister/withdrawal clear the raw token.
+- Save generation-bound per-device push commands with each new inbox row in the existing event transaction. Snapshot only currently registered devices; do not backfill old notifications on registration.
+- Send through Firebase Admin SDK outside DB transactions using leased, fenced commands, up to eight attempts and a 24-hour lifetime. Only UNREGISTERED invalidates a token; reject payload/project mismatch without deleting the token. Respect provider retry delays.
+- Default push dispatch to disabled and use the separately provisioned service-account file. Keep provider errors and credentials out of logs. A generic notification body and notificationId deduplication limit stale in-flight delivery and at-least-once retries; REST remains authoritative.
+- Backend implementation and test doubles do not prove real FCM authentication or device delivery. See `docs/architecture/fcm-push-design.md`.
+
+Reason:
+- A provider failure must not roll back or lose a committed inbox notification. Device ownership changes must not redirect a pending notification to another account.
+
+Implication for agents:
+- Preserve the per-device generation and lease fences. Do not send from an inbox transaction or treat FCM acceptance as confirmed phone delivery.
+
+Related files:
+- `docs/architecture/fcm-push-design.md`
+- `notification-service`
