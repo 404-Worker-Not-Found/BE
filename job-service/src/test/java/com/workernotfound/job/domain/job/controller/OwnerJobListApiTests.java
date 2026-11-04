@@ -5,9 +5,12 @@ import com.workernotfound.job.support.TestSchedule;
 import com.workernotfound.job.domain.job.dto.request.OwnerJobSearchRequest;
 import com.workernotfound.job.domain.job.entity.JobMatchingSeatReservation;
 import com.workernotfound.job.domain.job.entity.JobPost;
+import com.workernotfound.job.domain.job.entity.enums.ApplicationStatus;
 import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import com.workernotfound.job.domain.job.repository.JobMatchingSeatReservationRepository;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
+import com.workernotfound.job.domain.job.port.ApplicationStateSnapshot;
+import com.workernotfound.job.domain.job.service.ApplicantCountProjectionService;
 import com.workernotfound.job.domain.job.service.JobFindService;
 import com.workernotfound.job.global.security.JwtProperties;
 import com.workernotfound.job.support.IntegrationTestSupport;
@@ -44,6 +47,7 @@ class OwnerJobListApiTests extends IntegrationTestSupport {
 
     private static final AtomicLong OWNER_SEQUENCE = new AtomicLong(980_000);
     private static final AtomicLong MATCHING_SEQUENCE = new AtomicLong(980_000);
+    private static final AtomicLong APPLICATION_SEQUENCE = new AtomicLong(980_000);
     private static final LocalDateTime REGISTERED_AT = LocalDateTime.of(2026, 1, 1, 9, 0);
 
     @Autowired
@@ -57,6 +61,9 @@ class OwnerJobListApiTests extends IntegrationTestSupport {
 
     @Autowired
     private JobFindService jobFindService;
+
+    @Autowired
+    private ApplicantCountProjectionService projectionService;
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
@@ -287,23 +294,28 @@ class OwnerJobListApiTests extends IntegrationTestSupport {
         assertThat(confirmedCountOf(body, noReservation)).isZero();
     }
 
-    // 확정 인원은 페이지의 공고 ID로 묶어 한 번에 센다. 공고 수가 늘어도 쿼리 수가 늘지 않는다.
+    // 확정 인원과 지원자 수는 페이지의 공고 ID로 묶어 한 번에 센다. 공고 수가 늘어도 쿼리 수가 늘지 않는다.
     @Test
-    void countsConfirmedSeatsWithoutQueryPerJob() {
+    void countsConfirmedSeatsAndApplicantsWithoutQueryPerJob() {
         long ownerId = nextOwnerId();
         for (int i = 0; i < 6; i++) {
             JobPost post = saveJob(ownerId, JobStatus.OPEN);
             saveReservation(post, Outcome.CONSUMED);
+            projectionService.applySnapshot(post.getId(), List.of(new ApplicationStateSnapshot(
+                    APPLICATION_SEQUENCE.incrementAndGet(), ApplicationStatus.APPLIED, 1L)), REGISTERED_AT);
         }
         Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
         statistics.clear();
         statistics.setStatisticsEnabled(true);
         try {
-            // 페이지가 가득 차 전체 건수 쿼리까지 실행되는 경우: 페이지 조회, 건수, 확정 인원 집계
+            // 페이지가 가득 차 전체 건수 쿼리까지 실행되는 경우: 페이지 조회, 건수, 확정 인원 집계, 적재된 공고, 지원자 수 집계
             var response = jobFindService.findOwnerJobs(ownerId, new OwnerJobSearchRequest(null, 0, 5));
 
-            assertThat(response.jobs()).hasSize(5).allSatisfy(card -> assertThat(card.confirmedCount()).isEqualTo(1));
-            assertThat(statistics.getPrepareStatementCount()).isEqualTo(3);
+            assertThat(response.jobs()).hasSize(5).allSatisfy(card -> {
+                assertThat(card.confirmedCount()).isEqualTo(1);
+                assertThat(card.applicantCount()).isEqualTo(1);
+            });
+            assertThat(statistics.getPrepareStatementCount()).isEqualTo(5);
         } finally {
             statistics.setStatisticsEnabled(false);
             statistics.clear();

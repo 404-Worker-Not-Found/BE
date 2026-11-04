@@ -30,7 +30,8 @@ public record JobDetailResponse(
         Integer recruitCount
 
 ) {
-    public static JobDetailResponse of(JobPost post, String categoryName) {
+    // applicantCount: 지원자 수 projection의 현재 APPLIED 지원 수. 초기 적재 전인 공고는 null이다.
+    public static JobDetailResponse of(JobPost post, String categoryName, Integer applicantCount) {
         int rawMinutes = (int) Duration.between(post.getStartTime(), post.getEndTime()).toMinutes();
         int totalMinutes = post.isEndTimeNextDay() ? rawMinutes + 1440 : rawMinutes;
         return new JobDetailResponse(
@@ -46,7 +47,7 @@ public record JobDetailResponse(
                 totalMinutes / 60,
                 totalMinutes % 60,
                 post.getDescription(),
-                null,
+                applicantCount,
                 post.getRecruitCount()
         );
     }

@@ -291,7 +291,15 @@ Redis 기록 성공과 MySQL의 `PUBLISHED` 변경 사이에 장애가 나면 �
 
 `ApplicationSubmitted`와 `ApplicationCanceled`에는 `revision`을 포함한 공통 이벤트 필드와 함께 `applicationId`, `admissionId`, `jobPostId`, `workerMemberId`, 지원 상태, 상태 변경 시각을 넣는다. 공통 `revision`은 지원 집계의 상태 버전이며 별도의 `applicationRevision`을 추가하지 않는다. 최초 지원 이벤트는 `revision=1`이고 상태가 바뀔 때마다 1 증가한다.
 
-지원자 수 projection은 아직 구현하지 않았고 `job-service`의 `applicantCount`는 `null`이다. 구현할 때 `job-service`는 지원별로 저장된 마지막 `revision`보다 큰 이벤트만 반영하고, 같은 `revision`의 재전송은 바꾸지 않으며 더 작은 `revision`은 무시한다. 세는 지원 상태(`APPLIED`), 재지원 처리, 초기 반영과 재구축(이 서비스의 공고별 지원 상태 스냅샷 내부 계약 추가)은 [지원자 수 projection 기준](./job-post-design.md#지원자-수-projection-기준미구현)을 따른다.
+`job-service`는 지원 상태 이벤트 4종을 별도 consumer group(`job-applicant-count-v1`)으로 읽어 공고 지원자 수(`applicantCount`) projection에 반영한다. 지원별로 저장된 마지막 `revision`보다 큰 이벤트만 반영하고, 같은 `revision`의 재전송은 바꾸지 않으며 더 작은 `revision`은 무시한다. 초기 적재와 재구축에는 아래 공고별 지원 상태 스냅샷 계약을 쓴다. 세는 지원 상태(`APPLIED`), 재지원 처리, 정합성 비교는 [지원자 수 projection](./job-post-design.md#지원자-수-projection)을 따른다.
+
+| 항목 | 값 |
+| --- | --- |
+| Method/Path | `GET /api/applications/internal/jobs/{jobPostId}/application-states` |
+| Header | `X-Internal-Secret: {configured secret}` |
+| Response `data` | `jobPostId`, `applications[]`(`applicationId`, `status`, `revision`) |
+
+공고의 모든 지원을 상태와 관계없이 ID 오름차순으로 돌려준다. 지원이 없거나 matching-service가 모르는 공고는 빈 목록이다. 읽기 전용 트랜잭션 한 번으로 읽으므로 한 응답 안의 행은 같은 시점 값이다. 수신 측 계약은 `ApplicationStateContractTests`가 실제 컨트롤러·보안 필터·MySQL로 검증한다.
 
 ## 아직 없는 점수 데이터의 후속 연동
 

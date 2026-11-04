@@ -6,6 +6,7 @@ import com.workernotfound.matching.domain.application.exception.ApplicationError
 import com.workernotfound.matching.domain.application.model.OwnerApplicantRow;
 import com.workernotfound.matching.domain.application.repository.ApplicationRepository;
 import com.workernotfound.matching.global.exception.BusinessException;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -66,6 +67,10 @@ public class ApplicationFindService {
 			throw new BusinessException(ApplicationErrorCode.APPLICATION_FORBIDDEN);
 		}
 		return hasApplications;
+	}
+
+	public List<Application> findJobApplications(Long jobPostId) {
+		return applicationRepository.findByJobPostIdOrderByIdAsc(jobPostId);
 	}
 
 	public Application findOwnerApplicant(Long jobPostId, Long applicationId, Long ownerMemberId) {

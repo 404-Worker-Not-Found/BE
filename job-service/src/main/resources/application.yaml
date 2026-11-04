@@ -43,6 +43,20 @@ job:
     poll-interval: ${JOB_ADMISSION_EVENTS_POLL_INTERVAL:1s}
     initial-delay: ${JOB_ADMISSION_EVENTS_INITIAL_DELAY:0s}
     batch-size: ${JOB_ADMISSION_EVENTS_BATCH_SIZE:100}
+  # 공고 지원자 수(applicantCount) projection. matching 지원 상태 이벤트를 전용 그룹(job-applicant-count-v1)으로 반영하고,
+  # matching-service 공고별 지원 상태 스냅샷으로 초기 적재와 정합성 비교·재구축을 한다.
+  applicant-count:
+    events:
+      enabled: ${JOB_APPLICANT_COUNT_EVENTS_ENABLED:true}
+      stream: ${MATCHING_OUTBOX_STREAM_KEY:matching:domain-events}
+      poll-interval: ${JOB_APPLICANT_COUNT_EVENTS_POLL_INTERVAL:1s}
+      initial-delay: ${JOB_APPLICANT_COUNT_EVENTS_INITIAL_DELAY:0s}
+      batch-size: ${JOB_APPLICANT_COUNT_EVENTS_BATCH_SIZE:100}
+    sync:
+      enabled: ${JOB_APPLICANT_COUNT_SYNC_ENABLED:true}
+      interval: ${JOB_APPLICANT_COUNT_SYNC_INTERVAL:1m}
+      initial-delay: ${JOB_APPLICANT_COUNT_SYNC_INITIAL_DELAY:30s}
+      batch-size: ${JOB_APPLICANT_COUNT_SYNC_BATCH_SIZE:100}
   matching-seat-reservation:
     ttl: ${MATCHING_SEAT_RESERVATION_TTL:10m}
     expiry-sweep-enabled: ${MATCHING_SEAT_RESERVATION_EXPIRY_SWEEP_ENABLED:true}

@@ -114,6 +114,9 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 		""")
 	List<Long> findAutoMatchingJobPostIds(LocalDateTime now, long afterJobPostId, Pageable pageable);
 
+	// job-service 지원자 수 projection의 초기 적재·재구축용 스냅샷. 상태와 관계없이 공고의 모든 지원을 돌려준다.
+	List<Application> findByJobPostIdOrderByIdAsc(Long jobPostId);
+
 	List<Application> findByJobPostIdAndStatusOrderByAppliedAtAscIdAsc(
 		Long jobPostId,
 		ApplicationStatus status

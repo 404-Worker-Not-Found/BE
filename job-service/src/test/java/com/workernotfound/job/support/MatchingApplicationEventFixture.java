@@ -62,8 +62,24 @@ public final class MatchingApplicationEventFixture {
             LocalDateTime occurredAt,
             String status
     ) {
+        return record(eventId, eventType, applicationId, admissionId, jobPostId, workerMemberId, occurredAt, status,
+                1L);
+    }
+
+    // 지원 상태가 바뀐 이벤트는 matching-service applications.revision을 함께 싣는다(최초 지원 1, 상태 변경마다 1 증가).
+    public static Map<String, String> record(
+            String eventId,
+            String eventType,
+            Long applicationId,
+            Long admissionId,
+            Long jobPostId,
+            Long workerMemberId,
+            LocalDateTime occurredAt,
+            String status,
+            Long revision
+    ) {
         MatchingApplicationEvent event = new MatchingApplicationEvent(eventId, eventType, occurredAt, applicationId,
-                UUID.randomUUID().toString(), 1L, 1, applicationId, admissionId, jobPostId, workerMemberId, status,
+                UUID.randomUUID().toString(), revision, 1, applicationId, admissionId, jobPostId, workerMemberId, status,
                 occurredAt);
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("eventId", eventId);
