@@ -2,10 +2,12 @@
 
 ## 범위와 소유권
 
-notification-service는 회원별 인앱 알림과 읽음 상태를 전용 MySQL에 보관한다. matching-service의 `matching:domain-events` Redis Stream에서 `MatchConfirmed` v1과 `ApplicationRejected` v1을 소비한다. 다른 서비스 DB에 접근하거나 서비스 간 FK를 만들지 않는다.
+notification-service는 회원별 인앱 알림과 읽음 상태를 전용 MySQL에 보관한다. matching-service의 `matching:domain-events` Redis Stream에서 `MatchConfirmed` v1, `ApplicationRejected` v1, `MatchingProposed` v1, `MatchingCandidatesExhausted` v1을 소비한다. 다른 서비스 DB에 접근하거나 서비스 간 FK를 만들지 않는다.
 
 - `MatchConfirmed`: 점주 OWNER와 알바생 WORKER 각각에게 알림을 생성한다. 화면 기본 문구는 “매칭이 확정되었습니다.”로 표시할 수 있다.
 - `ApplicationRejected`: 해당 WORKER에게만 알림을 생성한다. 기본 문구는 “지원한 공고의 모집이 완료되었습니다.”다.
+- `MatchingProposed`(#154): 매칭 제안(수동·자동·폴백)을 받은 WORKER에게만 알림을 생성한다. 지원·매칭 ID를 함께 저장한다. 기본 문구는 “매칭 제안이 도착했습니다.”이며, 자동·폴백 제안은 응답 제한시간이 있으므로 앱이 매칭 상세의 `expiresAt`을 함께 보여 준다.
+- `MatchingCandidatesExhausted`(#154): 자동 매칭에서 남은 자리가 있는데 제안할 후보가 없는 공고의 점주 OWNER에게만 공고 단위 알림을 생성한다(지원·매칭·근무 ID 없음, V6 제약 예외). 기본 문구는 “남은 자리에 제안할 지원자가 없습니다.”다.
 - API는 type과 공고·지원·매칭 ID를 반환한다. 프런트에서 문구와 이동 화면을 결정한다. 토큰, 결제 ID, 다른 참여자 ID, 내부 이벤트 ID는 노출하지 않는다.
 - 현재 ApplicationSubmitted 이벤트에는 점주 ID가 없으므로 점주 지원 알림을 임의로 생성하지 않는다. 인앱 목록과 미읽음 개수는 REST 재조회로 갱신한다. #156은 저장 알림에 Android FCM 발송 대기열을 추가한다([FCM 설계](fcm-push-design.md)). SSE/WebSocket·SMS·이메일은 후속 범위다.
 
@@ -16,7 +18,7 @@ notification-service는 회원별 인앱 알림과 읽음 상태를 전용 MySQL
 - envelope의 eventId/eventType/aggregateType/aggregateId/revision/version을 payload와 대조한다. 지원하는 이벤트에 누락·불일치·잘못된 상태·버전이 있으면 ACK하지 않고 pending에 남긴다. 다른 이벤트 타입은 이 소비자의 범위 밖이므로 ACK한다. Stream trim이나 자동 폐기는 하지 않는다.
 - `notification_events`는 eventId별 fingerprint를 저장한다. receipt 행을 잠근 후 기존 알림을 확인하고 회원별 알림을 생성한다. receipt와 알림을 같은 트랜잭션에서 커밋한 뒤 ACK한다. 같은 eventId의 다른 내용은 거부한다.
 - 알림의 `(event_id, member_id, member_role)` DB 유일 제약이 추가 중복을 차단한다. ACK 전에 프로세스가 중단돼도 재전달은 같은 알림을 유지하며 읽음 상태를 초기화하지 않는다.
-- fingerprint v1은 공통 필드 eventId, eventType, ISO_LOCAL_DATE_TIME occurredAt, aggregateId, revision, version, applicationId, jobPostId, workerMemberId를 순서대로 사용한다. MatchConfirmed는 matchingId와 ownerMemberId, ApplicationRejected는 status를 뒤에 붙인다. 각 값의 문자열 길이와 콜론을 앞에 붙인 후 SHA-256을 계산한다. 새로운 record 필드나 사용하지 않는 추가 JSON 필드가 기존 지문을 바꾸면 안 된다.
+- fingerprint v1은 공통 필드 eventId, eventType, ISO_LOCAL_DATE_TIME occurredAt, aggregateId, revision, version, applicationId, jobPostId, workerMemberId를 순서대로 사용한다. MatchConfirmed는 matchingId와 ownerMemberId, ApplicationRejected는 status를 뒤에 붙인다. MatchingProposed는 MatchConfirmed와 같은 필드를, MatchingCandidatesExhausted는 공통 필드 중 지원·알바생 대신 jobPostId, ownerMemberId, remainingSeats를 쓴다. 기존 두 이벤트의 필드 순서는 저장된 수신 기록과 같아야 하므로 바꾸지 않는다(회귀 테스트로 고정). 각 값의 문자열 길이와 콜론을 앞에 붙인 후 SHA-256을 계산한다. 새로운 record 필드나 사용하지 않는 추가 JSON 필드가 기존 지문을 바꾸면 안 된다.
 - 알림은 상태를 덮어쓰는 projection이 아니라 발생 이력이므로 과거 이벤트도 보관한다. 재전달의 기준은 source의 안정된 eventId다. 발생 시각은 occurredAt, 목록 정렬은 서비스에 저장된 ID를 사용한다.
 
 ## API
@@ -69,6 +71,8 @@ notification-service는 회원별 인앱 알림과 읽음 상태를 전용 MySQL
 ### 이벤트 종류 확장 시 배포 순서
 
 새 취소·노쇼 이벤트를 발행하는 work-service보다 notification-service를 먼저 배포한다. 기존 `notification-work-v1` 소비자는 지원하지 않는 이벤트를 ACK하므로, 생산자를 먼저 배포하면 새 이벤트의 알림이 누락되고 같은 그룹에서 자동 재수신되지 않는다. 기존 소비자 인스턴스가 모두 교체된 뒤 생산자를 배포한다.
+
+`MatchingProposed`·`MatchingCandidatesExhausted`(#154)도 같다. 기존 `notification-results-v1` 소비자는 두 이벤트를 ACK하고 버리므로 notification-service(V6 포함)를 matching-service보다 먼저 배포한다.
 
 ## 예치 이상 알림 (#108 MVP)
 

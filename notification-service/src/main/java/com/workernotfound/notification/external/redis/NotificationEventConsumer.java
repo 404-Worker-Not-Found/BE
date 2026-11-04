@@ -78,6 +78,13 @@ public class NotificationEventConsumer {
     }
   }
 
+  // 알림을 만드는 matching 이벤트와 envelope의 aggregateType. 나머지 이벤트는 바로 ACK한다.
+  private static final Map<String, String> AGGREGATE_TYPES = Map.of(
+      "MatchConfirmed", "MATCHING",
+      "MatchingProposed", "MATCHING",
+      "ApplicationRejected", "APPLICATION",
+      "MatchingCandidatesExhausted", "JOB_POST");
+
   private List<MapRecord<String, Object, Object>> read(ReadOffset offset) {
     var records =
         redis
@@ -92,7 +99,7 @@ public class NotificationEventConsumer {
   private void process(List<MapRecord<String, Object, Object>> records) {
     for (var record : records) {
       try {
-        if (Set.of("MatchConfirmed", "ApplicationRejected").contains(record.getValue().get("eventType"))) {
+        if (AGGREGATE_TYPES.containsKey(record.getValue().get("eventType"))) {
           service.receive(parse(record.getValue()));
         }
         // The service transaction has committed before acknowledgment. Never trim the stream.
@@ -108,7 +115,7 @@ public class NotificationEventConsumer {
 
   private NotificationEvent parse(Map<Object, Object> fields) throws JsonProcessingException {
     var event = mapper.readValue((String) fields.get("payload"), NotificationEvent.class);
-    String aggregateType = "MatchConfirmed".equals(event.eventType()) ? "MATCHING" : "APPLICATION";
+    String aggregateType = AGGREGATE_TYPES.get(event.eventType());
     if (!aggregateType.equals(fields.get("aggregateType"))
         || !Objects.equals(fields.get("eventId"), event.eventId())
         || !Objects.equals(fields.get("eventType"), event.eventType())

@@ -352,7 +352,7 @@ Redis 기록 성공과 MySQL의 `PUBLISHED` 변경 사이에 장애가 나면 �
 - 자동·폴백 제안은 `selection_type`, 점수 묶음·스냅샷, `expires_at`을 저장하고 이력은 `SYSTEM` 행위자(`AUTO_CANDIDATE_PROPOSED` / `FALLBACK_CANDIDATE_PROPOSED`)로 남긴다.
 - 만료는 지원 → 매칭 → 확정 Saga를 잠근 뒤 다시 확인한다. 수락이 이미 시작돼 확정 진행·보상이 필요한 제안은 만료하지 않는다. 만료 이력 사유는 `MATCHING_RESPONSE_EXPIRED`다.
 - 응답 제한시간이 지난 제안은 만료 처리 전이라도 새로 수락할 수 없다(409 `MATCHING-409-006`). 수동 제안은 제한시간이 없다.
-- 제안 도착과 후보 소진 알림은 다음 단위에서 notification-service에 연결한다. 그 전까지 알바생은 본인 매칭 목록으로 제안을 확인한다.
+- 제안을 만들 때(수동·자동·폴백) 같은 트랜잭션에서 `MatchingProposed` v1(aggregate `MATCHING`, revision 1, `selectionType`·`expiresAt` 포함)을, 후보 소진을 처음 기록할 때 `MatchingCandidatesExhausted` v1(aggregate `JOB_POST`, revision 1, `ownerMemberId`·`remainingSeats`)을 Outbox에 저장한다. notification-service가 알바생 제안 알림과 점주 후보 소진 알림을 만든다. 다른 소비자는 이벤트 종류로 거르고 ACK한다.
 
 ## Redis와 복구
 

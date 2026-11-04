@@ -44,13 +44,13 @@ class NotificationIntegrationTests extends IntegrationTestSupport {
   NotificationEvent confirmed() {
     long id = IDS.addAndGet(10);
     return new NotificationEvent(UUID.randomUUID().toString(), "MatchConfirmed", LocalDateTime.now(),
-        id, 1L, 1, id, id + 1, id + 2, id + 3, id + 4, null);
+        id, 1L, 1, id, id + 1, id + 2, id + 3, id + 4, null, null);
   }
 
   NotificationEvent rejected(NotificationEvent original, String eventId) {
     return new NotificationEvent(eventId, "ApplicationRejected", original.occurredAt(),
         original.applicationId(), 2L, 1, null, original.applicationId(), original.jobPostId(),
-        null, original.workerMemberId(), "REJECTED");
+        null, original.workerMemberId(), "REJECTED", null);
   }
 
   AuthenticatedMember owner(NotificationEvent event) {
@@ -63,10 +63,18 @@ class NotificationIntegrationTests extends IntegrationTestSupport {
 
   Map<String, String> fields(NotificationEvent event) throws Exception {
     return Map.of("eventId", event.eventId(), "eventType", event.eventType(),
-        "aggregateType", event.eventType().equals("MatchConfirmed") ? "MATCHING" : "APPLICATION",
+        "aggregateType", aggregateType(event.eventType()),
         "aggregateId", event.aggregateId().toString(), "revision", event.revision().toString(),
         "version", event.version().toString(), "occurredAt", event.occurredAt().toString(),
         "payload", mapper.writeValueAsString(event));
+  }
+
+  static String aggregateType(String eventType) {
+    return switch (eventType) {
+      case "MatchConfirmed", "MatchingProposed" -> "MATCHING";
+      case "MatchingCandidatesExhausted" -> "JOB_POST";
+      default -> "APPLICATION";
+    };
   }
 
   String token(long memberId, String role) throws Exception {
@@ -143,17 +151,17 @@ class NotificationIntegrationTests extends IntegrationTestSupport {
     events.receive(event);
     var changed = new NotificationEvent(event.eventId(), event.eventType(), event.occurredAt(), event.aggregateId(),
         event.revision(), event.version(), event.matchingId(), event.applicationId(), event.jobPostId(),
-        event.ownerMemberId(), event.workerMemberId() + 100, null);
+        event.ownerMemberId(), event.workerMemberId() + 100, null, null);
     assertThatThrownBy(() -> events.receive(changed)).isInstanceOf(IllegalArgumentException.class);
     assertThat(notifications.getUnreadCount(worker(event)).unreadCount()).isEqualTo(1);
     assertThat(notifications.getUnreadCount(worker(changed)).unreadCount()).isZero();
     var badVersion = new NotificationEvent(UUID.randomUUID().toString(), event.eventType(), event.occurredAt(),
         event.aggregateId(), 1L, 2, event.matchingId(), event.applicationId(), event.jobPostId(),
-        event.ownerMemberId(), event.workerMemberId(), null);
+        event.ownerMemberId(), event.workerMemberId(), null, null);
     assertThatThrownBy(() -> events.receive(badVersion)).isInstanceOf(IllegalArgumentException.class);
     var badOwner = new NotificationEvent(UUID.randomUUID().toString(), event.eventType(), event.occurredAt(),
         event.aggregateId(), 1L, 1, event.matchingId(), event.applicationId(), event.jobPostId(), null,
-        event.workerMemberId(), null);
+        event.workerMemberId(), null, null);
     assertThatThrownBy(() -> events.receive(badOwner)).isInstanceOf(IllegalArgumentException.class);
     var rolledBack = confirmed();
     new TransactionTemplate(transactions).executeWithoutResult(tx -> {
@@ -248,7 +256,8 @@ class NotificationIntegrationTests extends IntegrationTestSupport {
       var at = original.occurredAt().withNano(nanos);
       var event = new NotificationEvent(original.eventId(), original.eventType(), at,
           original.aggregateId(), original.revision(), original.version(), original.matchingId(),
-          original.applicationId(), original.jobPostId(), original.ownerMemberId(), original.workerMemberId(), null);
+          original.applicationId(), original.jobPostId(), original.ownerMemberId(), original.workerMemberId(), null,
+        null);
       LocalDateTime stored = jdbc.queryForObject("SELECT CAST(? AS DATETIME(6))", LocalDateTime.class, at);
       assertThat(stored).isNotEqualTo(at);
       var micros = at.truncatedTo(java.time.temporal.ChronoUnit.MICROS);
@@ -270,7 +279,8 @@ class NotificationIntegrationTests extends IntegrationTestSupport {
     var at = original.occurredAt().withNano(123456000);
     var event = new NotificationEvent(original.eventId(), original.eventType(), at,
         original.aggregateId(), original.revision(), original.version(), original.matchingId(),
-        original.applicationId(), original.jobPostId(), original.ownerMemberId(), original.workerMemberId(), null);
+        original.applicationId(), original.jobPostId(), original.ownerMemberId(), original.workerMemberId(), null,
+        null);
     for (var mismatched : List.of(at.plusNanos(1000), at.minusNanos(1000), at.plusNanos(1))) {
       var envelope = new HashMap<>(fields(event));
       envelope.put("occurredAt", mismatched.toString());
@@ -280,6 +290,107 @@ class NotificationIntegrationTests extends IntegrationTestSupport {
       assertThat(redis.opsForStream().pending(STREAM, "notification-results-v1",
           org.springframework.data.domain.Range.closed(id.getValue(), id.getValue()), 10)).hasSize(1);
     }
+  }
+
+  NotificationEvent proposed(NotificationEvent confirmed) {
+    return new NotificationEvent(UUID.randomUUID().toString(), "MatchingProposed", confirmed.occurredAt(),
+        confirmed.matchingId(), 1L, 1, confirmed.matchingId(), confirmed.applicationId(), confirmed.jobPostId(),
+        confirmed.ownerMemberId(), confirmed.workerMemberId(), null, null);
+  }
+
+  NotificationEvent exhausted(long jobPostId, long ownerMemberId, int remainingSeats) {
+    return new NotificationEvent(UUID.randomUUID().toString(), "MatchingCandidatesExhausted", LocalDateTime.now(),
+        jobPostId, 1L, 1, null, null, jobPostId, ownerMemberId, null, null, remainingSeats);
+  }
+
+  @Test
+  void proposalNotifiesOnlyTheWorkerThroughTheMatchingStream() throws Exception {
+    var event = proposed(confirmed());
+    redis.opsForStream().add(STREAM, fields(event));
+    consumer.poll();
+    events.receive(event);
+
+    var page = notifications.getNotifications(worker(event), null, 20);
+    assertThat(page.content()).singleElement().satisfies(notice -> {
+      assertThat(notice.type()).isEqualTo("MatchingProposed");
+      assertThat(notice.matchingId()).isEqualTo(event.matchingId());
+      assertThat(notice.applicationId()).isEqualTo(event.applicationId());
+      assertThat(notice.jobPostId()).isEqualTo(event.jobPostId());
+    });
+    assertThat(notifications.getNotifications(owner(event), null, 20).content()).isEmpty();
+  }
+
+  @Test
+  void candidateExhaustionNotifiesOnlyTheOwnerAtJobLevel() throws Exception {
+    long id = IDS.addAndGet(10);
+    var event = exhausted(id, id + 1, 2);
+    redis.opsForStream().add(STREAM, fields(event));
+    consumer.poll();
+
+    var owner = new AuthenticatedMember(id + 1, id + 1, "OWNER");
+    assertThat(notifications.getNotifications(owner, null, 20).content()).singleElement().satisfies(notice -> {
+      assertThat(notice.type()).isEqualTo("MatchingCandidatesExhausted");
+      assertThat(notice.jobPostId()).isEqualTo(id);
+      assertThat(notice.matchingId()).isNull();
+      assertThat(notice.applicationId()).isNull();
+      assertThat(notice.workId()).isNull();
+    });
+  }
+
+  @Test
+  void rejectsMalformedNewEventsAndChangedContentForSameId() {
+    var confirmed = confirmed();
+    var proposal = proposed(confirmed);
+    var withoutApplication = new NotificationEvent(proposal.eventId(), proposal.eventType(), proposal.occurredAt(),
+        proposal.aggregateId(), 1L, 1, proposal.matchingId(), null, proposal.jobPostId(), proposal.ownerMemberId(),
+        proposal.workerMemberId(), null, null);
+    var exhaustionWithWorker = new NotificationEvent(UUID.randomUUID().toString(), "MatchingCandidatesExhausted",
+        LocalDateTime.now(), confirmed.jobPostId(), 1L, 1, null, null, confirmed.jobPostId(), confirmed.ownerMemberId(),
+        confirmed.workerMemberId(), null, 1);
+    var exhaustionWithoutSeats = exhausted(confirmed.jobPostId(), confirmed.ownerMemberId(), 1);
+    var noSeats = new NotificationEvent(exhaustionWithoutSeats.eventId(), exhaustionWithoutSeats.eventType(),
+        exhaustionWithoutSeats.occurredAt(), exhaustionWithoutSeats.aggregateId(), 1L, 1, null, null,
+        exhaustionWithoutSeats.jobPostId(), exhaustionWithoutSeats.ownerMemberId(), null, null, null);
+    for (var invalid : List.of(withoutApplication, exhaustionWithWorker, noSeats))
+      assertThatThrownBy(() -> events.receive(invalid)).isInstanceOf(IllegalArgumentException.class);
+
+    events.receive(proposal);
+    var changed = new NotificationEvent(proposal.eventId(), proposal.eventType(), proposal.occurredAt(),
+        proposal.aggregateId(), 1L, 1, proposal.matchingId(), proposal.applicationId(), proposal.jobPostId(),
+        proposal.ownerMemberId() + 1, proposal.workerMemberId(), null, null);
+    assertThatThrownBy(() -> events.receive(changed)).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  // 배포 전에 받은 MatchConfirmed·ApplicationRejected가 다시 전달돼도 같은 지문이어야 한다.
+  @Test
+  void legacyEventFingerprintsKeepTheirOriginalFieldOrder() throws Exception {
+    var event = confirmed();
+    var rejected = rejected(event, UUID.randomUUID().toString());
+    events.receive(event);
+    events.receive(rejected);
+
+    String time = java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(event.occurredAt());
+    assertThat(storedFingerprint(event.eventId())).isEqualTo(sha256(event.eventId(), event.eventType(), time,
+        event.aggregateId(), event.revision(), event.version(), event.applicationId(), event.jobPostId(),
+        event.workerMemberId(), event.matchingId(), event.ownerMemberId()));
+    assertThat(storedFingerprint(rejected.eventId())).isEqualTo(sha256(rejected.eventId(), rejected.eventType(),
+        time, rejected.aggregateId(), rejected.revision(), rejected.version(), rejected.applicationId(),
+        rejected.jobPostId(), rejected.workerMemberId(), rejected.status()));
+  }
+
+  String storedFingerprint(String eventId) {
+    return jdbc.queryForObject("select fingerprint from notification_events where event_id = ?", String.class,
+        eventId);
+  }
+
+  static String sha256(Object... fields) throws Exception {
+    var canonical = new StringBuilder();
+    for (Object field : fields) {
+      String value = field.toString();
+      canonical.append(value.length()).append(':').append(value);
+    }
+    return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+        .digest(canonical.toString().getBytes(StandardCharsets.UTF_8)));
   }
 
   @Test

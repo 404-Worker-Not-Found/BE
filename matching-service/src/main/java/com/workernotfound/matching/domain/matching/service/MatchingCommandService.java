@@ -9,6 +9,8 @@ import com.workernotfound.matching.domain.matching.entity.enums.MatchingActorTyp
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingSelectionType;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingStatus;
 import com.workernotfound.matching.domain.matching.exception.MatchingErrorCode;
+import com.workernotfound.matching.domain.matching.event.MatchingProposedEvent;
+import com.workernotfound.matching.domain.outbox.service.OutboxEventCommandService;
 import com.workernotfound.matching.domain.matching.repository.MatchingRepository;
 import com.workernotfound.matching.domain.matching.repository.MatchingStatusHistoryRepository;
 import com.workernotfound.matching.domain.score.entity.MatchingScoreBatch;
@@ -32,6 +34,7 @@ public class MatchingCommandService {
 	private final MatchingRepository matchingRepository;
 	private final MatchingStatusHistoryRepository historyRepository;
 	private final MatchingScoreFindService scoreFindService;
+	private final OutboxEventCommandService outboxEventCommandService;
 
 	@Transactional
 	public Matching createManual(
@@ -68,6 +71,7 @@ public class MatchingCommandService {
 			.selectedAt(selectedAt)
 			.build());
 		historyRepository.saveAndFlush(initialHistory(matching, ownerMemberId, selectedAt));
+		outboxEventCommandService.saveMatchingProposedEvent(MatchingProposedEvent.of(matching));
 		return matching;
 	}
 

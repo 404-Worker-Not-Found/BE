@@ -9,9 +9,12 @@ import com.workernotfound.matching.domain.matching.entity.MatchingStatusHistory;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingActorType;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingSelectionType;
 import com.workernotfound.matching.domain.matching.entity.enums.MatchingStatus;
+import com.workernotfound.matching.domain.matching.event.MatchingCandidatesExhaustedEvent;
+import com.workernotfound.matching.domain.matching.event.MatchingProposedEvent;
 import com.workernotfound.matching.domain.matching.repository.MatchingCandidateExhaustionRepository;
 import com.workernotfound.matching.domain.matching.repository.MatchingRepository;
 import com.workernotfound.matching.domain.matching.repository.MatchingStatusHistoryRepository;
+import com.workernotfound.matching.domain.outbox.service.OutboxEventCommandService;
 import com.workernotfound.matching.domain.score.entity.MatchingScoreBatch;
 import com.workernotfound.matching.domain.score.entity.MatchingScoreSnapshot;
 import com.workernotfound.matching.domain.score.service.MatchingScoreFindService;
@@ -50,6 +53,7 @@ public class AutoMatchingService {
 	private final MatchingCandidateExhaustionRepository exhaustionRepository;
 	private final MatchingScoreFindService scoreFindService;
 	private final AccountGateService accountGates;
+	private final OutboxEventCommandService outboxEventCommandService;
 	private final AutoMatchingProperties properties;
 	private final Clock clock;
 
@@ -130,6 +134,7 @@ public class AutoMatchingService {
 			.revision(matching.getRevision())
 			.changedAt(now)
 			.build());
+		outboxEventCommandService.saveMatchingProposedEvent(MatchingProposedEvent.of(matching));
 	}
 
 	// 응답 대기 제안이 남아 있으면 그 결과를 기다린다. 없으면 남은 자리를 후보 소진으로 한 번 기록한다.
@@ -142,7 +147,10 @@ public class AutoMatchingService {
 		if (matchingRepository.existsByJobPostIdAndStatus(jobPostId, MatchingStatus.PENDING)) {
 			return AutoMatchingResult.WAITING_FOR_RESPONSES;
 		}
-		exhaustionRepository.record(jobPostId, reference.getOwnerMemberId(), remainingSeats, now);
+		if (exhaustionRepository.record(jobPostId, reference.getOwnerMemberId(), remainingSeats, now)) {
+			outboxEventCommandService.saveCandidatesExhaustedEvent(MatchingCandidatesExhaustedEvent.of(
+				jobPostId, reference.getOwnerMemberId(), remainingSeats, now));
+		}
 		return AutoMatchingResult.EXHAUSTED;
 	}
 

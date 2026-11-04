@@ -3,7 +3,9 @@ package com.workernotfound.matching.domain.outbox.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workernotfound.matching.domain.application.event.ApplicationEvent;
+import com.workernotfound.matching.domain.matching.event.MatchingCandidatesExhaustedEvent;
 import com.workernotfound.matching.domain.matching.event.MatchingEvent;
+import com.workernotfound.matching.domain.matching.event.MatchingProposedEvent;
 import com.workernotfound.matching.domain.outbox.entity.OutboxEvent;
 import com.workernotfound.matching.domain.outbox.repository.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +17,7 @@ public class OutboxEventCommandService {
 
 	private static final String APPLICATION_AGGREGATE = "APPLICATION";
 	private static final String MATCHING_AGGREGATE = "MATCHING";
+	private static final String JOB_POST_AGGREGATE = "JOB_POST";
 
 	private final OutboxEventRepository outboxEventRepository;
 	private final ObjectMapper objectMapper;
@@ -47,6 +50,42 @@ public class OutboxEventCommandService {
 			.occurredAt(event.occurredAt())
 			.build();
 		return outboxEventRepository.saveAndFlush(outboxEvent);
+	}
+
+	public OutboxEvent saveMatchingProposedEvent(MatchingProposedEvent event) {
+		return outboxEventRepository.saveAndFlush(OutboxEvent.builder()
+			.eventId(event.eventId())
+			.aggregateType(MATCHING_AGGREGATE)
+			.aggregateId(event.aggregateId())
+			.eventType(event.eventType())
+			.correlationId(event.correlationId())
+			.revision(event.revision())
+			.schemaVersion(event.version())
+			.payload(serialize(event))
+			.occurredAt(event.occurredAt())
+			.build());
+	}
+
+	public OutboxEvent saveCandidatesExhaustedEvent(MatchingCandidatesExhaustedEvent event) {
+		return outboxEventRepository.saveAndFlush(OutboxEvent.builder()
+			.eventId(event.eventId())
+			.aggregateType(JOB_POST_AGGREGATE)
+			.aggregateId(event.aggregateId())
+			.eventType(event.eventType())
+			.correlationId(event.correlationId())
+			.revision(event.revision())
+			.schemaVersion(event.version())
+			.payload(serialize(event))
+			.occurredAt(event.occurredAt())
+			.build());
+	}
+
+	private String serialize(Object event) {
+		try {
+			return objectMapper.writeValueAsString(event);
+		} catch (JsonProcessingException exception) {
+			throw new IllegalStateException("매칭 이벤트 payload 직렬화에 실패했습니다.", exception);
+		}
 	}
 
 	private String toJson(ApplicationEvent event) {

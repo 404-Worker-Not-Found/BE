@@ -206,6 +206,20 @@ class PushIntegrationTests extends IntegrationTestSupport {
     assertThat(count()).isEqualTo(2);
   }
 
+  @Test void proposalAndCandidateExhaustionQueuePushOnlyForTheirRecipient() {
+    var confirmed = event();
+    devices.register(member(confirmed.ownerMemberId(), "OWNER"), request("proposal-owner"));
+    devices.register(member(confirmed.workerMemberId(), "WORKER"), request("proposal-worker"));
+    events.receive(new NotificationEvent(UUID.randomUUID().toString(), "MatchingProposed", confirmed.occurredAt(),
+        confirmed.matchingId(), 1L, 1, confirmed.matchingId(), confirmed.applicationId(), confirmed.jobPostId(),
+        confirmed.ownerMemberId(), confirmed.workerMemberId(), null, null));
+    assertThat(pushRecipients()).containsExactly("WORKER");
+    events.receive(new NotificationEvent(UUID.randomUUID().toString(), "MatchingCandidatesExhausted",
+        LocalDateTime.now(), confirmed.jobPostId(), 1L, 1, null, null, confirmed.jobPostId(),
+        confirmed.ownerMemberId(), null, null, 1));
+    assertThat(pushRecipients()).containsExactly("OWNER", "WORKER");
+  }
+
   @Test void parallelRegistrationKeepsOneTokenBindingAndOneDelivery() throws Exception {
     var event = event();
     var executor = Executors.newFixedThreadPool(4);
@@ -231,13 +245,19 @@ class PushIntegrationTests extends IntegrationTestSupport {
   private NotificationEvent event() {
     long id = IDS.addAndGet(10);
     return new NotificationEvent(UUID.randomUUID().toString(), "MatchConfirmed", LocalDateTime.now(),
-        id, 1L, 1, id, id + 1, id + 2, id + 3, id + 4, null);
+        id, 1L, 1, id, id + 1, id + 2, id + 3, id + 4, null, null);
   }
 
   private AuthenticatedMember member(long id, String role) { return new AuthenticatedMember(id, id, role); }
   private DeviceTokenRequest request(String token) { return new DeviceTokenRequest(token, "ANDROID"); }
   private PushResult accepted() { return new PushResult(PushResult.Outcome.ACCEPTED, null, null); }
   private long count() { return jdbc.queryForObject("SELECT COUNT(*) FROM notification_push_deliveries", Long.class); }
+  private List<String> pushRecipients() {
+    return jdbc.queryForList("""
+        SELECT t.member_role FROM notification_push_deliveries d
+        JOIN notification_device_tokens t ON t.id=d.device_token_id ORDER BY t.member_role
+        """, String.class);
+  }
   private String state() { return jdbc.queryForObject("SELECT state FROM notification_push_deliveries", String.class); }
   private long deviceId() { return jdbc.queryForObject("SELECT id FROM notification_device_tokens", Long.class); }
   private boolean active(long id) { return jdbc.queryForObject("SELECT active FROM notification_device_tokens WHERE id=?", Boolean.class, id); }

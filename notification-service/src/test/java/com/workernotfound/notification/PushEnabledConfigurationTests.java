@@ -53,7 +53,7 @@ class PushEnabledConfigurationTests extends IntegrationTestSupport {
         new DeviceTokenRequest("enabled-configuration-token", "ANDROID"));
     String eventId = UUID.randomUUID().toString();
     events.receive(new NotificationEvent(eventId, "MatchConfirmed", LocalDateTime.now(),
-        member, 1L, 1, member, member + 1, member + 2, member + 3, member, null));
+        member, 1L, 1, member, member + 1, member + 2, member + 3, member, null, null));
     Long notificationId = jdbc.queryForObject(
         "SELECT id FROM notifications WHERE event_id=? AND member_id=? AND member_role='WORKER'",
         Long.class, eventId, member);
