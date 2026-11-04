@@ -50,6 +50,7 @@ public class JobFindService {
     private final JobPaymentOrderCommandRepository paymentOrderCommandRepository;
     private final JobPaymentChangeRequestRepository paymentChangeRequestRepository;
     private final JobMatchingSeatReservationRepository seatReservationRepository;
+    private final ApplicantCountFindService applicantCountFindService;
     private final Clock clock;
 
     public JobPost findJobPost(Long jobId) {
@@ -66,7 +67,7 @@ public class JobFindService {
         }
         Map<Long, String> categoryNameMap = buildCategoryNameMap();
         String categoryName = resolveCategoryName(categoryNameMap, post.getCategoryId());
-        return JobDetailResponse.of(post, categoryName);
+        return JobDetailResponse.of(post, categoryName, applicantCountFindService.findApplicantCount(jobId));
     }
 
     // 점주 본인 공고의 결제 주문 생성 상태. 다른 회원의 공고는 존재 여부를 드러내지 않도록 404로 응답한다.
@@ -97,9 +98,12 @@ public class JobFindService {
         int size = request.size() != null ? request.size() : DEFAULT_PAGE_SIZE;
         Page<JobPost> posts = fetchOwnerJobs(ownerMemberId, request.status(), PageRequest.of(page, size, OWNER_JOB_SORT));
         Map<Long, Long> consumedCounts = countConsumedSeats(posts.getContent());
+        Map<Long, Integer> applicantCounts = applicantCountFindService.findApplicantCounts(
+                posts.getContent().stream().map(JobPost::getId).toList());
 
         List<OwnerJobCardResponse> cards = posts.getContent().stream()
-                .map(post -> OwnerJobCardResponse.of(post, consumedCounts.getOrDefault(post.getId(), 0L)))
+                .map(post -> OwnerJobCardResponse.of(
+                        post, consumedCounts.getOrDefault(post.getId(), 0L), applicantCounts.get(post.getId())))
                 .toList();
         return new OwnerJobListResponse(page, size, posts.getTotalElements(), posts.getTotalPages(), cards);
     }

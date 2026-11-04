@@ -1637,6 +1637,32 @@ Implication for agents:
 Related files:
 - `docs/architecture/job-post-design.md`
 - `docs/architecture/matching-application-design.md`
+## 2026-11-03 - Applicant Count Projection Implementation
+
+Decision:
+- Implement the applicant-count projection from "2026-10-18 - Applicant Count Projection Criteria" in #160 (job-service V23, after #158's V22). Job detail and the owner job list now return `applicantCount` for jobs whose initial snapshot load is done, and `null` otherwise.
+- Store per-application rows (`job_application_projections`) and count `APPLIED` rows with the `(job_post_id, status)` index instead of keeping a counter.
+- Serialize event and snapshot application per job by locking a per-job state row (`job_applicant_count_states`, created with `INSERT … ON DUPLICATE KEY UPDATE`) before reading or creating application rows. This replaces the application-row lock in the criteria because the application row may not exist yet.
+- matching-service exposes `GET /api/applications/internal/jobs/{jobPostId}/application-states` returning every application of the job (`applicationId`, `status`, `revision`).
+- A 1-minute sync applies the snapshot to jobs that are not loaded yet or whose projection changed by an event after the last snapshot (`changed_at > synced_at`). Applying the snapshot with the revision rule is both the comparison and the rebuild; changes on an already-loaded job are logged as drift.
+
+Reason:
+- A per-job lock avoids duplicate-key and gap-lock races when an event and a snapshot create the same missing application row.
+- Counting rows keeps one source for the count and needs no separate counter repair.
+- Comparing only changed jobs keeps snapshot calls proportional to application activity.
+
+Implication for agents:
+- Do not add another counter for `applicantCount`; count projection rows.
+- Jobs whose events are stuck in pending with no other change are not re-compared; check the pending error log. Add a broader periodic sweep only if that gap matters.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `docs/architecture/matching-application-design.md`
+- `job-service/src/main/resources/db/migration/V23__create_job_applicant_count_projection.sql`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/ApplicantCountProjectionService.java`
+- `job-service/src/main/java/com/workernotfound/job/domain/job/service/ApplicantCountSyncService.java`
+- `matching-service/src/main/java/com/workernotfound/matching/domain/application/controller/ApplicationStateController.java`
+
 ## 2026-10-18 - Worker Settlement Policy and Foundation
 
 Decision:

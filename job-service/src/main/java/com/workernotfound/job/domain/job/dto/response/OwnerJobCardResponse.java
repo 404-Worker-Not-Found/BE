@@ -33,11 +33,11 @@ public record OwnerJobCardResponse(
 
         long confirmedCount,
 
-        // 지원자 수의 원본은 matching-service에 있고 조회 계약이 없으므로 상세 조회와 같이 null이다.
+        // 지원자 수 projection의 현재 APPLIED 지원 수. 초기 적재 전인 공고는 상세 조회와 같이 null이다.
         Integer applicantCount
 
 ) {
-    public static OwnerJobCardResponse of(JobPost post, long confirmedCount) {
+    public static OwnerJobCardResponse of(JobPost post, long confirmedCount, Integer applicantCount) {
         return new OwnerJobCardResponse(
                 post.getId(),
                 post.getStoreName(),
@@ -51,7 +51,7 @@ public record OwnerJobCardResponse(
                 post.getApplicationDeadline(),
                 post.getRecruitCount(),
                 confirmedCount,
-                null
+                applicantCount
         );
     }
 }
