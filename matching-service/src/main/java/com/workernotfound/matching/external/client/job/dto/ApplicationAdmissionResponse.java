@@ -17,6 +17,8 @@ public record ApplicationAdmissionResponse(
 	BigDecimal latitude,
 	BigDecimal longitude,
 	LocalDateTime admittedAt,
-	LocalDateTime expiresAt
+	LocalDateTime expiresAt,
+	LocalDateTime applicationDeadline,
+	Integer recruitCount
 ) {
 }

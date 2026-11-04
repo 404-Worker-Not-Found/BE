@@ -76,7 +76,9 @@ class ApplicationAdmissionApiTests extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.startTime").value("09:00:00"))
                 .andExpect(jsonPath("$.data.latitude").value(37.5665))
                 .andExpect(jsonPath("$.data.admittedAt").value(notNullValue()))
-                .andExpect(jsonPath("$.data.expiresAt").value(notNullValue()));
+                .andExpect(jsonPath("$.data.expiresAt").value(notNullValue()))
+                .andExpect(jsonPath("$.data.applicationDeadline").value(notNullValue()))
+                .andExpect(jsonPath("$.data.recruitCount").value(jobPost.getRecruitCount()));
     }
 
     @Test

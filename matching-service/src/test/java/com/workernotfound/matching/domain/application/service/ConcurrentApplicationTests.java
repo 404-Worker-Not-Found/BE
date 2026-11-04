@@ -127,7 +127,9 @@ class ConcurrentApplicationTests extends IntegrationTestSupport {
 			BigDecimal.valueOf(37.5),
 			BigDecimal.valueOf(127.0),
 			TestSchedule.now(),
-			TestSchedule.now().plusMinutes(1)
+			TestSchedule.now().plusMinutes(1),
+			TestSchedule.now().plusHours(1),
+			2
 		);
 	}
 }

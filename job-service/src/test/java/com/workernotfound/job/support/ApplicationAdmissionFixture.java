@@ -32,6 +32,8 @@ public final class ApplicationAdmissionFixture {
                 .endTime(jobPost.getEndTime())
                 .latitude(jobPost.getLatitude())
                 .longitude(jobPost.getLongitude())
+                .applicationDeadline(jobPost.getApplicationDeadline())
+                .recruitCount(jobPost.getRecruitCount())
                 .admittedAt(expiresAt.minusMinutes(5))
                 .expiresAt(expiresAt)
                 .build());

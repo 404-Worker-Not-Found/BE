@@ -131,6 +131,19 @@ public class Matching extends BaseEntity {
 		this.revision++;
 	}
 
+	// 자동·폴백 제안의 응답 제한시간이 지났으면 시스템이 만료한다. 수동 제안은 제한시간이 없다.
+	public boolean isResponseExpired(LocalDateTime now) {
+		return status == MatchingStatus.PENDING && expiresAt != null && !now.isBefore(expiresAt);
+	}
+
+	public void expire(LocalDateTime now) {
+		if (!isResponseExpired(now)) {
+			throw new BusinessException(MatchingErrorCode.MATCHING_STATE_CONFLICT);
+		}
+		this.status = MatchingStatus.EXPIRED;
+		this.revision++;
+	}
+
 	public void decline() {
 		if (status != MatchingStatus.PENDING) {
 			throw new BusinessException(MatchingErrorCode.MATCHING_STATE_CONFLICT);

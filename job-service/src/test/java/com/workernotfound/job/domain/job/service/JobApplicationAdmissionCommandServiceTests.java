@@ -120,6 +120,8 @@ class JobApplicationAdmissionCommandServiceTests extends IntegrationTestSupport 
                         .endTime(jobPost.getEndTime())
                         .latitude(jobPost.getLatitude())
                         .longitude(jobPost.getLongitude())
+                        .applicationDeadline(jobPost.getApplicationDeadline())
+                        .recruitCount(jobPost.getRecruitCount())
                         .admittedAt(TestSchedule.now().minusMinutes(10))
                         .expiresAt(TestSchedule.now().minusMinutes(5))
                         .build()

@@ -82,6 +82,8 @@ public class JobApplicationAdmissionCommandService {
                 .endTime(jobPost.getEndTime())
                 .latitude(jobPost.getLatitude())
                 .longitude(jobPost.getLongitude())
+                .applicationDeadline(jobPost.getApplicationDeadline())
+                .recruitCount(jobPost.getRecruitCount())
                 .admittedAt(now)
                 .expiresAt(now.plus(applicationAdmissionProperties.ttl()))
                 .build();

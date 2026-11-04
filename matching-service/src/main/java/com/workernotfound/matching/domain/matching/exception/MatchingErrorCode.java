@@ -17,6 +17,7 @@ public enum MatchingErrorCode implements ErrorCode {
 	MATCHING_STATE_CONFLICT("MATCHING-409-003", "현재 매칭 상태에서는 요청을 처리할 수 없습니다.", HttpStatus.CONFLICT),
 	MATCHING_CONFIRMATION_IN_PROGRESS("MATCHING-409-004", "매칭 확정이 이미 처리 중입니다.", HttpStatus.CONFLICT),
 	MATCHING_CAPACITY_UNAVAILABLE("MATCHING-409-005", "공고의 남은 모집 자리가 없습니다.", HttpStatus.CONFLICT),
+	MATCHING_RESPONSE_EXPIRED("MATCHING-409-006", "응답 제한시간이 지난 매칭 제안입니다.", HttpStatus.CONFLICT),
 	MATCHING_CONFIRMATION_FAILED("MATCHING-503-001", "외부 서비스 오류로 매칭을 확정하지 못했습니다.", HttpStatus.SERVICE_UNAVAILABLE);
 
 	private final String code;

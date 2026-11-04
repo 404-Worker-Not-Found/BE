@@ -64,6 +64,13 @@ public class Application extends BaseEntity {
 	@Column(name = "work_starts_at", updatable = false)
 	private LocalDateTime workStartsAt;
 
+	// 지원 승인 당시 공고의 지원 마감 시각과 모집 인원. V15 이전 지원은 없다.
+	@Column(name = "application_deadline", updatable = false)
+	private LocalDateTime applicationDeadline;
+
+	@Column(name = "recruit_count", updatable = false)
+	private Integer recruitCount;
+
 	@Version
 	@Column(nullable = false)
 	private Long version;
@@ -78,7 +85,9 @@ public class Application extends BaseEntity {
 			Long ownerMemberId,
 			Long jobApplicationAdmissionId,
 			LocalDateTime appliedAt,
-			LocalDateTime workStartsAt) {
+			LocalDateTime workStartsAt,
+			LocalDateTime applicationDeadline,
+			Integer recruitCount) {
 		this.jobPostId = jobPostId;
 		this.workerMemberId = workerMemberId;
 		this.ownerMemberId = ownerMemberId;
@@ -86,6 +95,8 @@ public class Application extends BaseEntity {
 		this.status = ApplicationStatus.APPLIED;
 		this.appliedAt = appliedAt;
 		this.workStartsAt = workStartsAt;
+		this.applicationDeadline = applicationDeadline;
+		this.recruitCount = recruitCount;
 		this.revision = 1L;
 	}
 

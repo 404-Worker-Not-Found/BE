@@ -65,6 +65,12 @@ public class JobApplicationAdmission extends BaseEntity {
     @Column(nullable = false, updatable = false, precision = 10, scale = 7)
     private BigDecimal longitude;
 
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime applicationDeadline;
+
+    @Column(nullable = false, updatable = false)
+    private Integer recruitCount;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ApplicationAdmissionStatus status;
@@ -90,6 +96,8 @@ public class JobApplicationAdmission extends BaseEntity {
             LocalTime endTime,
             BigDecimal latitude,
             BigDecimal longitude,
+            LocalDateTime applicationDeadline,
+            Integer recruitCount,
             LocalDateTime admittedAt,
             LocalDateTime expiresAt
     ) {
@@ -104,6 +112,8 @@ public class JobApplicationAdmission extends BaseEntity {
         this.endTime = endTime;
         this.latitude = latitude;
         this.longitude = longitude;
+        this.applicationDeadline = toStoredTime(applicationDeadline);
+        this.recruitCount = recruitCount;
         this.status = ApplicationAdmissionStatus.RESERVED;
         // DATETIME(6)에 저장되기 전부터 최초 응답과 재조회 응답의 정밀도를 맞춘다.
         this.admittedAt = toStoredTime(admittedAt);

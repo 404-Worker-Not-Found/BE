@@ -59,6 +59,14 @@ matching:
     internal-secret: ${INTERNAL_API_SECRET}
   confirmation:
     lease-duration: ${MATCHING_CONFIRMATION_LEASE_DURATION:2m}
+  auto-matching:
+    # 지원 마감 뒤 점수 상위 후보 자동 제안과 거절·만료 시 폴백(임시 정책).
+    enabled: ${MATCHING_AUTO_MATCHING_ENABLED:true}
+    interval: ${MATCHING_AUTO_MATCHING_INTERVAL:1m}
+    initial-delay: ${MATCHING_AUTO_MATCHING_INITIAL_DELAY:30s}
+    response-timeout: ${MATCHING_AUTO_MATCHING_RESPONSE_TIMEOUT:30m}
+    work-start-margin: ${MATCHING_AUTO_MATCHING_WORK_START_MARGIN:1h}
+    batch-size: ${MATCHING_AUTO_MATCHING_BATCH_SIZE:100}
   application-queue:
     recovery-interval: ${MATCHING_APPLICATION_QUEUE_RECOVERY_INTERVAL:5m}
     recovery-initial-delay: ${MATCHING_APPLICATION_QUEUE_RECOVERY_INITIAL_DELAY:30s}
