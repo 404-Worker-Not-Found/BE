@@ -85,6 +85,8 @@ sudo docker run --rm -it caddy:2-alpine caddy hash-password
 
 회원가입 실제 동작에는 Gmail 앱 비밀번호, SOLAPI 키/등록 발신번호, 점주 가입에는 국세청 API 키가 필요하다. OAuth도 안드로이드 플랫폼에 맞는 제공자 설정과 로그인 복귀 경로 등록이 필요하다. 이 설정은 CORS Origin과 별개이며 앱의 SDK·인가 코드 흐름과 현재 백엔드 OAuth 계약의 호환성을 별도로 확인한다. 비어 있으면 해당 기능이 성공했다고 간주하지 않는다. Toss는 테스트 키만 지원하며 `TOSS_ENABLED=false`일 때 결제로 자금을 확보해야 하는 공고 게시/매칭의 전체 흐름은 검증할 수 없다. 실결제 키를 넣지 않는다.
 
+처음 `up`하기 전에 [Firebase 서버 인증 파일](#firebase-서버-인증-파일)의 키 설치와 일반 파일 확인을 먼저 수행한다. 파일이 없으면 notification-service가 기동되지 않는다.
+
 ```bash
 sudo ./scripts/deploy.sh check
 sudo ./scripts/deploy.sh pull
@@ -136,6 +138,40 @@ curl -i -u SWAGGER_USERNAME https://API_HOST/docs/job/v3/api-docs
 원본 설정과 권한을 제한한 환경변수 백업, 이미지 기준 정보, 재기동 로그와 검사 요약은 `/home/ubuntu/wnf-deploy-backups/android-147-20261101T163410Z`에 있다. 원복 시 이 디렉터리의 원본 설정 3개를 같은 상대 경로로 복원하고 `check`와 `up`을 실행한다. 환경변수와 이미지가 바뀌지 않았으므로 이번 설정 원복에 해당 값을 교체할 필요는 없다.
 
 `check`, Caddy 설정 검증과 `up`이 성공했고, 8개 앱의 healthy 상태를 확인했다. 공개 HTTPS에서 공고 조회 200, JWT 없는 회원 조회 401, 내부 API·Actuator 404, 인증 없는 Swagger 401, Origin 없는 로그인 POST의 입력 검증 400, OPTIONS 403과 CORS 허용 헤더 부재를 확인했다. WSS는 Origin 없음·API Origin에서 101, 외부 Origin에서 403이었고, 인증 없는 STOMP CONNECT는 거절됐다. 실제 단말의 로그인 후 업무·채팅 흐름과 제공자 OAuth는 별도 확인 대상이다.
+
+## Firebase 서버 인증 파일
+
+`notification-service`는 서버의 `/opt/wnf/secrets/firebase-admin.json` 파일 하나만 `/run/secrets/firebase-admin.json`에 읽기 전용으로 연결한다. `GOOGLE_APPLICATION_CREDENTIALS`는 이 컨테이너 내부 경로를 가리킨다. 다른 서비스에는 키를 연결하지 않는다. Firebase Admin SDK가 사용하는 서버 인증 경로다. #156의 기기 토큰 API와 발송 기능을 사용하려면 해당 기능이 포함된 새 이미지를 배포하고 `NOTIFICATION_PUSH_ENABLED=true`를 명시해야 한다. 키 연결만으로 푸시가 발송되지는 않는다([FCM 연동](../architecture/fcm-push-design.md)).
+
+이 배포 설정으로 컨테이너를 시작하기 전에 서비스 계정 JSON을 안전한 경로로 서버에 전송하고 아래 권한을 설정한다. `UPLOADED_KEY_PATH`는 실제 업로드 경로로 바꾼다. JSON 내용은 터미널에 출력하거나 Git, 앱 이미지, 안드로이드 앱에 포함하지 않는다.
+
+```bash
+sudo install -d -o root -g root -m 0700 /opt/wnf/secrets
+sudo install -T -o 10001 -g 10001 -m 0400 UPLOADED_KEY_PATH /opt/wnf/secrets/firebase-admin.json
+sudo test -f /opt/wnf/secrets/firebase-admin.json && echo "Firebase credential is a regular file."
+```
+
+`-T`는 대상 경로를 항상 파일로 다룬다. 같은 경로에 디렉터리가 이미 있으면 그 안에 복사하지 않고 실패하므로, 원인을 확인한 뒤 디렉터리를 정리하고 다시 설치한다. Compose는 기존 디렉터리도 연결할 수 있으므로 기동 전에 일반 파일인지 확인한다.
+
+호스트 디렉터리는 root만 접근하며, Docker가 연결한 파일은 앱의 UID 10001만 읽는다. 원본 파일이 없으면 Compose는 디렉터리를 대신 만들지 않고 기동을 거부한다. 키를 준비하지 않은 서버에도 새 기동 전 이 파일이 필요하다. `.env.deploy`에 맥의 로컬 경로나 JSON 원문을 넣지 않는다.
+
+서버 Compose 파일에 변경을 반영한 뒤 알림 서비스만 재생성한다. `recreate`는 `up`과 같이 셸의 Compose 보간 변수를 제거하고 `check`를 통과해야 재생성하며, 앱 서비스 이름만 받는다. 실행 중인 컨테이너가 정확히 하나이고 설정의 이미지 참조·로컬 이미지 ID가 실행 이미지와 모두 일치해야 진행한다. 이미지 태그가 달라졌거나 같은 태그의 로컬 이미지가 바뀌었으면 중단하며, 실행 중 이미지를 확인할 수 없는 경우에도 진행하지 않는다. 재생성 중 이미지 pull은 하지 않는다. 이미지 변경은 이 명령 대신 아래의 정상 릴리스 배포 절차로 진행한다. 키 내용은 출력하지 않고 기본 실행 사용자로 일반 파일 읽기 가능 여부를 확인한다.
+
+```bash
+sudo test -f /opt/wnf/secrets/firebase-admin.json && \
+  sudo ./scripts/deploy.sh recreate notification-service
+sudo docker compose --project-name wnf --env-file .env.deploy -f compose.deploy.yml exec -T notification-service sh -c 'test "$GOOGLE_APPLICATION_CREDENTIALS" = /run/secrets/firebase-admin.json && test -f "$GOOGLE_APPLICATION_CREDENTIALS" && test -s "$GOOGLE_APPLICATION_CREDENTIALS" && test -r "$GOOGLE_APPLICATION_CREDENTIALS" && test ! -w "$GOOGLE_APPLICATION_CREDENTIALS" && echo "Firebase credential file is readable and read-only."'
+```
+
+재생성 동안 알림 API에 짧은 중단이 있다. 기존 이미지 태그를 유지하며, 다른 앱이나 DB는 재생성하지 않는다. 키 교체도 새 파일을 같은 위치에 원자적으로 배치한 뒤 알림 컨테이너를 재생성해야 한다. 단일 파일 bind mount는 파일 교체 후 기존 inode를 계속 가리킬 수 있다. 새 키의 실제 FCM 인증·발송을 검증한 뒤 기존 키를 폐기한다.
+
+공식 안내: [Firebase Admin SDK 인증](https://firebase.google.com/docs/admin/setup), [Compose bind mount 설정](https://docs.docker.com/reference/compose-file/services/#volumes).
+
+### 서버 적용 기록 (2026-11-02, #153)
+
+사용자가 교체한 새 키를 검증하고 적용 승인을 받은 뒤, `Ubuntu-1`의 `/home/ubuntu/wnf-backend/compose.deploy.yml`에 파일 연결과 환경변수만 추가했다. 알림 컨테이너만 기존 이미지로 재생성했고 healthy 상태, 기본 앱 사용자의 파일 읽기 가능·쓰기 불가, 읽기 전용 mount, JWT 없는 알림 API의 401 응답을 확인했다. 다른 컨테이너 ID와 모든 이미지 참조·digest, `.env.deploy`는 변경하지 않았다. 실제 Firebase 인증과 푸시 발송은 아직 확인하지 않았다.
+
+원본 Compose, 적용 후보, 컨테이너 기준 정보와 검증 결과는 root 전용 `/home/ubuntu/wnf-deploy-backups/firebase-153-20261102T131641Z`에 있다. 키 원문은 백업에 포함하지 않았다. 서버 Compose는 아직 작업 트리 변경이므로 다음 소스 동기화에서 이를 덮어쓰지 말고 #153의 저장소 변경을 먼저 통합한다. 원복 시 이 디렉터리의 `compose.deploy.yml.original`을 복원하고 알림 컨테이너만 재생성한다. 이 기록의 서버 이미지는 발송 기능을 포함하지 않는다. #156의 구현 이미지 배포·활성화와 실제 기기 수신 검증은 별도로 진행한다.
 
 ## 5. 업데이트, 백업과 복구
 

@@ -7,7 +7,7 @@ notification-service는 회원별 인앱 알림과 읽음 상태를 전용 MySQL
 - `MatchConfirmed`: 점주 OWNER와 알바생 WORKER 각각에게 알림을 생성한다. 화면 기본 문구는 “매칭이 확정되었습니다.”로 표시할 수 있다.
 - `ApplicationRejected`: 해당 WORKER에게만 알림을 생성한다. 기본 문구는 “지원한 공고의 모집이 완료되었습니다.”다.
 - API는 type과 공고·지원·매칭 ID를 반환한다. 프런트에서 문구와 이동 화면을 결정한다. 토큰, 결제 ID, 다른 참여자 ID, 내부 이벤트 ID는 노출하지 않는다.
-- 현재 ApplicationSubmitted 이벤트에는 점주 ID가 없으므로 점주 지원 알림을 임의로 생성하지 않는다. 공고·결제 알림, 실시간 push/SSE/WebSocket, 외부 앱 푸시·SMS·이메일은 후속 범위다. 인앱 목록과 미읽음 개수는 REST 재조회로 갱신한다.
+- 현재 ApplicationSubmitted 이벤트에는 점주 ID가 없으므로 점주 지원 알림을 임의로 생성하지 않는다. 인앱 목록과 미읽음 개수는 REST 재조회로 갱신한다. #156은 저장 알림에 Android FCM 발송 대기열을 추가한다([FCM 설계](fcm-push-design.md)). SSE/WebSocket·SMS·이메일은 후속 범위다.
 
 ## 소비와 멱등성
 
@@ -62,7 +62,7 @@ notification-service는 회원별 인앱 알림과 읽음 상태를 전용 MySQL
 - 기존 본인·역할별 조회와 읽음 처리를 그대로 사용한다. 잘못된 이벤트는 pending에 남기고 순회 커서를 진행시켜 후속 이벤트 처리를 계속한다. Stream을 자동 trim하거나 실패 이벤트를 자동 삭제하지 않는다.
 - `WORK_OUTBOX_STREAM_KEY`를 근무 생산자와 동일하게 맞춘다. `NOTIFICATION_WORK_EVENTS_ENABLED=false`는 근무 알림 소비만 중단하며 기존 매칭 알림 소비 설정과 독립적이다.
 
-이 구현은 인앱 보관함만 제공한다. 푸시·문자·이메일 발송이나 금융 처리는 수행하지 않는다.
+근무 이벤트도 인앱 보관함과 FCM 발송 대기열을 함께 저장한다. 실제 발송은 별도 작업자가 처리하며 문자·이메일 발송이나 금융 처리는 수행하지 않는다.
 
 - 2026-10-28 확장에서도 기존 참여자 이벤트의 지문은 유지한다. SYSTEM의 null actor만 빈 canonical 필드로 표현하고 기존 숫자 actor 값의 직렬화는 바꾸지 않는다. 양측 알림은 하나의 트랜잭션에서 저장하므로 일부만 저장된 상태로 ACK하지 않는다.
 
