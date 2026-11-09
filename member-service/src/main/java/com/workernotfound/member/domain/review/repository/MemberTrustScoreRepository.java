@@ -1,5 +1,6 @@
 package com.workernotfound.member.domain.review.repository;
 
+import com.workernotfound.member.domain.review.repository.MemberReviewStatsRepository.Totals;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -15,21 +16,24 @@ import org.springframework.transaction.annotation.Transactional;
 public class MemberTrustScoreRepository {
 	private final JdbcTemplate jdbc;
 
-	/** 신뢰 점수를 저장하고 이번 변경의 revision을 돌려준다. 호출자가 같은 회원의 평점 집계 행을 잠근 상태여야 한다. */
+	/** 신뢰 점수를 저장하고 이번 변경의 revision을 돌려준다. 호출자가 같은 회원의 신뢰 점수 입력 집계 행을 잠근 상태여야 한다. */
 	@Transactional(propagation = Propagation.MANDATORY)
-	public long save(Long memberId, BigDecimal trustScore, long reviewCount, String policyVersion, LocalDateTime now) {
-		jdbc.update("insert into member_trust_scores(member_id, trust_score, review_count, policy_version, revision, updated_at)"
-				+ " values (?, ?, ?, ?, 1, ?) on duplicate key update trust_score = ?, review_count = ?, policy_version = ?,"
-				+ " revision = revision + 1, updated_at = ?",
-			memberId, trustScore, reviewCount, policyVersion, now, trustScore, reviewCount, policyVersion, now);
+	public long save(Long memberId, BigDecimal trustScore, Totals inputs, String policyVersion, LocalDateTime now) {
+		jdbc.update("insert into member_trust_scores(member_id, trust_score, review_count, no_show_count, policy_version,"
+				+ " revision, updated_at) values (?, ?, ?, ?, ?, 1, ?) on duplicate key update trust_score = ?,"
+				+ " review_count = ?, no_show_count = ?, policy_version = ?, revision = revision + 1, updated_at = ?",
+			memberId, trustScore, inputs.reviewCount(), inputs.noShowCount(), policyVersion, now,
+			trustScore, inputs.reviewCount(), inputs.noShowCount(), policyVersion, now);
 		return jdbc.queryForObject("select revision from member_trust_scores where member_id = ?", Long.class, memberId);
 	}
 
 	public Optional<CurrentTrustScore> find(Long memberId) {
-		return jdbc.query("select trust_score, review_count, revision from member_trust_scores where member_id = ?",
-			(rs, row) -> new CurrentTrustScore(rs.getBigDecimal(1), rs.getLong(2), rs.getLong(3)), memberId).stream().findFirst();
+		return jdbc.query("select trust_score, review_count, no_show_count, revision from member_trust_scores"
+				+ " where member_id = ?",
+			(rs, row) -> new CurrentTrustScore(rs.getBigDecimal(1), rs.getLong(2), rs.getLong(3), rs.getLong(4)), memberId)
+			.stream().findFirst();
 	}
 
-	public record CurrentTrustScore(BigDecimal trustScore, long reviewCount, long revision) {
+	public record CurrentTrustScore(BigDecimal trustScore, long reviewCount, long noShowCount, long revision) {
 	}
 }

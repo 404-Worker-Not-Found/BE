@@ -311,7 +311,7 @@ class Journey:
             eventually('review entitlement', lambda: self.sql('member', f'SELECT COUNT(*) FROM reviewable_works WHERE work_id={w}') != '0')
             self.api('member', 'POST', '/api/members/me/reviews', dict(workId=w, rating=5, comment='Journey'), actor[1])
         self.check('mutual review via real event entitlement')
-        # One 5-point review: (3.0 x 3 + 5) / 4 = 3.5 -> 62.50 under the tentative review-rating-v1 policy.
+        # One 5-point review: (3.0 x 3 + 5) / 4 = 3.5 -> 62.50 under the tentative review-rating-no-show-v1 policy.
         eventually('trust score copy', lambda: self.sql('matching', f'SELECT CAST(trust_score AS CHAR) FROM member_trust_scores WHERE member_id={worker[0]}') == '62.50')
         self.check('trust score reaches matching via member outbox stream')
         settlement = int(self.sql('payment', f'SELECT id FROM payment_settlements WHERE work_id={w}'))
@@ -353,6 +353,10 @@ class Journey:
             eventually(label + ' matching terminal', lambda: self.sql('matching', f'SELECT status FROM matchings WHERE id={m}') == 'CANCELED')
             eventually(label + ' deposit released', lambda: self.sql('payment', f'SELECT CAST(locked_amount AS UNSIGNED) FROM payment_deposits WHERE job_post_id={j}') == '0')
             self.check(label + ' terminal propagation and money release')
+            if label == 'no-show':
+                # The same worker's 62.50 review score loses the default 10-point no-show penalty.
+                eventually('no-show trust penalty copy', lambda: self.sql('matching', f'SELECT CAST(trust_score AS CHAR) FROM member_trust_scores WHERE member_id={worker[0]}') == '52.50')
+                self.check('no-show penalty reaches matching via member outbox stream')
 
     def close(self):
         failures = []

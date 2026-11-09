@@ -324,7 +324,7 @@ Redis 기록 성공과 MySQL의 `PUBLISHED` 변경 사이에 장애가 나면 �
 2026-11-02부터 현재 정책은 `application-time-trust-v1`이다. 기존 `application-time-v1` 배치는 정책이 달라 현재 배치로 보지 않으며 다음 갱신이나 주기 복구 때 새 정책으로 다시 계산한다.
 
 - 총점 = 지원 시각 점수 × 0.5 + 신뢰 점수 × 0.5, 소수 넷째 자리 반올림. 신뢰 점수는 `rating_score`와 입력 JSON의 `rating`에 그대로(0~100) 저장한다.
-- 신뢰 점수가 없는 지원자(받은 리뷰 없음)는 `RATING`을 `missing_inputs`에 남기고 그 비중을 지원 시각 점수에 재분배해 총점 = 지원 시각 점수다. 스냅샷은 `READY`다.
+- 신뢰 점수가 없는 지원자(받은 리뷰와 노쇼가 모두 없음)는 `RATING`을 `missing_inputs`에 남기고 그 비중을 지원 시각 점수에 재분배해 총점 = 지원 시각 점수다. 스냅샷은 `READY`다.
 - 신뢰 점수 원본은 member-service다. matching-service는 `member:domain-events`의 `TrustScoreUpdated` v1을 전용 그룹 `matching-trust-score-v1`로 소비해 `member_trust_scores`(V14) 사본에 회원별 더 큰 `revision`만 반영한다. 같은 revision 재전달과 더 작은 revision은 반영하지 않고 ACK한다. 다른 이벤트는 바로 ACK하고, 해석할 수 없거나 envelope와 payload가 다른 레코드는 pending으로 남겨 회전 커서로 다시 읽는다.
 - 사본이 바뀌면 커밋 뒤 그 회원이 `APPLIED`로 지원 중인 공고마다 공고별 잠금 아래에서 점수 대기열을 다시 맞춘다. 현재 배치 판단은 정책·활성 지원 구성에 더해 각 스냅샷의 `rating_score`가 현재 사본과 같은지도 비교한다. 커밋 뒤 갱신이 실패해도 주기 복구가 바뀐 신뢰 점수를 보고 새 배치를 계산한다.
 - 이미 시작한 매칭 제안과 점주에게 고정해 보여 준 점수 묶음은 바꾸지 않는다. 새 묶음은 다음 조회부터 쓰인다.
