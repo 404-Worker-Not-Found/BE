@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
@@ -25,7 +26,7 @@ public record WorkerSignupRequest(
 	String password,
 
 	@NotBlank
-	@Size(max = 20)
+	@Pattern(regexp = "^\\+?[0-9]{10,15}$")
 	String phoneNumber,
 
 	@NotBlank
@@ -51,9 +52,8 @@ public record WorkerSignupRequest(
 	@Size(max = 20)
 	List<@NotBlank @Size(max = 100) String> preferredBusinessTypes,
 
-	@Valid
 	@NotEmpty
 	@Size(max = 50)
-	List<WorkerAvailableTimeRequest> availableTimes
+	List<@Valid WorkerAvailableTimeRequest> availableTimes
 ) {
 }
