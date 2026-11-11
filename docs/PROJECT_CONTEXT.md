@@ -358,6 +358,7 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - See `docs/architecture/payment-lock-design.md` for the boundary and follow-up work. See `docs/architecture/toss-deposit-design.md` for the provider and job/frontend contracts. Full matching acceptance still requires product frontend and job-service integration.
 
 - A dedicated work-termination consumer releases only the confirmed work's normal active payment lock on cancellation/no-show. Funding-blocked or settlement-transferred funds are durably marked REVIEW_REQUIRED; a transferable settlement is held. Termination records prevent a late completion from reusing released money. This is not a PG refund or an automatic resolution of blocked funds.
+- Termination refund (#167, 2026-11-12): when that consumer releases a lock (`RELEASED` only), the same transaction requests an owner refund of the full lock amount through the existing refund command (key `work-termination-refund-{workId}`); the existing refund scheduler executes the Toss cancel. Results are stored on `payment_work_terminations` (V15). Disabled by default (`PAYMENT_TERMINATION_REFUND_ENABLED=false`) until real Toss test partial cancel and webhooks are verified; amounts released while disabled are not refunded later automatically.
 
 ## Notification Service Context
 
