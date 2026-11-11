@@ -18,10 +18,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 // V6 이전에 받은 리뷰는 기존 평점 집계로 신뢰 점수와 TrustScoreUpdated를 한 번 채운다. 계산은 기본 설정의 Java 정책과 같다.
 class TrustScoreBackfillMigrationTests extends IntegrationTestSupport {
-	private final TrustScorePolicy defaultPolicy = new TrustScorePolicy(new TrustScoreProperties(new BigDecimal("3.0"), 3));
+	private final TrustScorePolicy defaultPolicy = new TrustScorePolicy(new TrustScoreProperties(new BigDecimal("3.0"), 3, BigDecimal.TEN));
 	private final ObjectMapper mapper = new ObjectMapper();
 	private String database;
 	private JdbcTemplate jdbc;
@@ -90,8 +91,33 @@ class TrustScoreBackfillMigrationTests extends IntegrationTestSupport {
 		for (long[] total : totals) {
 			assertThat(backfilled.get(total[0] * 10_000 + total[1]))
 				.as("count=%d, sum=%d", total[0], total[1])
-				.isEqualByComparingTo(defaultPolicy.calculate(total[0], total[1]));
+				.isEqualByComparingTo(defaultPolicy.calculate(total[0], total[1], 0));
 		}
+	}
+
+	// V7은 기존 점수를 바꾸지 않고 노쇼 횟수 0으로 채우며, 리뷰 없이 노쇼만 있는 점수를 허용한다.
+	@Test
+	void noShowMigrationKeepsBackfilledScoresAndAllowsNoShowOnlyScores() {
+		jdbc.update("insert into member_review_stats(member_id, review_count, rating_sum, updated_at) values"
+			+ " (201, 1, 5, now(6))");
+		flyway("6").migrate();
+
+		flyway(null).migrate();
+
+		assertThat(jdbc.queryForMap("select trust_score, review_count, no_show_count, policy_version, revision"
+			+ " from member_trust_scores where member_id = 201"))
+			.containsEntry("trust_score", new BigDecimal("62.50"))
+			.containsEntry("review_count", 1)
+			.containsEntry("no_show_count", 0)
+			.containsEntry("policy_version", "review-rating-v1")
+			.containsEntry("revision", 1L);
+		assertThat(jdbc.queryForObject("select no_show_count from member_review_stats where member_id = 201",
+			Integer.class)).isZero();
+		jdbc.update("insert into member_trust_scores(member_id, trust_score, review_count, no_show_count,"
+			+ " policy_version, revision, updated_at) values (202, 40.00, 0, 1, 'review-rating-no-show-v1', 1, now(6))");
+		assertThatThrownBy(() -> jdbc.update("insert into member_trust_scores(member_id, trust_score, review_count,"
+			+ " no_show_count, policy_version, revision, updated_at) values (203, 50.00, 0, 0, 'x', 1, now(6))"))
+			.hasMessageContaining("ck_member_trust_score_inputs");
 	}
 
 	@Test

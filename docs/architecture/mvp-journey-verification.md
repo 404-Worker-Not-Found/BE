@@ -39,3 +39,7 @@ Docker, Java 17, Python 3가 필요하다. 저장소 루트에서 `python3 scrip
 ## #154 매칭 제안 알림 확장 (2026-11-02)
 
 네 시나리오의 점주 수동 제안마다 matching Outbox의 `MatchingProposed`가 실제 Stream을 거쳐 notification-service에서 알바생 알림으로 저장되는지 확인한다. 여정의 근무 시작이 10분 뒤라 자동 매칭은 응답 시간이 남지 않아 제안하지 않는다. 자동·폴백 제안과 후보 소진은 서비스 통합 테스트로 검증한다. 확장한 실제 여정 35개 검사가 통과했다.
+
+## #164 노쇼 신뢰 점수 감점 확장 (2026-11-09)
+
+정상 근무에서 5점 리뷰로 62.50이 된 같은 알바생이 자동 노쇼 시나리오를 거친 뒤, 실제 `WorkNoShow`가 member-service 전용 그룹(`member-trust-no-show-v1`)으로 소비돼 기본 감점 10점이 적용되고 member Outbox → `member:domain-events` → matching-service 사본의 신뢰 점수가 52.50(임시 정책 `review-rating-no-show-v1`)이 되는지 확인한다. 정상 근무 시나리오의 62.50 확인은 노쇼 이전에 실행되므로 그대로 유지된다. 확장한 실제 여정 36개 검사가 통과했다. 리뷰 없는 노쇼의 중립 점수 감점, 재전달 중복 제거, 리뷰·노쇼 동시 처리는 서비스 통합 테스트로 검증한다.

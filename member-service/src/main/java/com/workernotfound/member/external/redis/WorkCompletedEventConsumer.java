@@ -76,7 +76,7 @@ public class WorkCompletedEventConsumer {
 			if (parser.isTarget(record.getValue())) process(record);
 			// 처리 트랜잭션이 커밋된 뒤에만 ACK한다. 다른 서비스 그룹에 영향을 주지 않도록 Stream은 trim하지 않는다.
 			redis.opsForStream().acknowledge(stream, GROUP, record.getId());
-		} catch (InvalidReviewEventException exception) {
+		} catch (InvalidWorkEventException exception) {
 			log.error("해석할 수 없는 근무 이벤트를 pending으로 남깁니다: stream={}, recordId={}, reason={}", stream,
 				record.getId(), exception.getMessage());
 		} catch (RuntimeException exception) {
@@ -88,7 +88,7 @@ public class WorkCompletedEventConsumer {
 	private void process(MapRecord<String, Object, Object> record) {
 		WorkCompletion completion = parser.parse(record.getValue());
 		if (receipts.receive(completion) == Outcome.CONFLICT)
-			throw new InvalidReviewEventException("같은 근무 ID로 다른 공고·참여자의 완료가 들어왔습니다: workId="
+			throw new InvalidWorkEventException("같은 근무 ID로 다른 공고·참여자의 완료가 들어왔습니다: workId="
 				+ completion.workId());
 	}
 

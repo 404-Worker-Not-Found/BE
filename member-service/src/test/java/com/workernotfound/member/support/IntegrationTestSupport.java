@@ -62,6 +62,8 @@ public abstract class IntegrationTestSupport {
 		// 리뷰 대상 근무 소비자는 테스트가 직접 poll한다. 백그라운드 실행이 테스트 순서에 끼어들지 않게 첫 실행을 미룬다.
 		registry.add("member.review-events.initial-delay", () -> "1h");
 		registry.add("member.review-events.poll-interval", () -> "1h");
+		registry.add("member.no-show-events.initial-delay", () -> "1h");
+		registry.add("member.no-show-events.poll-interval", () -> "1h");
 		// 회원 이벤트 relay도 테스트가 직접 실행한다.
 		registry.add("member.outbox.initial-delay", () -> "1h");
 		registry.add("member.outbox.poll-delay", () -> "1h");

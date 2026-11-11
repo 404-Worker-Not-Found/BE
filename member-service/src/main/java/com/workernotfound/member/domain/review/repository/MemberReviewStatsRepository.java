@@ -7,7 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-// 회원이 받은 리뷰 수와 평점 합. 동시에 쓰는 리뷰도 한 문장으로 더해 잃지 않는다.
+// 회원별 신뢰 점수 입력: 받은 리뷰 수·평점 합과 노쇼 횟수. 동시에 들어온 리뷰·노쇼도 한 문장으로 더해 잃지 않는다.
 @Repository
 @RequiredArgsConstructor
 public class MemberReviewStatsRepository {
@@ -19,13 +19,21 @@ public class MemberReviewStatsRepository {
 			memberId, rating, now, rating, now);
 	}
 
-	// 같은 트랜잭션의 집계 갱신 뒤 현재 값을 잠금 읽기로 읽는다. 같은 회원의 다른 리뷰는 집계 행 잠금으로 직렬화된다.
-	public Totals findTotalsForUpdate(Long memberId) {
-		return jdbc.query("select review_count, rating_sum from member_review_stats where member_id = ? for update",
-				rs -> rs.next() ? new Totals(rs.getLong(1), rs.getLong(2)) : new Totals(0, 0), memberId);
+	// 노쇼만 있는 회원은 리뷰 수·평점 합이 0인 행을 만든다. 리뷰 집계와 같은 행을 잠가 신뢰 점수 갱신을 직렬화한다.
+	public void addNoShow(Long memberId, LocalDateTime now) {
+		jdbc.update("insert into member_review_stats(member_id, review_count, rating_sum, no_show_count, updated_at)"
+			+ " values (?, 0, 0, 1, ?) on duplicate key update no_show_count = no_show_count + 1, updated_at = ?",
+			memberId, now, now);
 	}
 
-	public record Totals(long reviewCount, long ratingSum) {
+	// 같은 트랜잭션의 집계 갱신 뒤 현재 값을 잠금 읽기로 읽는다. 같은 회원의 다른 리뷰는 집계 행 잠금으로 직렬화된다.
+	public Totals findTotalsForUpdate(Long memberId) {
+		return jdbc.query("select review_count, rating_sum, no_show_count from member_review_stats"
+				+ " where member_id = ? for update",
+			rs -> rs.next() ? new Totals(rs.getLong(1), rs.getLong(2), rs.getLong(3)) : new Totals(0, 0, 0), memberId);
+	}
+
+	public record Totals(long reviewCount, long ratingSum, long noShowCount) {
 	}
 
 	public Summary find(Long memberId) {

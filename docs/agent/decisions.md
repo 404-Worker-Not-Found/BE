@@ -2172,3 +2172,24 @@ Implication for agents:
 Related files:
 - `docs/architecture/fcm-push-design.md`
 - `notification-service`
+
+## 2026-11-09 - Tentative No-show Trust Score Penalty (#164)
+
+Decision:
+- The user chose a fixed deduction per no-show: trust score = max(0, review rating score - penalty × no-show count), default penalty 10 points (`MEMBER_TRUST_SCORE_NO_SHOW_PENALTY`), as the new policy version `review-rating-no-show-v1`. The review rating calculation is unchanged.
+- Workers without received reviews start from the prior rating's neutral score (default 3.0 → 50.00) when they have a no-show, so a no-show alone creates a trust score. `TrustScoreUpdated` v1 may carry `reviewCount` 0 and adds `noShowCount`; matching-service accepts review count 0.
+- Only work-service `WorkNoShow` v1 (system-decided, revision 4) counts, once per work, for the worker. No recovery or time decay. Post-confirmation cancellation penalties remain deferred.
+- member-service consumes no-shows with a separate group from the start of `work:domain-events`, so no-shows before deployment are counted.
+
+Reason:
+- No-show is the clearest reliability signal the platform records, and matching already weights the trust score. A fixed deduction is simple to explain while the policy is tentative.
+
+Implication for agents:
+- Keep no-show counts in the same per-member input row as review totals so review and no-show updates share one lock and revision order.
+- Add cancellation penalties, recovery, decay, or weight changes only as new policy versions after the user confirms them. Do not modify existing score batches.
+
+Related files:
+- `docs/architecture/member-review-design.md`
+- `member-service/src/main/java/com/workernotfound/member/domain/review/service/TrustScorePolicy.java`
+- `member-service/src/main/resources/db/migration/V7__record_member_no_shows.sql`
+- `matching-service/src/main/resources/db/migration/V16__allow_no_show_only_trust_scores.sql`
