@@ -2193,3 +2193,22 @@ Related files:
 - `member-service/src/main/java/com/workernotfound/member/domain/review/service/TrustScorePolicy.java`
 - `member-service/src/main/resources/db/migration/V7__record_member_no_shows.sql`
 - `matching-service/src/main/resources/db/migration/V16__allow_no_show_only_trust_scores.sql`
+
+## 2026-11-12 - Automatic Refund of Released No-show/Cancellation Locks (#167)
+
+Decision:
+- The user chose that payment-service requests an owner refund of the full released lock amount in the same transaction when the work-termination consumer releases a confirmed work's lock after `WorkNoShow` or agreement `WorkCanceled`. This is an exception to the 2026-10-22 rule that job-service decides refund timing, valid while re-recruitment and job reopening do not exist.
+- Only `RELEASED` terminations refund. Review-required (funding-blocked, settlement-transferred, inactive lock) and already-released terminations do not.
+- The feature is disabled by default (`PAYMENT_TERMINATION_REFUND_ENABLED=false`). Keep it off until a real Toss test environment confirms partial/full cancel, same-key retry, and webhook receipt. Amounts released while disabled are not refunded later automatically.
+
+Reason:
+- Released money from a no-show or cancellation is never reused under the current policy, but it stayed in the deposit with no caller to return it to the owner.
+
+Implication for agents:
+- Reuse the existing refund command with the fixed key `work-termination-refund-{workId}`; never create a second refund for the same work. Check that the deposit's single DEPOSITED order exists before requesting, so a ledger inconsistency cannot roll back the lock release.
+- Revisit this exception before adding re-recruitment, job reopening, or job-service refund triggers.
+
+Related files:
+- `docs/architecture/refund-design.md`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/TerminationRefundService.java`
+- `payment-service/src/main/resources/db/migration/V15__termination_refunds.sql`

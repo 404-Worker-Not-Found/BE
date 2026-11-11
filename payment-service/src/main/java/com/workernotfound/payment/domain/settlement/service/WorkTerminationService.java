@@ -2,6 +2,7 @@ package com.workernotfound.payment.domain.settlement.service;
 
 import com.workernotfound.payment.domain.payment.entity.*;
 import com.workernotfound.payment.domain.payment.repository.*;
+import com.workernotfound.payment.domain.refund.service.TerminationRefundService;
 import com.workernotfound.payment.domain.settlement.entity.*;
 import com.workernotfound.payment.domain.settlement.exception.SettlementTargetNotReadyException;
 import com.workernotfound.payment.domain.settlement.repository.*;
@@ -20,6 +21,7 @@ public class WorkTerminationService {
   private final SettlementRepository settlements;
   private final SettlementHistoryRepository histories;
   private final MatchingEventReceiptRepository matchingReceipts;
+  private final TerminationRefundService refunds;
 
   @Transactional(isolation = Isolation.READ_COMMITTED)
   public String receive(WorkTerminationEvent event) {
@@ -59,7 +61,10 @@ public class WorkTerminationService {
     deposit.release(lock.getAmount());
     commands.release(lock.getMatchingId(), lock.getId());
     receipts.releaseHistory(lock.getId(), event.workId());
-    return receipts.decide(event.workId(), "RELEASED", null);
+    String result = receipts.decide(event.workId(), "RELEASED", null);
+    var refund = refunds.requestReleasedAmount(event.workId(), event.eventType(), deposit, lock.getAmount());
+    if (refund.outcome() != null) receipts.recordRefund(event.workId(), refund.refundId(), refund.outcome());
+    return result;
   }
 
   private void holdSettlement(long workId) {
