@@ -112,7 +112,7 @@
 - 리뷰 저장 트랜잭션에서 평점 집계를 더한 뒤 집계 행을 잠금 읽기로 다시 읽어 점수를 계산하고 `member_trust_scores`(V6)에 저장한다. 같은 회원이 받는 리뷰는 집계 행 잠금으로 직렬화되므로 `revision`(회원별 1부터 증가)과 이벤트 순서가 집계 순서와 같다. 잠금 순서는 계정 장벽 → 근무 행 → 상대방 집계 행 → 신뢰 점수 행이다.
 - 같은 트랜잭션에서 `member_outbox`에 `TrustScoreUpdated` v1을 저장한다. 같은 내용의 리뷰 재요청은 새 점수나 이벤트를 만들지 않는다.
 - relay가 짧은 DB 임대로 이벤트를 점유해 `member:domain-events`(matching Redis)에 다른 서비스와 같은 envelope(`eventId`, `aggregateType=MEMBER`, `aggregateId`=회원 ID, `eventType`, `revision`, `version`, `occurredAt`, `payload`)로 발행한다. 실패는 상한이 있는 지수 backoff로 재시도하고 전달은 at-least-once다.
-- payload: `eventId`, `eventType`, `memberId`, `revision`, `version`(1), `trustScore`(소수 둘째 자리), `reviewCount`, `policyVersion`. 발생 시각은 envelope `occurredAt`만 쓴다.
+- payload: `eventId`, `eventType`, `memberId`, `revision`, `version`(1), `trustScore`(소수 둘째 자리), `reviewCount`(노쇼만 있는 회원은 0), `noShowCount`(`review-rating-no-show-v1`부터), `policyVersion`. 발생 시각은 envelope `occurredAt`만 쓴다.
 
 ### 기존 데이터
 
