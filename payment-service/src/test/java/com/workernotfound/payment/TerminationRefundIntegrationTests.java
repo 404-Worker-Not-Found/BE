@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.workernotfound.payment.domain.payment.dto.request.PaymentLockRequest;
 import com.workernotfound.payment.domain.payment.entity.PaymentDeposit;
+import com.workernotfound.payment.domain.payment.exception.PaymentErrorCode;
 import com.workernotfound.payment.domain.payment.repository.PaymentDepositRepository;
 import com.workernotfound.payment.domain.payment.service.PaymentApplicationService;
 import com.workernotfound.payment.domain.refund.dto.request.RefundRequest;
@@ -21,6 +22,7 @@ import com.workernotfound.payment.domain.settlement.service.WorkTerminationEvent
 import com.workernotfound.payment.domain.settlement.service.WorkTerminationService;
 import com.workernotfound.payment.external.toss.TossGateway;
 import com.workernotfound.payment.external.toss.TossPayment;
+import com.workernotfound.payment.global.exception.BusinessException;
 import com.workernotfound.payment.support.IntegrationTestSupport;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -179,18 +181,21 @@ class TerminationRefundIntegrationTests extends IntegrationTestSupport {
     var start = new CountDownLatch(1);
     try {
       var terminate = executor.submit(() -> { start.await(); return terminations.receive(event(fixture, "WorkNoShow")); });
+      // 1000원은 어느 순서로 처리돼도 가용 잔액(종료 전 400원, 종료 환불 뒤 400원)을 넘으므로 잔액 부족 거절만 예상한다.
+      // 그 밖의 예외(교착·SQL 오류 등)는 거절로 삼키지 않고 테스트 실패로 드러낸다.
       var external = executor.submit(() -> {
         start.await();
         try {
-          return refunds.request(UUID.randomUUID().toString(),
+          refunds.request(UUID.randomUUID().toString(),
               new RefundRequest(fixture.job(), 20L, new BigDecimal("1000"), "KRW", "모집 종료 후 미사용 예치금"));
-        } catch (RuntimeException rejected) {
           return null;
+        } catch (BusinessException rejected) {
+          return rejected.getErrorCode();
         }
       });
       start.countDown();
       assertThat(terminate.get(10, TimeUnit.SECONDS)).isEqualTo("RELEASED");
-      external.get(10, TimeUnit.SECONDS);
+      assertThat(external.get(10, TimeUnit.SECONDS)).isEqualTo(PaymentErrorCode.INSUFFICIENT_DEPOSIT);
     } finally {
       executor.shutdownNow();
     }
