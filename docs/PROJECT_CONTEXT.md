@@ -373,6 +373,7 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 - See `docs/architecture/notification-design.md`.
 
 - Work notification consumers also handle mutual cancellation request outcomes, WorkCanceled and WorkNoShow. System expiry/no-show events require a null actor ID and SYSTEM role and notify both participants; participant actions notify the other participant. Existing event fingerprints and lifecycle revisions remain compatible.
+- Review request notifications (#173): each `WorkCompleted` also stores a `ReviewRequested` notification for both the owner and the worker (including the actor) in the same transaction; V7 makes the recipient uniqueness key include the notification type. Completions processed before V7 are not backfilled.
 
 ## Error Handling State
 

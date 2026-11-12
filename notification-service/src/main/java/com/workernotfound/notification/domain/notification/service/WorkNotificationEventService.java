@@ -17,6 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class WorkNotificationEventService {
+  // 근무 완료 뒤 점주·알바생 양측에 리뷰 작성을 요청한다. 근무 완료 이벤트 ID로 함께 저장해 재전달에도 한 번만 만든다.
+  static final String REVIEW_REQUESTED = "ReviewRequested";
+
   private final NotificationEventRepository receipts;
   private final NotificationRepository notifications;
   private final NotificationWriter writer;
@@ -36,11 +39,21 @@ public class WorkNotificationEventService {
     }
     boolean forOwner = "WORKER".equals(event.actorRole());
     notifyParticipant(event, forOwner ? event.ownerMemberId() : event.workerMemberId(), forOwner ? "OWNER" : "WORKER");
+    if ("WorkCompleted".equals(event.eventType())) requestReviews(event);
+  }
+
+  private void requestReviews(WorkNotificationEvent event) {
+    save(event, event.ownerMemberId(), "OWNER", REVIEW_REQUESTED);
+    save(event, event.workerMemberId(), "WORKER", REVIEW_REQUESTED);
   }
 
   private void notifyParticipant(WorkNotificationEvent event, Long memberId, String role) {
+    save(event, memberId, role, event.eventType());
+  }
+
+  private void save(WorkNotificationEvent event, Long memberId, String role, String notificationType) {
     writer.save(Notification.builder().eventId(event.eventId())
-        .memberId(memberId).memberRole(role).notificationType(event.eventType())
+        .memberId(memberId).memberRole(role).notificationType(notificationType)
         .jobPostId(event.jobPostId()).matchingId(event.matchingId()).workId(event.workId())
         .occurredAt(event.occurredAt()).build());
   }
