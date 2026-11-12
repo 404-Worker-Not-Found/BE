@@ -5,6 +5,7 @@ import com.workernotfound.member.domain.review.dto.request.WriteReviewRequest;
 import com.workernotfound.member.domain.review.dto.response.PendingReviewsResponse;
 import com.workernotfound.member.domain.review.dto.response.ReceivedReviewsResponse;
 import com.workernotfound.member.domain.review.dto.response.ReviewResponse;
+import com.workernotfound.member.domain.review.dto.response.TrustScoreResponse;
 import com.workernotfound.member.domain.review.service.ReviewCommandService;
 import com.workernotfound.member.domain.review.service.ReviewQueryService;
 import com.workernotfound.member.global.response.ApiResponse;
@@ -56,5 +57,11 @@ public class ReviewController implements ReviewControllerDocs {
 		@RequestParam(defaultValue = "20") int size
 	) {
 		return ResponseEntity.ok(ApiResponse.success(reviewQueryService.received(memberId, page, size)));
+	}
+
+	@Override
+	@GetMapping("/{memberId}/trust-score")
+	public ResponseEntity<ApiResponse<TrustScoreResponse>> getTrustScore(@PathVariable Long memberId) {
+		return ResponseEntity.ok(ApiResponse.success(reviewQueryService.trustScore(memberId)));
 	}
 }

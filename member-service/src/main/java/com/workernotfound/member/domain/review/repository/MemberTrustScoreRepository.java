@@ -36,4 +36,16 @@ public class MemberTrustScoreRepository {
 
 	public record CurrentTrustScore(BigDecimal trustScore, long reviewCount, long noShowCount, long revision) {
 	}
+
+	// 조회 API용 현재 점수와 마지막 갱신 시각.
+	public Optional<TrustScoreSummary> findSummary(Long memberId) {
+		return jdbc.query("select trust_score, review_count, no_show_count, updated_at from member_trust_scores"
+				+ " where member_id = ?",
+			(rs, row) -> new TrustScoreSummary(rs.getBigDecimal(1), rs.getLong(2), rs.getLong(3),
+				rs.getObject(4, LocalDateTime.class)), memberId)
+			.stream().findFirst();
+	}
+
+	public record TrustScoreSummary(BigDecimal trustScore, long reviewCount, long noShowCount, LocalDateTime updatedAt) {
+	}
 }

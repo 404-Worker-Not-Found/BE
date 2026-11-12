@@ -1,8 +1,10 @@
 package com.workernotfound.member.domain.review.controller;
 
 import com.workernotfound.member.domain.member.entity.enums.MemberRole;
+import com.workernotfound.member.domain.review.service.NoShowPenaltyService;
 import com.workernotfound.member.domain.review.service.ReviewableWorkReceiptService;
 import com.workernotfound.member.domain.review.service.WorkCompletion;
+import com.workernotfound.member.domain.review.service.WorkNoShow;
 import com.workernotfound.member.global.security.AuthenticatedMember;
 import com.workernotfound.member.support.IntegrationTestSupport;
 import java.time.LocalDate;
@@ -33,6 +35,9 @@ class ReviewApiTests extends IntegrationTestSupport {
 
 	@Autowired
 	private ReviewableWorkReceiptService receipts;
+
+	@Autowired
+	private NoShowPenaltyService noShows;
 
 	@Autowired
 	private JdbcTemplate jdbc;
@@ -72,6 +77,52 @@ class ReviewApiTests extends IntegrationTestSupport {
 				.contentType("application/json").content(body(work, "5", "null")))
 			.andExpect(status().isConflict())
 			.andExpect(jsonPath("$.code").value("REVIEW-409-001"));
+	}
+
+	@Test
+	void showsTrustScoreAfterReviewAndNoShow() throws Exception {
+		long owner = member("OWNER");
+		long worker = member("WORKER");
+		long work = completedWork(owner, worker);
+
+		mvc.perform(get("/api/members/" + worker + "/trust-score").with(as(owner, MemberRole.OWNER)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.memberId").value(worker))
+			.andExpect(jsonPath("$.data.trustScore").doesNotExist())
+			.andExpect(jsonPath("$.data.reviewCount").value(0))
+			.andExpect(jsonPath("$.data.noShowCount").value(0))
+			.andExpect(jsonPath("$.data.updatedAt").doesNotExist());
+
+		mvc.perform(post("/api/members/me/reviews").with(as(owner, MemberRole.OWNER))
+				.contentType("application/json").content(body(work, "5", "null")))
+			.andExpect(status().isOk());
+		mvc.perform(get("/api/members/" + worker + "/trust-score").with(as(owner, MemberRole.OWNER)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.trustScore").value(62.50))
+			.andExpect(jsonPath("$.data.reviewCount").value(1))
+			.andExpect(jsonPath("$.data.noShowCount").value(0))
+			.andExpect(jsonPath("$.data.updatedAt").exists());
+
+		noShows.receive(new WorkNoShow("api-no-show-" + work, IDS.incrementAndGet(), IDS.incrementAndGet(), owner, worker,
+			LocalDate.of(2026, 10, 28), LocalDateTime.now(ZoneId.of("Asia/Seoul")).minusMinutes(10)));
+		mvc.perform(get("/api/members/" + worker + "/trust-score").with(as(worker, MemberRole.WORKER)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.trustScore").value(52.50))
+			.andExpect(jsonPath("$.data.reviewCount").value(1))
+			.andExpect(jsonPath("$.data.noShowCount").value(1));
+	}
+
+	@Test
+	void rejectsTrustScoreQueryForUnknownMemberOrWithoutAuthentication() throws Exception {
+		long owner = member("OWNER");
+
+		mvc.perform(get("/api/members/" + owner + "/trust-score"))
+			.andExpect(status().isUnauthorized());
+		mvc.perform(get("/api/members/" + IDS.incrementAndGet() + "/trust-score").with(as(owner, MemberRole.OWNER)))
+			.andExpect(status().isNotFound());
+		mvc.perform(get("/v3/api-docs"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.paths['/api/members/{memberId}/trust-score']").exists());
 	}
 
 	@Test
