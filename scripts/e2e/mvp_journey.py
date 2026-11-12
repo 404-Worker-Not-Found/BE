@@ -314,6 +314,9 @@ class Journey:
         # One 5-point review: (3.0 x 3 + 5) / 4 = 3.5 -> 62.50 under the tentative review-rating-no-show-v1 policy.
         eventually('trust score copy', lambda: self.sql('matching', f'SELECT CAST(trust_score AS CHAR) FROM member_trust_scores WHERE member_id={worker[0]}') == '62.50')
         self.check('trust score reaches matching via member outbox stream')
+        trust = self.api('member', 'GET', f'/api/members/{worker[0]}/trust-score', token=owner[1])
+        self.check('owner reads worker trust score API', trust['trustScore'] == 62.5
+                   and trust['reviewCount'] == 1 and trust['noShowCount'] == 0)
         settlement = int(self.sql('payment', f'SELECT id FROM payment_settlements WHERE work_id={w}'))
         for actor in [owner, worker]:
             view = self.api('payment', 'GET', f'/api/payments/me/settlements/{settlement}', token=actor[1])
@@ -357,6 +360,9 @@ class Journey:
                 # The same worker's 62.50 review score loses the default 10-point no-show penalty.
                 eventually('no-show trust penalty copy', lambda: self.sql('matching', f'SELECT CAST(trust_score AS CHAR) FROM member_trust_scores WHERE member_id={worker[0]}') == '52.50')
                 self.check('no-show penalty reaches matching via member outbox stream')
+                trust = self.api('member', 'GET', f'/api/members/{worker[0]}/trust-score', token=worker[1])
+                self.check('worker reads no-show trust score API', trust['trustScore'] == 52.5
+                           and trust['reviewCount'] == 1 and trust['noShowCount'] == 1)
 
     def close(self):
         failures = []
