@@ -43,3 +43,7 @@ Docker, Java 17, Python 3가 필요하다. 저장소 루트에서 `python3 scrip
 ## #164 노쇼 신뢰 점수 감점 확장 (2026-11-09)
 
 정상 근무에서 5점 리뷰로 62.50이 된 같은 알바생이 자동 노쇼 시나리오를 거친 뒤, 실제 `WorkNoShow`가 member-service 전용 그룹(`member-trust-no-show-v1`)으로 소비돼 기본 감점 10점이 적용되고 member Outbox → `member:domain-events` → matching-service 사본의 신뢰 점수가 52.50(임시 정책 `review-rating-no-show-v1`)이 되는지 확인한다. 정상 근무 시나리오의 62.50 확인은 노쇼 이전에 실행되므로 그대로 유지된다. 확장한 실제 여정 36개 검사가 통과했다. 리뷰 없는 노쇼의 중립 점수 감점, 재전달 중복 제거, 리뷰·노쇼 동시 처리는 서비스 통합 테스트로 검증한다.
+
+## #171 신뢰 점수 조회 API 확장 (2026-11-13)
+
+matching-service 사본 확인에 더해 #170의 `GET /api/members/{memberId}/trust-score`를 실제 member-service 프로세스와 JWT로 호출한다. 정상 근무의 상호 리뷰 뒤 점주가 알바생 점수를 조회하면 62.50·리뷰 1·노쇼 0이고, 자동 노쇼 시나리오 뒤 알바생 본인 조회는 52.50·리뷰 1·노쇼 1이다. 확장한 실제 여정 38개 검사가 통과했다. 점수 없음·없는 회원·미인증 응답은 서비스 API 테스트로 검증한다.
