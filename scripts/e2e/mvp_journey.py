@@ -325,6 +325,11 @@ class Journey:
         eventually('owner completion notification', lambda: self.sql('notification', f'SELECT COUNT(*) FROM notifications WHERE work_id={w}') != '0')
         self.api('notification', 'GET', '/api/notifications/me', token=worker[1])
         self.check('real work stream notification and authenticated inbox')
+        eventually('review request notifications', lambda: self.sql('notification', f"SELECT COUNT(*) FROM notifications WHERE work_id={w} AND notification_type='ReviewRequested'") == '2')
+        for actor in [owner, worker]:
+            inbox = self.api('notification', 'GET', '/api/notifications/me', token=actor[1])
+            self.check('participant review request notification', any(
+                notice['type'] == 'ReviewRequested' and notice['workId'] == w for notice in inbox['content']))
         self.check('payout stays disabled', self.sql('payment', 'SELECT COUNT(*) FROM payment_payout_commands') == '0')
         for label in ['cancellation', 'no-show', 'funding']:
             j, m, w, amount, order = self.matched(owner, worker, label)

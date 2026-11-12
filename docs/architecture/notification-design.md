@@ -66,6 +66,15 @@ notification-service는 회원별 인앱 알림과 읽음 상태를 전용 MySQL
 
 근무 이벤트도 인앱 보관함과 FCM 발송 대기열을 함께 저장한다. 실제 발송은 별도 작업자가 처리하며 문자·이메일 발송이나 금융 처리는 수행하지 않는다.
 
+### 리뷰 작성 요청 (#173)
+
+`WorkCompleted`를 받으면 위 상대방 완료 알림과 같은 트랜잭션에서 점주·알바생 양측에 `ReviewRequested` 알림을 저장한다. 처리자도 받는다. 리뷰가 쌓여야 신뢰 점수([상호 리뷰 설계](member-review-design.md))가 의미를 가지므로 완료 직후 양측의 리뷰 작성을 안내한다.
+
+- 근무 완료 이벤트 ID로 함께 저장하므로 receipt·fingerprint·재전달·동시 수신의 멱등 처리를 그대로 따른다. 같은 이벤트·수신자에 완료 알림과 리뷰 요청이 함께 있을 수 있어 중복 방지 키를 `(event_id, member_id, member_role, notification_type)`으로 바꿨다(V7).
+- 응답은 다른 근무 알림과 같이 `type=ReviewRequested`, `workId`, `matchingId`, `jobPostId`를 담고 `applicationId`는 null이다. FCM data의 `type`도 `ReviewRequested`다. 문구와 화면 이동은 Android가 이 type으로 정한다. 알림을 누르면 `GET /api/members/me/reviews/pending`이나 `workId`로 리뷰 작성 화면을 연다.
+- 작성 기간(기본 14일)이 지난 뒤 작성하면 member-service가 `REVIEW-409-002`로 거절한다. 알림 자체는 만료하지 않는다.
+- 출근·시작·노쇼·취소 이벤트는 리뷰 요청을 만들지 않는다. V7 배포 전에 처리한 근무 완료에는 소급 생성하지 않는다. 다른 서비스와 이벤트 계약은 바뀌지 않는다.
+
 - 2026-10-28 확장에서도 기존 참여자 이벤트의 지문은 유지한다. SYSTEM의 null actor만 빈 canonical 필드로 표현하고 기존 숫자 actor 값의 직렬화는 바꾸지 않는다. 양측 알림은 하나의 트랜잭션에서 저장하므로 일부만 저장된 상태로 ACK하지 않는다.
 
 ### 이벤트 종류 확장 시 배포 순서

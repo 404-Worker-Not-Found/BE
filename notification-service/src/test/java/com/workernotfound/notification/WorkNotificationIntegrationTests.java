@@ -130,12 +130,14 @@ class WorkNotificationIntegrationTests extends IntegrationTestSupport {
       boolean owner = event.actorRole().equals("WORKER");
       var recipient = member(owner ? event.ownerMemberId() : event.workerMemberId(), owner ? "OWNER" : "WORKER");
       var page = notifications.getNotifications(recipient, null, 20);
-      assertThat(page.content()).hasSize(1);
-      var notice = page.content().get(0);
-      assertThat(notice.type()).isEqualTo(event.eventType());
+      var transitions = page.content().stream().filter(notice -> notice.type().equals(event.eventType())).toList();
+      assertThat(transitions).hasSize(1);
+      var notice = transitions.get(0);
       assertThat(notice.workId()).isEqualTo(event.workId());
       assertThat(notice.applicationId()).isNull();
-      assertThat(notifications.getNotifications(member(event.actorMemberId(), event.actorRole()), null, 20).content()).isEmpty();
+      // 근무 완료의 리뷰 요청은 별도 테스트가 확인한다. 처리자는 근무 전이 알림을 받지 않는다.
+      assertThat(notifications.getNotifications(member(event.actorMemberId(), event.actorRole()), null, 20).content())
+          .extracting(actorNotice -> actorNotice.type()).doesNotContain(event.eventType());
       String auth = token(recipient.memberId(), recipient.role());
       mvc.perform(get("/api/notifications/me").header("Authorization", auth)).andExpect(status().isOk())
           .andExpect(jsonPath("$.data.content[0].workId").value(event.workId()));
@@ -148,13 +150,69 @@ class WorkNotificationIntegrationTests extends IntegrationTestSupport {
   }
 
   @Test
+  void completionRequestsReviewFromBothParticipantsOnce() throws Exception {
+    for (String actorRole : List.of("OWNER", "WORKER")) {
+      var completed = event("WorkCompleted", actorRole);
+      redis.opsForStream().add(StreamRecords.newRecord().in(STREAM).ofMap(fields(completed)));
+      consumer.poll();
+      events.receive(completed);
+      var owner = notifications.getNotifications(member(completed.ownerMemberId(), "OWNER"), null, 20).content();
+      var worker = notifications.getNotifications(member(completed.workerMemberId(), "WORKER"), null, 20).content();
+      boolean ownerCompleted = actorRole.equals("OWNER");
+      assertThat(owner).extracting(notice -> notice.type()).containsExactlyInAnyOrderElementsOf(
+          ownerCompleted ? List.of("ReviewRequested") : List.of("WorkCompleted", "ReviewRequested"));
+      assertThat(worker).extracting(notice -> notice.type()).containsExactlyInAnyOrderElementsOf(
+          ownerCompleted ? List.of("WorkCompleted", "ReviewRequested") : List.of("ReviewRequested"));
+      for (var notice : List.of(owner, worker).stream().flatMap(List::stream)
+          .filter(notice -> notice.type().equals("ReviewRequested")).toList()) {
+        assertThat(notice.workId()).isEqualTo(completed.workId());
+        assertThat(notice.jobPostId()).isEqualTo(completed.jobPostId());
+        assertThat(notice.applicationId()).isNull();
+      }
+      String auth = token(completed.workerMemberId(), "WORKER");
+      mvc.perform(get("/api/notifications/me/unread-count").header("Authorization", auth))
+          .andExpect(status().isOk()).andExpect(jsonPath("$.data.unreadCount").value(worker.size()));
+    }
+  }
+
+  @Test
+  void concurrentCompletionDeliveryCreatesReviewRequestsOnce() throws Exception {
+    var completed = event("WorkCompleted", "OWNER");
+    var pool = Executors.newFixedThreadPool(6);
+    try {
+      List<Future<?>> tasks = new ArrayList<>();
+      for (int i=0; i<6; i++) tasks.add(pool.submit(() -> events.receive(completed)));
+      for (var task : tasks) task.get(15, TimeUnit.SECONDS);
+    } finally { pool.shutdownNow(); }
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id = ? AND notification_type = ?",
+        Long.class, completed.eventId(), "ReviewRequested")).isEqualTo(2);
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id = ?", Long.class,
+        completed.eventId())).isEqualTo(3);
+  }
+
+  @Test
+  void nonCompletionWorkEventsDoNotRequestReviews() throws Exception {
+    var base = event("WorkCheckedIn", "WORKER");
+    var noShow = new WorkNotificationEvent(UUID.randomUUID().toString(), "WorkNoShow", base.workId(), 4L, 1,
+        base.occurredAt(), base.workId(), base.matchingId(), base.jobPostId(), base.ownerMemberId(),
+        base.workerMemberId(), null, "SYSTEM", "NO_SHOW", base.workDate(), base.startTime(), base.endTime(), base.endTimeNextDay());
+    for (var event : List.of(base, event("WorkStarted", "OWNER"), noShow)) {
+      events.receive(event);
+      assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id = ? AND notification_type = ?",
+          Long.class, event.eventId(), "ReviewRequested")).isZero();
+    }
+  }
+
+  @Test
   void sameMemberIdStillRoutesUsingDeclaredActorRole() throws Exception {
     var original = event("WorkCompleted", "WORKER");
     var json = (com.fasterxml.jackson.databind.node.ObjectNode)mapper.valueToTree(original);
     json.put("workerMemberId", original.ownerMemberId()).put("actorMemberId", original.ownerMemberId());
     events.receive(mapper.treeToValue(json, WorkNotificationEvent.class));
-    assertThat(notifications.getNotifications(member(original.ownerMemberId(), "OWNER"), null, 20).content()).hasSize(1);
-    assertThat(notifications.getNotifications(member(original.ownerMemberId(), "WORKER"), null, 20).content()).isEmpty();
+    assertThat(notifications.getNotifications(member(original.ownerMemberId(), "OWNER"), null, 20).content())
+        .extracting(notice -> notice.type()).containsExactlyInAnyOrder("WorkCompleted", "ReviewRequested");
+    assertThat(notifications.getNotifications(member(original.ownerMemberId(), "WORKER"), null, 20).content())
+        .extracting(notice -> notice.type()).containsExactly("ReviewRequested");
   }
 
   @Test
@@ -172,7 +230,8 @@ class WorkNotificationIntegrationTests extends IntegrationTestSupport {
     ((com.fasterxml.jackson.databind.node.ObjectNode)changed).put("jobPostId", 999999L);
     assertThatThrownBy(() -> events.receive(mapper.treeToValue(changed, WorkNotificationEvent.class)))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id = ?", Long.class, original.eventId())).isEqualTo(1);
+    // 상대방 완료 알림 1개와 양측 리뷰 요청 2개
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id = ?", Long.class, original.eventId())).isEqualTo(3);
   }
 
   @Test
@@ -203,7 +262,8 @@ class WorkNotificationIntegrationTests extends IntegrationTestSupport {
     var second = event("WorkCompleted", "WORKER");
     redis.opsForStream().add(StreamRecords.newRecord().in(STREAM).ofMap(fields(second)));
     consumer.poll(); consumer.poll();
-    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id IN (?, ?)", Long.class, first.eventId(), second.eventId())).isEqualTo(2);
+    // 출근 알림 1개, 근무 완료의 상대방 알림 1개와 양측 리뷰 요청 2개
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id IN (?, ?)", Long.class, first.eventId(), second.eventId())).isEqualTo(4);
     assertThat(redis.opsForStream().pending(STREAM, "notification-work-v1").getTotalPendingMessages()).isEqualTo(1);
     // A conflicting receipt simulates a repairable consumer-side failure on an otherwise valid stream entry.
     var pending = event("WorkStarted", "OWNER");
@@ -243,7 +303,7 @@ class WorkNotificationIntegrationTests extends IntegrationTestSupport {
     assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id IN (?, ?)",
         Long.class, missing.eventId(), mismatched.eventId())).isZero();
     assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id = ?", Long.class,
-        valid.eventId())).isEqualTo(1);
+        valid.eventId())).isEqualTo(3);
     assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id = ?", Long.class,
         unknown.eventId())).isZero();
   }
@@ -257,6 +317,6 @@ class WorkNotificationIntegrationTests extends IntegrationTestSupport {
         .put("revision", 2).put("status", "IN_PROGRESS").put("occurredAt", "2026-10-04T09:00:00");
     events.receive(mapper.treeToValue(json, WorkNotificationEvent.class));
     assertThat(notifications.getNotifications(member(completed.workerMemberId(), "WORKER"), null, 20).content())
-        .extracting(notice -> notice.type()).containsExactly("WorkStarted", "WorkCompleted");
+        .extracting(notice -> notice.type()).containsExactly("WorkStarted", "ReviewRequested", "WorkCompleted");
   }
 }
