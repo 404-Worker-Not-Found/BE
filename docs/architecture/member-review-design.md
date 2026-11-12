@@ -31,9 +31,11 @@
 | `POST /api/members/me/reviews` | 리뷰 작성. 본문 `{"workId":10,"rating":5,"comment":"친절했어요"}` |
 | `GET /api/members/me/reviews/pending?page=0&size=20` | 내가 참여해 완료됐고 작성 기간 안이며 아직 리뷰하지 않은 근무. 최근 완료 순 |
 | `GET /api/members/{memberId}/reviews?page=0&size=20` | 회원이 받은 리뷰 수·평균 평점과 리뷰 목록. 최근 순 |
+| `GET /api/members/{memberId}/trust-score` | 회원의 현재 [신뢰 점수](#신뢰-점수126-두-번째-단위-임시-정책)와 계산에 쓴 받은 리뷰 수·노쇼 횟수(#169). 받은 리뷰 조회처럼 로그인한 회원이면 조회할 수 있다 |
 
 - 작성 응답 `data`: `reviewId`, `workId`, `revieweeMemberId`, `reviewerRole`(`OWNER`/`WORKER`), `rating`, `comment`, `createdAt`
 - 작성할 리뷰 목록 항목: `workId`, `jobPostId`, `workDate`, `myRole`, `revieweeMemberId`, `completedAt`, `writableUntil`
+- 신뢰 점수 응답 `data`: `memberId`, `trustScore`(0~100, 소수 둘째 자리), `reviewCount`, `noShowCount`, `updatedAt`. 받은 리뷰와 노쇼가 모두 없으면 점수를 만들지 않으므로 `trustScore`·`updatedAt`은 `null`, 횟수는 0이다. 조회는 저장된 `member_trust_scores`만 읽고 다시 계산하지 않는다.
 - `page`는 0 이상, `size`는 1~100(기본 20)이다.
 
 | 결과 | 코드 |
@@ -44,7 +46,7 @@
 | 리뷰할 수 있는 완료 근무가 아님(근무 없음, 완료 이벤트 미수신) | 404 `REVIEW-404-001` |
 | 이미 다른 내용으로 작성함 | 409 `REVIEW-409-001` |
 | 작성 기간 지남 | 409 `REVIEW-409-002` |
-| 받은 리뷰 조회 대상 회원 없음 | 404 `MEMBER-404-001` |
+| 받은 리뷰·신뢰 점수 조회 대상 회원 없음 | 404 `MEMBER-404-001` |
 
 같은 근무에 같은 작성자가 다시 요청하면 평점과 정리한 코멘트가 같을 때 처음 리뷰를 돌려준다. 작성 기간이 지난 뒤의 같은 요청도 처음 리뷰를 돌려준다. 검사 순서는 근무 존재 → 참여자 → 계정 장벽 → 기존 리뷰 → 작성 기간이다.
 

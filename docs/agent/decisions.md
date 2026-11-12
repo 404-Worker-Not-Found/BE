@@ -2212,3 +2212,37 @@ Related files:
 - `docs/architecture/refund-design.md`
 - `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/TerminationRefundService.java`
 - `payment-service/src/main/resources/db/migration/V15__termination_refunds.sql`
+
+## 2026-11-12 - Trust Score Query Visibility (#169)
+
+Decision:
+- The user approved `GET /api/members/{memberId}/trust-score`, readable by any authenticated member like received reviews. It returns the stored trust score, review count, no-show count, and update time; the score and update time are null when the member has neither reviews nor no-shows.
+- No-show counts are therefore visible to other authenticated members, including owners reviewing applicants.
+
+Reason:
+- The graduation demonstration must show trust score changes after reviews and no-shows, and owners need to judge applicants. Received reviews already use the same visibility.
+
+Implication for agents:
+- The query reads `member_trust_scores` only; never recalculate or change the score or `TrustScoreUpdated` in a read path.
+- Narrow visibility (for example, self-only no-show counts) only after the user decides so.
+
+Related files:
+- `docs/architecture/member-review-design.md`
+- `member-service/src/main/java/com/workernotfound/member/domain/review/controller/ReviewController.java`
+
+## 2026-11-12 - Settlement Demonstration Ends at Scheduled Payout
+
+Decision:
+- The user chose to demonstrate settlement only up to the scheduled-payout state: deposit, matching lock, work completion, and the participant's settlement showing `RESERVED` with `payableAt` (or `ON_HOLD` after no-show or cancellation). The final transfer is explained in the presentation, not executed.
+- The existing rules stay: payout execution remains disabled (`PAYMENT_PAYOUT_ENABLED=false`), no demo-only or fake payout gateway is added, and settlements are never marked `PAID` without a confirmed provider payout.
+
+Reason:
+- Real payout requires a Toss payout-service contract, payee registration and KYC, and fee and withholding decisions, which cannot be completed before the demonstration. A fake success would contradict the 2026-10-18 payout rules and risk marking real data paid without money moving.
+
+Implication for agents:
+- Do not implement a simulated payout, a success stub outside tests, or a manual `PAID` transition for demonstration purposes.
+- Revisit only after the user reports the Toss payout contract, sandbox availability, and fee/withholding decisions.
+
+Related files:
+- `docs/architecture/settlement-payout-mvp.md`
+- `docs/architecture/settlement-design.md`
