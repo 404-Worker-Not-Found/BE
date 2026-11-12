@@ -178,6 +178,19 @@ class WorkNotificationIntegrationTests extends IntegrationTestSupport {
   @Test
   void concurrentCompletionDeliveryCreatesReviewRequestsOnce() throws Exception {
     var completed = event("WorkCompleted", "OWNER");
+    for (var recipient : List.of(Map.entry(completed.ownerMemberId(), "OWNER"), Map.entry(completed.workerMemberId(), "WORKER")))
+      jdbc.update("INSERT INTO notification_device_tokens (token_hash, token, member_id, member_role, updated_at)"
+          + " VALUES (?, ?, ?, ?, UTC_TIMESTAMP(6))", UUID.randomUUID().toString().replace("-", "").repeat(2),
+          "review-request-token-" + UUID.randomUUID(), recipient.getKey(), recipient.getValue());
+    // 완료 알림·양측 리뷰 요청·FCM 대기열이 한 트랜잭션이라 롤백하면 receipt까지 함께 사라진다.
+    new TransactionTemplate(transactions).executeWithoutResult(status -> {
+      events.receive(completed);
+      status.setRollbackOnly();
+    });
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notification_events WHERE event_id = ?", Long.class,
+        completed.eventId())).isZero();
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id = ?", Long.class,
+        completed.eventId())).isZero();
     var pool = Executors.newFixedThreadPool(6);
     try {
       List<Future<?>> tasks = new ArrayList<>();
@@ -187,6 +200,10 @@ class WorkNotificationIntegrationTests extends IntegrationTestSupport {
     assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id = ? AND notification_type = ?",
         Long.class, completed.eventId(), "ReviewRequested")).isEqualTo(2);
     assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE event_id = ?", Long.class,
+        completed.eventId())).isEqualTo(3);
+    // 점주 리뷰 요청 1건, 알바생 완료 알림·리뷰 요청 2건이 각자 기기로 대기한다.
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notification_push_deliveries d"
+        + " JOIN notifications n ON n.id = d.notification_id WHERE n.event_id = ?", Long.class,
         completed.eventId())).isEqualTo(3);
   }
 
