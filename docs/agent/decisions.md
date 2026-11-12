@@ -2246,3 +2246,22 @@ Implication for agents:
 Related files:
 - `docs/architecture/settlement-payout-mvp.md`
 - `docs/architecture/settlement-design.md`
+
+## 2026-11-13 - Review Request Notifications for Both Participants (#173)
+
+Decision:
+- The user chose that every `WorkCompleted` stores a `ReviewRequested` notification for both the owner and the worker, including the participant who completed the work, in the same transaction as the existing counterpart completion notification.
+- The notification recipient uniqueness key includes the notification type (V7), so one event can produce several notification types for the same recipient.
+- Completions processed before V7 are not backfilled, and other work events do not request reviews.
+
+Reason:
+- Trust scores depend on accumulated reviews. A single notification type gives the Android client one entry point to review writing, instead of reusing the counterpart's `WorkCompleted` notification while the actor gets nothing.
+
+Implication for agents:
+- Keep review requests derived from the work completion event ID so existing receipt, fingerprint, and redelivery idempotency apply; do not add a separate review-request event or member-service call.
+- The Android client owns the `ReviewRequested` text and navigation. Review-period expiry stays enforced by member-service (`REVIEW-409-002`), not by expiring notifications.
+
+Related files:
+- `docs/architecture/notification-design.md`
+- `notification-service/src/main/java/com/workernotfound/notification/domain/notification/service/WorkNotificationEventService.java`
+- `notification-service/src/main/resources/db/migration/V7__review_request_notifications.sql`
