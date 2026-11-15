@@ -104,6 +104,9 @@ public class JobPost extends BaseEntity {
     @Column(nullable = false)
     private boolean published;
 
+    // 점주 목록에서 숨긴 시각. 상세 조회와 내부 처리에는 영향을 주지 않는다.
+    private LocalDateTime deletedAt;
+
     @Builder
     private JobPost(
             Long businessId,
@@ -254,6 +257,15 @@ public class JobPost extends BaseEntity {
             throw new IllegalStateException("결제 대기 공고만 지원 마감으로 마감할 수 있습니다: " + status);
         }
         this.status = JobStatus.CLOSED;
+    }
+
+    public void deleteFromOwnerList(LocalDateTime now) {
+        if (status != JobStatus.CLOSED) {
+            throw new IllegalStateException("마감된 공고만 삭제할 수 있습니다.");
+        }
+        if (deletedAt == null) {
+            deletedAt = toStoredTime(now);
+        }
     }
 
     public void closeByOwner() {

@@ -23,19 +23,20 @@ public interface JobPostRepository extends JpaRepository<JobPost, Long> {
 
     List<JobPost> findByStatusAndCategoryIdIn(JobStatus status, List<Long> categoryIds);
 
-    // 점주 본인 공고 목록. 정렬은 호출자의 Pageable(created_at DESC, id DESC)로 idx_job_posts_owner_created를 탄다.
-    Page<JobPost> findByOwnerId(Long ownerId, Pageable pageable);
+    // 점주 본인 공고 목록. 정렬은 호출자의 Pageable(created_at DESC, id DESC)로 idx_job_posts_owner_deleted_created를 탄다.
+    Page<JobPost> findByOwnerIdAndDeletedAtIsNull(Long ownerId, Pageable pageable);
 
-    Page<JobPost> findByOwnerIdAndStatus(Long ownerId, JobStatus status, Pageable pageable);
+    Page<JobPost> findByOwnerIdAndStatusAndDeletedAtIsNull(Long ownerId, JobStatus status, Pageable pageable);
 
-    long countByOwnerId(Long ownerId);
+    long countByOwnerIdAndDeletedAtIsNull(Long ownerId);
 
-    long countByOwnerIdAndStatus(Long ownerId, JobStatus status);
+    long countByOwnerIdAndStatusAndDeletedAtIsNull(Long ownerId, JobStatus status);
 
     // JPA setFirstResult(int)의 한도를 넘는 offset도 MySQL에는 long으로 전달할 수 있다.
     @Query(value = """
             select j.* from job_posts j
             where j.owner_id = :ownerId
+              and j.deleted_at is null
               and (:status is null or j.status = :status)
             order by j.created_at desc, j.id desc
             limit :size offset :offset

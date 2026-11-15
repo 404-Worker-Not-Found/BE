@@ -2172,3 +2172,20 @@ Implication for agents:
 Related files:
 - `docs/architecture/fcm-push-design.md`
 - `notification-service`
+
+## 2026-11-15 - Closed Job Deletion from Owner List
+
+Decision:
+- The user approved the recommendation to allow only the owning OWNER to delete a CLOSED job from their list through `DELETE /api/jobs/{id}`.
+- Store the first deletion timestamp, return 200 for repeats without an Idempotency-Key, and exclude deleted jobs from owner list pages, status filters and totals. Reject non-CLOSED jobs with `JOB-409-016`; other owners' jobs remain 404.
+- Preserve job state, existing detail visibility, related records and internal processing. Deletion does not cancel work, refund deposits or send a new recruitment-completion command.
+
+Reason:
+- Owners need to remove closed postings from their list while preserving records needed for existing applications, work and payment flows.
+
+Implication for agents:
+- Apply the deletion filter only to owner-list queries and their counts; do not introduce global entity filtering or physical deletion.
+
+Related files:
+- `docs/architecture/job-post-design.md`
+- `job-service/src/main/resources/db/migration/V24__add_deleted_at_to_job_posts.sql`

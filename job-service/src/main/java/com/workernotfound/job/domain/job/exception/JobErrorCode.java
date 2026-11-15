@@ -33,7 +33,8 @@ public enum JobErrorCode implements ErrorCode {
     FUNDING_REVISION_CONFLICT("JOB-409-012", "같은 주문과 revision의 예치 상태 알림 내용이 다릅니다.", HttpStatus.CONFLICT),
     FUNDING_ORDER_LINK_PENDING("JOB-409-013", "결제 주문 연결이 끝나지 않아 예치 상태를 아직 반영할 수 없습니다. 같은 명령으로 다시 시도하세요.", HttpStatus.CONFLICT),
     PAYMENT_CHANGE_NOT_ALLOWED("JOB-409-014", "결제 조건을 변경하거나 재결제할 수 없는 공고입니다.", HttpStatus.CONFLICT),
-    PAYMENT_CHANGE_IN_PROGRESS("JOB-409-015", "진행 중인 결제 주문 생성·교체가 있습니다. 결과가 확인된 뒤 다시 시도하세요.", HttpStatus.CONFLICT);
+    PAYMENT_CHANGE_IN_PROGRESS("JOB-409-015", "진행 중인 결제 주문 생성·교체가 있습니다. 결과가 확인된 뒤 다시 시도하세요.", HttpStatus.CONFLICT),
+    JOB_DELETE_NOT_ALLOWED("JOB-409-016", "마감된 공고만 삭제할 수 있습니다.", HttpStatus.CONFLICT);
 
     private final String code;
     private final String message;
