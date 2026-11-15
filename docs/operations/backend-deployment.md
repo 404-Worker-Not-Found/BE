@@ -197,6 +197,30 @@ sudo ./scripts/deploy.sh up
 
 Lightsail은 서버를 stop해도 요금이 계속 발생한다. 프로젝트 종료 시 필요한 백업을 외부에 보관한 뒤 인스턴스·불필요한 스냅샷·연결 해제된 고정 IP 등 남은 리소스를 정리하고 Billing에서 비용을 확인한다.
 
+## 백엔드 재배포 기록 (2026-11-05 KST, #162)
+
+대상은 `66e388a459d4d78f463b86dfbfc064696dcd71ad`다. [이미지 발행 실행](https://github.com/404-Worker-Not-Found/BE/actions/runs/41868728756)에서 전체 서비스 검증과 배포 설정·프록시 검사, 8개 이미지 발행이 모두 성공했다.
+
+서버의 기존 소스는 `ea8033b`, 실행 중이던 앱 이미지 태그는 `cd8cc800108e77449177287299146e612f973675`였다. 서버 전용 설정 3개와 `.env.deploy`, 설정 diff 및 기존 이미지 ID는 root 전용 `/home/ubuntu/wnf-deploy-backups/release-66e388a`에 보관했다. 설정 차이를 확인한 뒤 최신 소스로 갱신했고, 기존 안드로이드 설정과 Firebase 파일 연결은 최신 저장소에 포함되어 있다. `IMAGE_TAG`만 대상 SHA로 바꾸었으며 토스 테스트 결제 활성화와 기존 비밀값을 보존했다. FCM 푸시는 기본값인 비활성 상태다.
+
+**완료:** 이미지 다운로드와 앱·proxy 중지 후 MySQL 백업 `/home/ubuntu/wnf-backend/backups/mysql-20261104T165205Z.sql.gz`를 만들었고 `gzip -t`를 통과했다. DB·Redis를 유지한 상태에서 서버 스냅샷 `Ubuntu-1-before-66e388a-20261105` 생성 완료를 확인한 뒤 `deploy.sh up`을 실행했다. 종료 코드 0, Caddy 설정 검증 성공, 8개 앱 healthy와 대상 SHA 이미지 사용을 확인했다. 서버 작업 트리는 깨끗하고 `.env.deploy`는 백업과 비교해 `IMAGE_TAG`만 달라졌다. 기존 이미지 ID와 배포 후 이미지·재시작 상태는 백업 디렉터리의 `images-before.txt`, `images-after.txt`에 있다.
+
+Flyway 최종 버전은 auth/member/job/matching/work/chat/payment/notification 순서로 3/6/23/15/8/6/14/6이며 실패 기록은 없다. 공개 HTTPS에서 카테고리·공고 검색 200, JWT 없는 내 정보 401, 내부 API·Actuator 404, 인증 없는 Swagger 문서 401을 확인했다. 배포된 Swagger에서도 카테고리 API가 표시된다.
+
+채팅 서비스는 첫 초기화 때 Redis 연결 초기화의 2초 타임아웃으로 한 번 재시작한 뒤 정상 기동했다. 최종 확인에서도 재시작 횟수 1과 healthy를 유지했고 OOM은 없었다. 초기 동시 기동 시 Redis 연결 타임아웃은 추후 관찰 대상이다. 이번 검사는 인증 후 업무 흐름, 실제 제공자 결제, FCM 기기 수신 또는 부하 시험을 대신하지 않는다. Flyway 변경이 반영되었으므로 이전 이미지 실행만으로 DB까지 원복되는 것으로 간주하지 않는다.
+
+## 최신 백엔드 재배포 기록 (2026-11-14 KST, #162)
+
+사용자가 선택한 최신 `develop` 커밋 `59f1fc437ed44882992698ff73dc82f5d17fd5c0`을 `Ubuntu-1`의 `/home/ubuntu/wnf-backend`에 배포했다. 로컬 회원가입 오류 처리 수정 `392c528`은 이 배포에 포함되지 않는다. [이미지 발행 실행](https://github.com/404-Worker-Not-Found/BE/actions/runs/43571794753)에서 전체 저장소 검증, 배포 설정·프록시 검사와 8개 이미지 발행이 모두 성공했다.
+
+이전 서버 소스·앱 이미지 태그는 `66e388a459d4d78f463b86dfbfc064696dcd71ad`였다. 기존 환경 파일은 root 전용 `/home/ubuntu/wnf-deploy-backups/release-59f1fc4/env.before`에 백업했고, 배포 파일은 비교 결과 `IMAGE_TAG`만 변경됐다. 기존 비밀값과 기능 활성화 설정을 보존했으며 Firebase 인증 파일의 존재를 확인했다. 서버 소스와 앱 8개의 실행 이미지 태그가 대상 SHA와 일치하고 서버 Git 작업 트리가 깨끗함을 확인했다.
+
+이미지를 모두 내려받은 뒤 앱과 proxy를 중지하고 MySQL 백업 `/home/ubuntu/wnf-backend/backups/mysql-20261114T084435Z.sql.gz`를 생성했다. `gzip -t`를 통과했으며, 서버 스냅샷 `ubuntu-1-before-59f1fc4-20261114` 생성 완료를 확인한 후 새 버전을 기동했다. 백업 디렉터리의 `images-before.json`은 앱 중지 후·교체 전 기준이고, `images-after.json`과 `up.log`는 배포 후 상태와 기동 기록이다.
+
+`deploy.sh up`은 첫 기동에서 chat-service의 unhealthy 상태로 대기 검사가 실패했다. 채팅 로그에 matching Redis 연결 실패가 기록됐으며, 자동으로 한 번 재시작한 뒤 최종 검사에서 healthy를 유지했다. 최종 상태는 앱 8개 모두 healthy, 채팅 재시작 1회·다른 앱 0회, 모든 앱 OOM 없음이다. Caddy 설정 검증은 별도로 실행해 성공했다. 초기 Redis 연결 실패는 이전 배포에서도 관찰된 기동 안정성 보강 항목이다.
+
+새 Flyway 마이그레이션은 member V7, matching V16, payment V15, notification V7이 각각 성공했다. 공개 HTTPS에서 공고 검색·카테고리 조회 200, JWT 없는 내 정보 조회 401, 내부 API·Actuator 404, 인증 없는 Swagger 문서 401을 확인했다. 인증 후 업무 흐름, 실제 제공자 결제·환불, 기기 푸시 수신과 부하 시험은 이번 배포 검사에 포함하지 않았다. DB 스키마가 변경됐으므로 이전 이미지 실행만으로 DB까지 원복되지 않는다.
+
 ## 공식 문서
 
 - [Lightsail 요금](https://aws.amazon.com/lightsail/pricing/)
