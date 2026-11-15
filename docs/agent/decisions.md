@@ -2173,6 +2173,99 @@ Related files:
 - `docs/architecture/fcm-push-design.md`
 - `notification-service`
 
+## 2026-11-09 - Tentative No-show Trust Score Penalty (#164)
+
+Decision:
+- The user chose a fixed deduction per no-show: trust score = max(0, review rating score - penalty × no-show count), default penalty 10 points (`MEMBER_TRUST_SCORE_NO_SHOW_PENALTY`), as the new policy version `review-rating-no-show-v1`. The review rating calculation is unchanged.
+- Workers without received reviews start from the prior rating's neutral score (default 3.0 → 50.00) when they have a no-show, so a no-show alone creates a trust score. `TrustScoreUpdated` v1 may carry `reviewCount` 0 and adds `noShowCount`; matching-service accepts review count 0.
+- Only work-service `WorkNoShow` v1 (system-decided, revision 4) counts, once per work, for the worker. No recovery or time decay. Post-confirmation cancellation penalties remain deferred.
+- member-service consumes no-shows with a separate group from the start of `work:domain-events`, so no-shows before deployment are counted.
+
+Reason:
+- No-show is the clearest reliability signal the platform records, and matching already weights the trust score. A fixed deduction is simple to explain while the policy is tentative.
+
+Implication for agents:
+- Keep no-show counts in the same per-member input row as review totals so review and no-show updates share one lock and revision order.
+- Add cancellation penalties, recovery, decay, or weight changes only as new policy versions after the user confirms them. Do not modify existing score batches.
+
+Related files:
+- `docs/architecture/member-review-design.md`
+- `member-service/src/main/java/com/workernotfound/member/domain/review/service/TrustScorePolicy.java`
+- `member-service/src/main/resources/db/migration/V7__record_member_no_shows.sql`
+- `matching-service/src/main/resources/db/migration/V16__allow_no_show_only_trust_scores.sql`
+
+## 2026-11-12 - Automatic Refund of Released No-show/Cancellation Locks (#167)
+
+Decision:
+- The user chose that payment-service requests an owner refund of the full released lock amount in the same transaction when the work-termination consumer releases a confirmed work's lock after `WorkNoShow` or agreement `WorkCanceled`. This is an exception to the 2026-10-22 rule that job-service decides refund timing, valid while re-recruitment and job reopening do not exist.
+- Only `RELEASED` terminations refund. Review-required (funding-blocked, settlement-transferred, inactive lock) and already-released terminations do not.
+- The feature is disabled by default (`PAYMENT_TERMINATION_REFUND_ENABLED=false`). Keep it off until a real Toss test environment confirms partial/full cancel, same-key retry, and webhook receipt. Amounts released while disabled are not refunded later automatically.
+
+Reason:
+- Released money from a no-show or cancellation is never reused under the current policy, but it stayed in the deposit with no caller to return it to the owner.
+
+Implication for agents:
+- Reuse the existing refund command with the fixed key `work-termination-refund-{workId}`; never create a second refund for the same work. Check that the deposit's single DEPOSITED order exists before requesting, so a ledger inconsistency cannot roll back the lock release.
+- Revisit this exception before adding re-recruitment, job reopening, or job-service refund triggers.
+
+Related files:
+- `docs/architecture/refund-design.md`
+- `payment-service/src/main/java/com/workernotfound/payment/domain/refund/service/TerminationRefundService.java`
+- `payment-service/src/main/resources/db/migration/V15__termination_refunds.sql`
+
+## 2026-11-12 - Trust Score Query Visibility (#169)
+
+Decision:
+- The user approved `GET /api/members/{memberId}/trust-score`, readable by any authenticated member like received reviews. It returns the stored trust score, review count, no-show count, and update time; the score and update time are null when the member has neither reviews nor no-shows.
+- No-show counts are therefore visible to other authenticated members, including owners reviewing applicants.
+
+Reason:
+- The graduation demonstration must show trust score changes after reviews and no-shows, and owners need to judge applicants. Received reviews already use the same visibility.
+
+Implication for agents:
+- The query reads `member_trust_scores` only; never recalculate or change the score or `TrustScoreUpdated` in a read path.
+- Narrow visibility (for example, self-only no-show counts) only after the user decides so.
+
+Related files:
+- `docs/architecture/member-review-design.md`
+- `member-service/src/main/java/com/workernotfound/member/domain/review/controller/ReviewController.java`
+
+## 2026-11-12 - Settlement Demonstration Ends at Scheduled Payout
+
+Decision:
+- The user chose to demonstrate settlement only up to the scheduled-payout state: deposit, matching lock, work completion, and the participant's settlement showing `RESERVED` with `payableAt` (or `ON_HOLD` after no-show or cancellation). The final transfer is explained in the presentation, not executed.
+- The existing rules stay: payout execution remains disabled (`PAYMENT_PAYOUT_ENABLED=false`), no demo-only or fake payout gateway is added, and settlements are never marked `PAID` without a confirmed provider payout.
+
+Reason:
+- Real payout requires a Toss payout-service contract, payee registration and KYC, and fee and withholding decisions, which cannot be completed before the demonstration. A fake success would contradict the 2026-10-18 payout rules and risk marking real data paid without money moving.
+
+Implication for agents:
+- Do not implement a simulated payout, a success stub outside tests, or a manual `PAID` transition for demonstration purposes.
+- Revisit only after the user reports the Toss payout contract, sandbox availability, and fee/withholding decisions.
+
+Related files:
+- `docs/architecture/settlement-payout-mvp.md`
+- `docs/architecture/settlement-design.md`
+
+## 2026-11-13 - Review Request Notifications for Both Participants (#173)
+
+Decision:
+- The user chose that every `WorkCompleted` stores a `ReviewRequested` notification for both the owner and the worker, including the participant who completed the work, in the same transaction as the existing counterpart completion notification.
+- The notification recipient uniqueness key includes the notification type (V7), so one event can produce several notification types for the same recipient.
+- Completions processed before V7 are not backfilled, and other work events do not request reviews.
+
+Reason:
+- Trust scores depend on accumulated reviews. A single notification type gives the Android client one entry point to review writing, instead of reusing the counterpart's `WorkCompleted` notification while the actor gets nothing.
+
+Implication for agents:
+- Keep review requests derived from the work completion event ID so existing receipt, fingerprint, and redelivery idempotency apply; do not add a separate review-request event or member-service call.
+- The Android client owns the `ReviewRequested` text and navigation. Review-period expiry stays enforced by member-service (`REVIEW-409-002`), not by expiring notifications.
+
+Related files:
+- `docs/architecture/notification-design.md`
+- `notification-service/src/main/java/com/workernotfound/notification/domain/notification/service/WorkNotificationEventService.java`
+- `notification-service/src/main/resources/db/migration/V7__review_request_notifications.sql`
+
 ## 2026-11-15 - Closed Job Deletion from Owner List
 
 Decision:

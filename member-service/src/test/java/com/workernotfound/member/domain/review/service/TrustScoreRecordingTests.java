@@ -64,7 +64,7 @@ class TrustScoreRecordingTests extends IntegrationTestSupport {
 		long second = completedWork(owner, worker);
 
 		commands.write(owner, new WriteReviewRequest(first, 5, null));
-		assertThat(trustScores.find(worker)).contains(new CurrentTrustScore(new java.math.BigDecimal("62.50"), 1, 1));
+		assertThat(trustScores.find(worker)).contains(new CurrentTrustScore(new java.math.BigDecimal("62.50"), 1, 0, 1));
 		commands.write(owner, new WriteReviewRequest(second, 4, null));
 
 		CurrentTrustScore current = trustScores.find(worker).orElseThrow();
@@ -81,7 +81,8 @@ class TrustScoreRecordingTests extends IntegrationTestSupport {
 		assertThat(latest.path("version").asInt()).isEqualTo(1);
 		assertThat(latest.path("trustScore").decimalValue()).isEqualByComparingTo("65.00");
 		assertThat(latest.path("reviewCount").asLong()).isEqualTo(2);
-		assertThat(latest.path("policyVersion").asText()).isEqualTo("review-rating-v1");
+		assertThat(latest.path("noShowCount").asLong()).isZero();
+		assertThat(latest.path("policyVersion").asText()).isEqualTo("review-rating-no-show-v1");
 	}
 
 	@Test

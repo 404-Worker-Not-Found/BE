@@ -178,6 +178,36 @@ class TrustScoreQueueRefreshTests extends IntegrationTestSupport {
 			.containsExactly(new BigDecimal("87.5"));
 	}
 
+	// member-service review-rating-no-show-v1은 리뷰 없이 노쇼만 있는 회원을 reviewCount 0, noShowCount와 함께 보낸다.
+	@Test
+	void consumerAppliesNoShowOnlyTrustScoreWithoutReviews() throws Exception {
+		createApplication(FIRST_WORKER, 9_100_101L, BASE_TIME);
+		TrustScoreUpdate noShowOnly = new TrustScoreUpdate(UUID.randomUUID().toString(), FIRST_WORKER, 1,
+			new BigDecimal("40.00"), 0, "review-rating-no-show-v1");
+		Map<String, String> fields = envelope(noShowOnly);
+		Map<String, Object> payload = mapper.readValue(fields.get("payload"), Map.class);
+		payload.put("noShowCount", 1);
+		fields.put("payload", mapper.writeValueAsString(payload));
+		Map<String, String> negativeReviews = envelope(update(SECOND_WORKER, 1, "40.00"));
+		negativeReviews.put("payload", negativeReviews.get("payload").replace("\"reviewCount\":1", "\"reviewCount\":-1"));
+		addRecord(fields);
+		addRecord(negativeReviews);
+
+		consumer.poll();
+
+		assertThat(jdbc.queryForMap("select trust_score, review_count, policy_version from member_trust_scores"
+			+ " where member_id = ?", FIRST_WORKER))
+			.containsEntry("review_count", 0)
+			.containsEntry("policy_version", "review-rating-no-show-v1");
+		assertThat(jdbc.queryForObject("select count(*) from member_trust_scores where member_id = ?",
+			Long.class, SECOND_WORKER)).isZero();
+		assertThat(redisTemplate.opsForStream().pending(STREAM, "matching-trust-score-v1").getTotalPendingMessages())
+			.isEqualTo(1);
+		assertThat(scoreQueueRepository.findScores(JOB_POST_ID, currentBatchId()))
+			.extracting(RankedApplicationScore::totalScore)
+			.containsExactly(new BigDecimal("70.0"));
+	}
+
 	private long currentBatchId() {
 		return scoreQueueRepository.findMetadata(JOB_POST_ID).orElseThrow().scoreBatchId();
 	}

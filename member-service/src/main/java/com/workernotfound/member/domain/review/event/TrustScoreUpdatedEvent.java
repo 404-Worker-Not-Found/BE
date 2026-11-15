@@ -5,7 +5,8 @@ import java.util.UUID;
 
 /**
  * 회원 신뢰 점수가 바뀐 사실. aggregate는 회원(MEMBER)이고 revision은 회원별 신뢰 점수 변경 순번이다.
- * 발생 시각은 Stream envelope의 occurredAt으로 전달하고 payload에는 시각을 넣지 않는다.
+ * 발생 시각은 Stream envelope의 occurredAt으로 전달하고 payload에는 시각을 넣지 않는다. 리뷰 없이 노쇼만 있는 회원은
+ * reviewCount가 0이다. noShowCount는 review-rating-no-show-v1부터 추가된 필드다.
  */
 public record TrustScoreUpdatedEvent(
 	String eventId,
@@ -15,6 +16,7 @@ public record TrustScoreUpdatedEvent(
 	int version,
 	BigDecimal trustScore,
 	long reviewCount,
+	long noShowCount,
 	String policyVersion
 ) {
 	public static final String TYPE = "TrustScoreUpdated";
@@ -22,8 +24,8 @@ public record TrustScoreUpdatedEvent(
 	public static final int SCHEMA_VERSION = 1;
 
 	public static TrustScoreUpdatedEvent of(long memberId, long revision, BigDecimal trustScore, long reviewCount,
-		String policyVersion) {
+		long noShowCount, String policyVersion) {
 		return new TrustScoreUpdatedEvent(UUID.randomUUID().toString(), TYPE, memberId, revision, SCHEMA_VERSION,
-			trustScore, reviewCount, policyVersion);
+			trustScore, reviewCount, noShowCount, policyVersion);
 	}
 }

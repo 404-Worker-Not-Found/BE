@@ -20,6 +20,9 @@ spring:
 payment:
   work-termination:
     enabled: ${PAYMENT_WORK_TERMINATION_ENABLED:true}
+  termination-refund:
+    # 노쇼·확정 근무 취소로 해제한 잠금 금액을 점주 환불로 자동 요청한다. 실제 토스 테스트 환경에서 부분 취소·웹훅을 확인하기 전에는 켜지 않는다.
+    enabled: ${PAYMENT_TERMINATION_REFUND_ENABLED:false}
   jwt:
     secret: ${AUTH_JWT_SECRET}
   toss:

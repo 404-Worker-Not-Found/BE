@@ -4,6 +4,7 @@ import com.workernotfound.member.domain.review.dto.request.WriteReviewRequest;
 import com.workernotfound.member.domain.review.dto.response.PendingReviewsResponse;
 import com.workernotfound.member.domain.review.dto.response.ReceivedReviewsResponse;
 import com.workernotfound.member.domain.review.dto.response.ReviewResponse;
+import com.workernotfound.member.domain.review.dto.response.TrustScoreResponse;
 import com.workernotfound.member.global.config.OpenApiConfig;
 import com.workernotfound.member.global.response.ApiResponse;
 import com.workernotfound.member.global.security.AuthenticatedMember;
@@ -19,7 +20,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import org.springframework.http.ResponseEntity;
 
-@Tag(name = "Review", description = "근무 완료 기반 상호 리뷰 API")
+@Tag(name = "Review", description = "근무 완료 기반 상호 리뷰와 신뢰 점수 API")
 public interface ReviewControllerDocs {
 
 	@Operation(
@@ -70,5 +71,20 @@ public interface ReviewControllerDocs {
 		@Parameter(description = "회원 ID") @Positive Long memberId,
 		@Parameter(description = "페이지(0부터)") @Min(0) int page,
 		@Parameter(description = "페이지 크기(1~100)") @Min(1) @Max(100) int size
+	);
+
+	@Operation(
+		summary = "신뢰 점수 조회",
+		description = "회원의 현재 신뢰 점수(0~100, 소수 둘째 자리)와 계산에 쓴 받은 리뷰 수·노쇼 횟수를 조회합니다. "
+			+ "받은 리뷰 평점을 보정한 점수에서 노쇼 1회당 고정 감점(기본 10점)을 뺍니다(임시 정책). "
+			+ "받은 리뷰와 노쇼가 모두 없으면 trustScore와 updatedAt은 null, 횟수는 0입니다.",
+		security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+	)
+	@ApiResponses({
+		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공", useReturnTypeSchema = true),
+		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "회원 없음", content = @Content)
+	})
+	ResponseEntity<ApiResponse<TrustScoreResponse>> getTrustScore(
+		@Parameter(description = "회원 ID") @Positive Long memberId
 	);
 }

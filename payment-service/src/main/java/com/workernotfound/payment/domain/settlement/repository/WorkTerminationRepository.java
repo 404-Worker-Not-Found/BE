@@ -34,6 +34,10 @@ public class WorkTerminationRepository {
     return result;
   }
 
+  public void recordRefund(long workId, Long refundId, String outcome) {
+    jdbc.update("UPDATE payment_work_terminations SET refund_id=?,refund_outcome=? WHERE work_id=?", refundId, outcome, workId);
+  }
+
   public String recordReceipt(WorkTerminationEvent event, String result) {
     jdbc.update("INSERT INTO payment_termination_event_receipts(event_id,work_id,matching_id,fingerprint,result,received_at)"
         + " VALUES (?,?,?,?,?,CURRENT_TIMESTAMP(6))", event.eventId(), event.workId(), event.matchingId(), event.fingerprint(), result);

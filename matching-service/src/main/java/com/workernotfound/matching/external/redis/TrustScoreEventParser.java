@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 // member-service TrustScoreUpdated v1. envelope와 payload의 식별 값이 같고 점수·리뷰 수가 계약 범위여야 한다.
+// 리뷰 없이 노쇼만 있는 회원은 reviewCount가 0이다. 점수 계산에 쓰지 않는 noShowCount는 읽지 않는다.
 @Component
 @RequiredArgsConstructor
 public class TrustScoreEventParser {
@@ -60,7 +61,7 @@ public class TrustScoreEventParser {
 				&& isPositive(memberId) && isPositive(revision) && Objects.equals(version, SCHEMA_VERSION)
 				&& trustScore != null && trustScore.signum() >= 0 && trustScore.compareTo(MAX_SCORE) <= 0
 				&& trustScore.stripTrailingZeros().scale() <= 2
-				&& isPositive(reviewCount) && reviewCount <= Integer.MAX_VALUE
+				&& reviewCount != null && reviewCount >= 0 && reviewCount <= Integer.MAX_VALUE
 				&& hasText(policyVersion) && policyVersion.length() <= 50;
 		}
 

@@ -6,10 +6,12 @@ import com.workernotfound.member.domain.review.dto.response.PendingReviewsRespon
 import com.workernotfound.member.domain.review.dto.response.PendingReviewsResponse.PendingReview;
 import com.workernotfound.member.domain.review.dto.response.ReceivedReviewsResponse;
 import com.workernotfound.member.domain.review.dto.response.ReceivedReviewsResponse.ReceivedReview;
+import com.workernotfound.member.domain.review.dto.response.TrustScoreResponse;
 import com.workernotfound.member.domain.review.entity.MemberReview;
 import com.workernotfound.member.domain.review.entity.ReviewableWork;
 import com.workernotfound.member.domain.review.repository.MemberReviewRepository;
 import com.workernotfound.member.domain.review.repository.MemberReviewStatsRepository;
+import com.workernotfound.member.domain.review.repository.MemberTrustScoreRepository;
 import com.workernotfound.member.domain.review.repository.ReviewableWorkRepository;
 import com.workernotfound.member.global.exception.BusinessException;
 import java.time.Clock;
@@ -28,6 +30,7 @@ public class ReviewQueryService {
 	private final ReviewableWorkRepository works;
 	private final MemberReviewRepository reviews;
 	private final MemberReviewStatsRepository stats;
+	private final MemberTrustScoreRepository trustScores;
 	private final ReviewProperties properties;
 	private final Clock clock;
 
@@ -38,6 +41,14 @@ public class ReviewQueryService {
 			PageRequest.of(page, size));
 		return new ReceivedReviewsResponse(memberId, summary.reviewCount(), summary.averageRating(),
 			result.map(ReceivedReview::from).getContent(), page, size, result.getTotalElements());
+	}
+
+	// 받은 리뷰와 노쇼가 모두 없으면 점수를 만들지 않으므로 점수 없이 횟수 0을 돌려준다.
+	public TrustScoreResponse trustScore(Long memberId) {
+		if (!members.existsById(memberId)) throw new BusinessException(MemberErrorCode.MEMBER_NOT_FOUND);
+		return trustScores.findSummary(memberId)
+			.map(summary -> TrustScoreResponse.from(memberId, summary))
+			.orElseGet(() -> TrustScoreResponse.empty(memberId));
 	}
 
 	public PendingReviewsResponse pending(Long memberId, int page, int size) {

@@ -85,6 +85,9 @@ class WorkTerminationIntegrationTests extends IntegrationTestSupport {
     assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment_status_histories WHERE termination_work_id=?", Long.class, fixture.work())).isEqualTo(1);
     assertThat(settlements.reserve(completion(fixture)).outcome()).isEqualTo(SettlementReservationResult.Outcome.WORK_CONFLICT);
     assertThat(jdbc.queryForObject("SELECT refunded_amount FROM payment_deposits WHERE job_post_id=?", BigDecimal.class, fixture.job())).isEqualByComparingTo("0");
+    // 종료 환불은 기본 꺼짐이다(#167). 해제 금액은 가용 잔액에 남고 환불 결과도 남기지 않는다.
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment_refunds WHERE job_post_id=?", Long.class, fixture.job())).isZero();
+    assertThat(jdbc.queryForObject("SELECT refund_outcome FROM payment_work_terminations WHERE work_id=?", String.class, fixture.work())).isNull();
   }
 
   @Test
