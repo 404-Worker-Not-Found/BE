@@ -209,7 +209,7 @@ Flyway 최종 버전은 auth/member/job/matching/work/chat/payment/notification 
 
 채팅 서비스는 첫 초기화 때 Redis 연결 초기화의 2초 타임아웃으로 한 번 재시작한 뒤 정상 기동했다. 최종 확인에서도 재시작 횟수 1과 healthy를 유지했고 OOM은 없었다. 초기 동시 기동 시 Redis 연결 타임아웃은 추후 관찰 대상이다. 이번 검사는 인증 후 업무 흐름, 실제 제공자 결제, FCM 기기 수신 또는 부하 시험을 대신하지 않는다. Flyway 변경이 반영되었으므로 이전 이미지 실행만으로 DB까지 원복되는 것으로 간주하지 않는다.
 
-## 최신 백엔드 재배포 기록 (2026-11-14 KST, #162)
+## 백엔드 재배포 기록 (2026-11-14 KST, #162)
 
 사용자가 선택한 최신 `develop` 커밋 `59f1fc437ed44882992698ff73dc82f5d17fd5c0`을 `Ubuntu-1`의 `/home/ubuntu/wnf-backend`에 배포했다. 로컬 회원가입 오류 처리 수정 `392c528`은 이 배포에 포함되지 않는다. [이미지 발행 실행](https://github.com/404-Worker-Not-Found/BE/actions/runs/43571794753)에서 전체 저장소 검증, 배포 설정·프록시 검사와 8개 이미지 발행이 모두 성공했다.
 
@@ -220,6 +220,18 @@ Flyway 최종 버전은 auth/member/job/matching/work/chat/payment/notification 
 `deploy.sh up`은 첫 기동에서 chat-service의 unhealthy 상태로 대기 검사가 실패했다. 채팅 로그에 matching Redis 연결 실패가 기록됐으며, 자동으로 한 번 재시작한 뒤 최종 검사에서 healthy를 유지했다. 최종 상태는 앱 8개 모두 healthy, 채팅 재시작 1회·다른 앱 0회, 모든 앱 OOM 없음이다. Caddy 설정 검증은 별도로 실행해 성공했다. 초기 Redis 연결 실패는 이전 배포에서도 관찰된 기동 안정성 보강 항목이다.
 
 새 Flyway 마이그레이션은 member V7, matching V16, payment V15, notification V7이 각각 성공했다. 공개 HTTPS에서 공고 검색·카테고리 조회 200, JWT 없는 내 정보 조회 401, 내부 API·Actuator 404, 인증 없는 Swagger 문서 401을 확인했다. 인증 후 업무 흐름, 실제 제공자 결제·환불, 기기 푸시 수신과 부하 시험은 이번 배포 검사에 포함하지 않았다. DB 스키마가 변경됐으므로 이전 이미지 실행만으로 DB까지 원복되지 않는다.
+
+## 최신 백엔드 재배포 기록 (2026-11-15 KST, #162)
+
+사용자가 선택한 최신 `develop` 커밋 `9700546ac5edf4c7b8bbd177d060b8b48249d41c`을 `Ubuntu-1`의 `/home/ubuntu/wnf-backend`에 배포했다. 마감 공고 삭제 API(#176)와 리뷰 작성 요청 알림 이후 변경을 포함한다. [이미지 발행 실행](https://github.com/404-Worker-Not-Found/BE/actions/runs/43694158691)에서 전체 저장소 검증과 8개 이미지 발행이 모두 성공했다.
+
+이전 서버 소스·앱 이미지 태그는 `59f1fc437ed44882992698ff73dc82f5d17fd5c0`였다. 배포 증거는 root 전용 `/home/ubuntu/wnf-deploy-backups/release-9700546-20261115`에 있다. 서버 소스, `.env.deploy`의 `IMAGE_TAG`, 앱 8개의 실행 이미지 태그가 대상 SHA와 일치하고 서버 Git 작업 트리가 깨끗함을 확인했다.
+
+이미지를 모두 내려받고 `check`를 통과한 뒤 앱과 proxy를 중지(17:39 KST)하고 MySQL 백업 `/home/ubuntu/wnf-backend/backups/mysql-20261115T083941Z.sql.gz`를 생성했다. `gzip -t`를 통과했으며, 서버 스냅샷 `ubuntu-1-before-9700546-20261115` 생성 완료(17:40 KST)를 확인한 후 새 버전을 기동했다. 백업 디렉터리의 `backup-result.json`, `snapshot.json`, `up.log`, `up-result.json`에 각 단계 기록이 있다.
+
+`deploy.sh up`은 종료 코드 0으로 끝났고 Caddy 설정 검증도 통과했다. chat-service는 첫 기동에서 `matching-redis` 호스트 이름 해석 실패로 Redis 연결에 실패해 대기 검사 중 자동으로 한 번 재시작했고, 이후 healthy가 됐다. 최종 상태는 앱 8개 모두 healthy, 채팅 재시작 1회·다른 앱 0회, 모든 컨테이너 OOM 없음이다. 같은 초기 Redis 연결 실패가 11-05, 11-14에 이어 세 번째로 관찰됐다.
+
+새 Flyway 마이그레이션 job V24(`add deleted at to job posts`)가 성공했다. 공개 HTTPS에서 공고 검색·카테고리 조회 200, JWT 없는 내 정보 조회 401, 내부 API·Actuator 404, 인증 없는 Swagger 문서 401을 확인했다. 인증 후 업무 흐름, 마감 공고 삭제 API 실제 호출, 실제 제공자 결제·환불, 기기 푸시 수신과 부하 시험은 이번 배포 검사에 포함하지 않았다. DB 스키마가 변경됐으므로 이전 이미지 실행만으로 DB까지 원복되지 않는다.
 
 ## 공식 문서
 
