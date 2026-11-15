@@ -39,6 +39,15 @@ class SwaggerDocumentationTests extends IntegrationTestSupport {
     }
 
     @Test
+    void openApiDocsDescribeClosedJobDeletion() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/jobs/{id}'].delete.summary").value("마감 공고 삭제(점주 본인)"))
+                .andExpect(jsonPath("$.paths['/api/jobs/{id}'].delete.security").isNotEmpty())
+                .andExpect(jsonPath("$.paths['/api/jobs/{id}'].delete.responses['409']").exists());
+    }
+
+    @Test
     void swaggerUiIsAccessible() throws Exception {
         mockMvc.perform(get("/swagger-ui/index.html"))
                 .andExpect(status().isOk());

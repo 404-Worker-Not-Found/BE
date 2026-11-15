@@ -2,7 +2,7 @@
 
 ## 범위
 
-`job-service`는 공고와 업종 카테고리의 원본을 소유한다. 현재는 점주의 공고 비공개(`PAYMENT_PENDING`) 등록과 payment-service 결제 주문 생성 연동, 점주의 결제 주문 조회, 공고 상세·목록 조회, 업종 카테고리 목록 조회, 점주 본인 공고 목록, matching 지원 상태 이벤트와 공고별 지원 상태 스냅샷을 반영한 공고 상세·점주 공고 목록의 지원자 수(`applicantCount`) projection, `matching-service`가 지원 저장 전에 호출하는 지원 접수 승인 내부 API와 matching Redis Stream의 `ApplicationSubmitted` 소비에 따른 승인 사용 완료 처리와 사용이 확인되지 않은 승인의 만료 처리, 매칭 확정 Saga가 호출하는 모집 자리 예약·확정·반환 내부 API와 만료 예약 회수, 1인 예정 급여 계산, 확정 인원 기준의 모집 완료 전이와 matching-service 모집 완료 알림, payment-service 예치 상태(`funding-status`) 수신에 따른 `PAYMENT_PENDING → OPEN` 공개와 예치 차단, 결제 대기 공고의 결제 조건 변경과 실패 주문 재결제(주문 교체), 환불 검토 대상 기록, 점주 수동 마감과 지원 마감·근무 시작 경과에 따른 자동 상태 전이를 제공한다. 공개 이후의 공고 수정·재모집, 재오픈, 공고 삭제, 마감 공고의 미결제 주문 정리와 남은 예치 환불, 실제 환불·정산, 확정된 매칭·근무의 자동 취소는 후속 작업이다.
+`job-service`는 공고와 업종 카테고리의 원본을 소유한다. 현재는 점주의 공고 비공개(`PAYMENT_PENDING`) 등록과 payment-service 결제 주문 생성 연동, 점주의 결제 주문 조회, 공고 상세·목록 조회, 업종 카테고리 목록 조회, 점주 본인 공고 목록, matching 지원 상태 이벤트와 공고별 지원 상태 스냅샷을 반영한 공고 상세·점주 공고 목록의 지원자 수(`applicantCount`) projection, `matching-service`가 지원 저장 전에 호출하는 지원 접수 승인 내부 API와 matching Redis Stream의 `ApplicationSubmitted` 소비에 따른 승인 사용 완료 처리와 사용이 확인되지 않은 승인의 만료 처리, 매칭 확정 Saga가 호출하는 모집 자리 예약·확정·반환 내부 API와 만료 예약 회수, 1인 예정 급여 계산, 확정 인원 기준의 모집 완료 전이와 matching-service 모집 완료 알림, payment-service 예치 상태(`funding-status`) 수신에 따른 `PAYMENT_PENDING → OPEN` 공개와 예치 차단, 결제 대기 공고의 결제 조건 변경과 실패 주문 재결제(주문 교체), 환불 검토 대상 기록, 점주 수동 마감과 지원 마감·근무 시작 경과에 따른 자동 상태 전이, 마감된 공고의 점주 목록 삭제를 제공한다. 공개 이후의 공고 수정·재모집, 재오픈, 마감 공고의 미결제 주문 정리와 남은 예치 환불, 실제 환불·정산, 확정된 매칭·근무의 자동 취소는 후속 작업이다.
 
 ## 공개 API
 
@@ -16,6 +16,7 @@
 | 결제 조건 변경 | `PUT /api/jobs/{id}/payment-terms` | `OWNER` 역할, 점주 본인, `Idempotency-Key` | 변경 후 전체 결제 조건 / 변경 요청 처리 상태 ([결제 조건 변경과 재결제](#결제-조건-변경과-재결제)) |
 | 재결제 | `POST /api/jobs/{id}/payment-order/retries` | `OWNER` 역할, 점주 본인, `Idempotency-Key` | 본문 없음 / 변경 요청 처리 상태 |
 | 수동 마감 | `POST /api/jobs/{id}/close` | `OWNER` 역할, 점주 본인, `Idempotency-Key` | 본문 없음 / `jobPostId`, `result`(`CLOSED`/`ALREADY_CLOSED`), `previousStatus`, `status`, `processedAt` ([수동 마감](#수동-마감)) |
+| 마감 공고 삭제 | `DELETE /api/jobs/{id}` | `OWNER` 역할, 점주 본인 | 본문 없음 / `data=null`, 반복 요청도 200. 점주 목록에서 숨기며 상세·연결 기록 유지 |
 | 목록 조회 | `GET /api/jobs/search` | 없음 | 위치·거리·급여·시작 시각·카테고리·유형·페이지 조건 / 공고 카드 목록과 페이지 정보 |
 | 점주 본인 공고 목록 | `GET /api/jobs/me` | `OWNER` 역할, 점주 본인(JWT `memberId`) | 상태·페이지 조건 / 점주 공고 카드 목록(확정 인원 포함)과 페이지 정보 ([점주 본인 공고 목록](#점주-본인-공고-목록)) |
 | 업종 카테고리 목록 | `GET /api/jobs/categories` | 없음 | 요청 조건 없음 / 활성 대분류(`id`, `name`)와 각 대분류의 활성 하위 분류(`subCategories`) ([업종 카테고리 목록](#업종-카테고리-목록)) |
@@ -749,7 +750,7 @@ payment-service는 200 success만 전송 완료로 보고 그 밖의 응답은 �
 - 결과 불명·운영 확인 상태로 남은 결제 변경 요청(`PENDING`)의 조회·조치 도구
 - 운영 확인 대상으로 남은 결제 주문 생성 명령의 조회·조치 도구
 - 재오픈과 그 이력 기록. 재오픈은 버전을 올려 이전 완료 알림과 구분해야 한다.
-- 마감 공고의 미결제 주문 정리와 남은 예치 잔액 환불, 공고 삭제
+- 마감 공고의 미결제 주문 정리와 남은 예치 잔액 환불
 - 근무 시작 뒤 자동 마감 전까지(최대 스케줄러 한 주기) 유효한 `RESERVED` 자리의 확정을 막을지 여부
 - 기존 멱등 키 컬럼(`job_application_admissions`, `job_matching_seat_reservations`의 예약·확정·반환 키, `job_funding_status_receipts`, `job_payment_change_requests`)은 테이블 기본 `utf8mb4_unicode_ci`라 대소문자만 다른 키를 같은 키로 본다. 운영 데이터의 충돌 여부를 확인한 뒤 바이트 비교 collation으로 바꾸는 마이그레이션이 필요하다
 - 확정된 자리의 취소·환불 정책
@@ -766,3 +767,11 @@ payment-service는 200 success만 전송 완료로 보고 그 밖의 응답은 �
 ### 서비스 간 실제 프로세스 검증(2026-10-06)
 
 job-service와 payment-service를 별도 JVM 프로세스로 실행하고 각자의 일회용 MySQL 컨테이너, 실행마다 새로 만든 테스트 전용 secret, 로컬 토스 PG 대역 서버(`TOSS_API_BASE_URL`, loopback HTTP)를 써서 실제 HTTP로 검증했다. 결제 성공은 payment-service 승인 API → PG 대역 → 예치 반영 → 예치 상태 전송 경로로만 만들었고 DB는 확인용으로만 읽었다. 확인한 흐름: 비공개 생성과 주문 생성·점주 조회의 `paymentOrderId` 연결, 공개 전 익명·타인·알바생 상세 404와 검색 제외·지원 승인 409·자리 예약 409, 테스트 예치(DEPOSITED)와 `funding-status` 전송 후 `OPEN`·이력 1건, 공개 후 상세·검색·지원 승인·자리 예약 허용과 공개 공고의 조건 변경 409, `READY` 주문의 조건 변경(새 버전·새 금액·새 주문, 이전 주문 `SUPERSEDED`와 승인 409, 새 주문 예치 후 새 조건으로 공개), `FAILED` 주문의 같은 조건 재결제(같은 버전·같은 금액·새 키·새 주문, 예치 후 공개), `CONFIRMING` 주문의 조건 변경 거절(`REJECTED`, 기존 조건·주문 유지). 실제 토스 테스트 결제창과 실제 토스 API 승인은 이 실행에 포함되지 않았다. 연결 전 예치 알림, 응답 유실·저장 실패, 잠금 순서 경쟁은 통합 테스트로만 검증했다.
+
+## 마감 공고 삭제 (#175)
+
+- `DELETE /api/jobs/{id}`는 OWNER JWT가 필요하고 본인 소유의 `CLOSED` 공고만 삭제할 수 있다. 다른 점주 공고와 없는 공고는 `404 JOB-404-001`, 마감 전 공고는 `409 JOB-409-016`이다.
+- 성공은 `200` 공통 응답(`success=true`, `data=null`)이다. 별도 Idempotency-Key는 필요 없고, 반복 요청도 성공하며 최초 삭제 시각을 유지한다.
+- V24의 nullable `job_posts.deleted_at`에 서비스 Clock의 시각을 저장한다. 공고 행 잠금 아래에서 소유권·상태 확인과 삭제 시각 저장을 처리한다.
+- 삭제한 공고는 점주 목록 `/api/jobs/me`의 페이지·상태 필터·전체 건수에서 제외한다. 큰 offset의 native 조회와 건수에도 같은 조건을 적용한다.
+- 상태는 `CLOSED`로 유지한다. 상세·결제 주문 조회의 기존 접근 권한과 지원·매칭·근무·결제 기록, 내부 재처리 흐름은 유지하며 취소·환불·모집 종료 알림을 추가 발생시키지 않는다.

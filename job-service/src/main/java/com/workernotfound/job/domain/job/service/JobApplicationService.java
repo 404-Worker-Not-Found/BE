@@ -42,6 +42,10 @@ public class JobApplicationService {
         return jobCommandService.create(ownerId, request);
     }
 
+    public void deleteJob(Long jobId, Long ownerMemberId) {
+        jobCommandService.delete(jobId, ownerMemberId);
+    }
+
     public JobDetailResponse getJobDetail(Long jobId, Long viewerMemberId) {
         return jobFindService.findJobDetail(jobId, viewerMemberId);
     }

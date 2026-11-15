@@ -39,6 +39,16 @@ public class JobController implements JobControllerDocs {
     }
 
     @Override
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> delete(
+            @AuthenticationPrincipal MemberClaims claims,
+            @PathVariable Long id
+    ) {
+        jobApplicationService.deleteJob(id, claims.memberId());
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @Override
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<OwnerJobListResponse>> getMyJobs(
             @AuthenticationPrincipal MemberClaims claims,

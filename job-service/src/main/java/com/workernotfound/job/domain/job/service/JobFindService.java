@@ -113,17 +113,17 @@ public class JobFindService {
             return findOwnerJobsWithLargeOffset(ownerMemberId, status, pageRequest);
         }
         if (status == null) {
-            return jobPostRepository.findByOwnerId(ownerMemberId, pageRequest);
+            return jobPostRepository.findByOwnerIdAndDeletedAtIsNull(ownerMemberId, pageRequest);
         }
-        return jobPostRepository.findByOwnerIdAndStatus(ownerMemberId, status, pageRequest);
+        return jobPostRepository.findByOwnerIdAndStatusAndDeletedAtIsNull(ownerMemberId, status, pageRequest);
     }
 
     private Page<JobPost> findOwnerJobsWithLargeOffset(Long ownerMemberId, JobStatus status, PageRequest pageRequest) {
         List<JobPost> posts = jobPostRepository.findByOwnerIdAndOptionalStatusWithOffset(
                 ownerMemberId, status == null ? null : status.name(), pageRequest.getPageSize(), pageRequest.getOffset());
         long totalCount = status == null
-                ? jobPostRepository.countByOwnerId(ownerMemberId)
-                : jobPostRepository.countByOwnerIdAndStatus(ownerMemberId, status);
+                ? jobPostRepository.countByOwnerIdAndDeletedAtIsNull(ownerMemberId)
+                : jobPostRepository.countByOwnerIdAndStatusAndDeletedAtIsNull(ownerMemberId, status);
         return new PageImpl<>(posts, pageRequest, totalCount);
     }
 

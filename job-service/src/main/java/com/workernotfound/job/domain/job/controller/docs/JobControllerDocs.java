@@ -48,10 +48,25 @@ public interface JobControllerDocs {
     ResponseEntity<ApiResponse<Long>> create(MemberClaims claims, @Valid CreateJobRequest request);
 
     @Operation(
+            summary = "마감 공고 삭제(점주 본인)",
+            description = "본인의 CLOSED 공고를 점주 목록에서 숨깁니다. 상세 조회와 지원·매칭·근무·결제 기록은 보존합니다. "
+                    + "반복 요청도 200이며 Idempotency-Key는 필요하지 않습니다.",
+            security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "삭제 성공 또는 이미 삭제됨"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 요청", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "OWNER가 아님", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "공고 없음 또는 본인 공고 아님", content = @Content),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "마감 전 공고(JOB-409-016)", content = @Content)
+    })
+    ResponseEntity<ApiResponse<Void>> delete(@Parameter(hidden = true) MemberClaims claims, Long id);
+
+    @Operation(
             summary = "점주 본인 공고 목록",
             description = "Bearer 토큰 회원(OWNER)이 등록한 공고를 등록 최신순(같으면 ID 내림차순)으로 조회합니다. 결제 대기"
                     + "(PAYMENT_PENDING)·공개·매칭 중·마감 공고와 예치 차단 공고를 모두 포함하며, status로 한 상태만 거를 수 있습니다. "
-                    + "점주 ID는 토큰으로만 정합니다. page 기본 0, size 기본 20·최대 100이며 범위 밖 페이지는 빈 목록입니다. "
+                    + "삭제한 공고는 목록과 전체 건수에서 제외됩니다. 점주 ID는 토큰으로만 정합니다. page 기본 0, size 기본 20·최대 100이며 범위 밖 페이지는 빈 목록입니다. "
                     + "confirmedCount는 확정(CONSUMED)된 모집 자리 수이고 applicantCount는 아직 제공하지 않아 null입니다. "
                     + "결제 진행 상태는 공고 결제 주문 조회 API로 확인합니다.",
             security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)

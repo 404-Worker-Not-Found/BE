@@ -276,6 +276,8 @@ Member signup design notes are recorded in `docs/architecture/auth-member-signup
 
 ## Job Service Context
 
+- Closed-job deletion (#175): `DELETE /api/jobs/{id}` lets the owning OWNER hide a CLOSED job from their job list. V24 stores `deleted_at`; list pages, filters and totals exclude hidden rows. Repeated deletion succeeds. Detail visibility and related records remain unchanged.
+
 - Admission snapshot timestamps and job application deadlines are normalized to MySQL `DATETIME(6)` precision before persistence. Nanosecond-capable clocks must not change the initial/replayed admission response or the exact deadline boundary after reload (#142).
 
 - `job-service` uses Java 17, Spring Boot 4.1.0, service-owned MySQL, Flyway, Spring Security, and Springdoc.

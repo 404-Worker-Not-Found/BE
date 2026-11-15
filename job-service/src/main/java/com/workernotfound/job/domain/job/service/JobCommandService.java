@@ -2,6 +2,7 @@ package com.workernotfound.job.domain.job.service;
 
 import com.workernotfound.job.domain.job.dto.request.CreateJobRequest;
 import com.workernotfound.job.domain.job.entity.JobPost;
+import com.workernotfound.job.domain.job.entity.enums.JobStatus;
 import com.workernotfound.job.domain.job.entity.enums.UrgencyLevel;
 import com.workernotfound.job.domain.job.exception.JobErrorCode;
 import com.workernotfound.job.domain.job.repository.JobPostRepository;
@@ -23,6 +24,19 @@ public class JobCommandService {
     private final JobWageCalculator jobWageCalculator;
     private final JobPaymentOrderCommandIssuer paymentOrderCommandIssuer;
     private final Clock clock;
+
+    @Transactional
+    public void delete(Long jobId, Long ownerMemberId) {
+        JobPost post = jobPostRepository.findByIdForUpdate(jobId)
+                .orElseThrow(() -> new BusinessException(JobErrorCode.JOB_NOT_FOUND));
+        if (!post.getOwnerId().equals(ownerMemberId)) {
+            throw new BusinessException(JobErrorCode.JOB_NOT_FOUND);
+        }
+        if (post.getStatus() != JobStatus.CLOSED) {
+            throw new BusinessException(JobErrorCode.JOB_DELETE_NOT_ALLOWED);
+        }
+        post.deleteFromOwnerList(LocalDateTime.now(clock));
+    }
 
     /**
      * 공고를 결제 대기(비공개)로 저장하고 전체 예치 예정액의 결제 주문 생성 명령을 같은 트랜잭션에 저장한다.
