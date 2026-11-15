@@ -48,9 +48,8 @@ public record CreateWorkerMemberRequest(
 	@Size(max = 20)
 	List<@NotBlank @Size(max = 100) String> preferredBusinessTypes,
 
-	@Valid
 	@NotEmpty
 	@Size(max = 50)
-	List<WorkerAvailableTimeRequest> availableTimes
+	List<@Valid WorkerAvailableTimeRequest> availableTimes
 ) {
 }

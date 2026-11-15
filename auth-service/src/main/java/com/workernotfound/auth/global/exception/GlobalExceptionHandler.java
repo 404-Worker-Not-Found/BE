@@ -40,7 +40,7 @@ public class GlobalExceptionHandler {
 					exception.getErrorCode(),
 					exception.getErrorCode().getMessage(),
 					request.getRequestURI(),
-					null);
+					exception.getReasons());
 		}
 		return error(
 				GlobalErrorCode.EXTERNAL_API_ERROR,
